@@ -33,19 +33,20 @@ Target behavior: export should use the reviewed state submitted by the user as t
 - **Method:** `POST`
 - **Request Type:** `application/x-www-form-urlencoded`
 - **Form Parameters:**
-  - `target_year` (int, required): Target forecasting year.
-  - `target_month` (int, required): Target forecasting month.
-  - `manual_qty_<row_id>` (int, optional): Manually specified quantity override.
-  - `exclude_<row_id>` (bool, optional): If checked, sets the row output to 0.
+  - `year` (int, required): Target forecasting year.
+  - `month` (int, required): Target forecasting month.
+  - `forecast_signature` (string, optional but emitted by the review page): Baseline signature used to reject stale review exports.
+  - `manual_quantity__<row_id>` (float, optional): Manually specified quantity override.
+  - `exclude__<row_id>` (bool, optional): If checked, sets the row output to 0.
 - **Open Design Issue:**
-  - The form must carry enough reviewed row state, or the server must keep a trusted review snapshot, so exported totals always match the user's review workspace.
+  - The current signature detects changed regenerated baselines. A future server-side review snapshot or full submitted row payload may be needed if the workflow must export without rebuilding from Excel.
 - **Success Response:**
   - **Code:** `200 OK`
   - **Content-Type:** `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
   - **Headers:** `Content-Disposition: attachment; filename=...`
 - **Error States:**
   - **Code:** `400 Bad Request`
-  - **Reason:** Invalid manual quantity format, invalid year/month.
+  - **Reason:** Invalid manual quantity format, invalid year/month, submitted row id not present in the regenerated forecast summary, or stale `forecast_signature`.
 
 ---
 

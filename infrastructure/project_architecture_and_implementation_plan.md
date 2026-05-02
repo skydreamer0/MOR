@@ -572,6 +572,12 @@ Before adding larger features, MOR should resolve these architecture issues:
 4. Align active documentation with `infrastructure/` and `docs/workflows/` only.
 5. Add regression tests around Excel input, workbook output, and encoding.
 
+Current progress:
+
+1. `/export` rejects submitted manual or excluded row IDs that are not present in the regenerated forecast summary.
+2. The review page carries an unrendered-row baseline total so browser recalculation preserves totals for rows hidden by `visible_row_limit`.
+3. The review page submits a forecast signature so `/export` can reject stale exports when the regenerated baseline no longer matches the reviewed baseline.
+
 ### Version 0.1: Working Prototype
 
 Goal:

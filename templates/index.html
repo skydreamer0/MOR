@@ -38,6 +38,8 @@
     <form method="post" action="/export" id="forecast-form">
       <input type="hidden" name="year" value="{{ year }}">
       <input type="hidden" name="month" value="{{ month }}">
+      <input type="hidden" name="forecast_signature" value="{{ forecast_signature }}">
+      <input type="hidden" data-unrendered-total value="{{ unrendered_total }}">
 
       <div class="forecast-tools" aria-label="表格工具">
         <label>

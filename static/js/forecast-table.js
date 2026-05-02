@@ -59,9 +59,10 @@ function renderRow(state, amount, visible) {
 function recalculate() {
   const searchInput = document.querySelector("[data-filter-search]");
   const statusInput = document.querySelector("[data-filter-status]");
+  const unrenderedTotalInput = document.querySelector("[data-unrendered-total]");
   const searchValue = (searchInput?.value || "").trim().toLowerCase();
   const statusValue = statusInput?.value || "all";
-  let total = 0;
+  let total = Number(unrenderedTotalInput?.value || 0);
   let visibleCount = 0;
   let editedCount = 0;
   let excludedCount = 0;
