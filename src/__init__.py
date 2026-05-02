@@ -1,0 +1,1 @@
+"""MOR sales forecast application."""
