@@ -451,6 +451,14 @@ If the UI behavior changes materially, update:
 
 ---
 
+
+## Execution Status (2026-05-02)
+
+- ✅ Task 1–6 completed in current workspace (baseline tests, UTF-8 labels, error/empty state, static CSS/JS extraction, Airtable/Retool action bar, row review state + client validation).
+- ✅ Current Python test suite passes with `PYTHONPATH=. pytest -q`.
+- ⏸️ Task 7 remains gated by roadmap decision: keep presenter/API optional until native form workflow is proven insufficient.
+- 🔜 Next execution focus: Task 8 browser verification + targeted docs sync if new UX behavior is introduced.
+
 ## Out Of Scope For This Plan
 
 - React, Next.js, shadcn/ui, or TanStack Table migration.

@@ -8,6 +8,21 @@ The first improvement target is the forecast review screen: readable labels, rel
 
 Git branch creation was attempted earlier but the repository denied creating the branch ref due to filesystem permissions. Continue in the current workspace until branch creation is allowed.
 
+## Execution Tracker (Last updated: 2026-05-02)
+
+Use this section as the single quick checkpoint for "現在做到哪裡".
+
+| Phase | Status | Notes |
+| --- | --- | --- |
+| P0 | ✅ Completed | Active plan/workflow/doc sources are established and readable UTF-8 labels are in use. |
+| P1 | ✅ Completed | Error alert, empty state, and route/template characterization are in place. |
+| P2 | ✅ Completed | CSS/JS extracted and Airtable/Retool-style table tools are active. |
+| P3 | ✅ Completed | Edited/excluded/invalid row states and client-side validation are active. |
+| P4 | ⏸️ Gated | Keep presenter/API optional until native form flow is insufficient. |
+| P5 | ⏳ Not started | Persistence and budget comparison remain explicitly deferred. |
+
+**Current execution target:** Task 8 visual/workflow verification in `docs/plans/2026-05-02-airtable-retool-frontend-implementation-plan.md`.
+
 ## Guiding Decision
 
 Use an **Airtable-style Record Review** information architecture and a **Retool-style internal tool** interaction model, implemented first with the existing Flask/Jinja page and small vanilla JavaScript modules.
