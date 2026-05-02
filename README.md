@@ -94,14 +94,16 @@ python app.py
 ## 專案結構
 
 ```text
-app.py                         Flask 路由與應用入口
-forecast_config.py             集中管理檔名、工作表、必要欄位、列數上限
-forecast_models.py             ForecastTarget, ForecastRow, ForecastSummary 資料模型
-data_loader.py                 Excel 載入與 DataFrame 前處理
-forecast_engine.py             預估計算核心邏輯
-exporter.py                    Excel 報表匯出
-sales_forecast.py              向後相容用的 Facade
-web/form_parser.py             表單解析與驗證
+app.py                         Flask 應用入口
+src/backend/                   核心預估與業務邏輯
+  app.py                       Flask 路由
+  forecast_config.py           集中管理檔名、工作表、必要欄位、列數上限
+  forecast_models.py           ForecastTarget, ForecastRow, ForecastSummary 資料模型
+  data_loader.py               Excel 載入與 DataFrame 前處理
+  forecast_engine.py           預估計算核心邏輯
+  exporter.py                  Excel 報表匯出
+  sales_forecast.py            向後相容用的 Facade
+  web/form_parser.py           表單解析與驗證
 templates/index.html           Server-rendered 預估審閱頁面
 static/                        靜態資源
 tests/                         單元測試與路由測試

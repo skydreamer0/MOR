@@ -19,7 +19,7 @@ D:\AI\python.exe app.py
 Bundled Codex runtime may also be used for syntax checks:
 
 ```powershell
-& 'C:\Users\User\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' -m py_compile app.py sales_forecast.py
+& 'C:\Users\User\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' -m py_compile app.py src\backend\app.py
 ```
 
 If dependencies are missing, install from `requirements.txt`. Do not add new third-party dependencies without approval. See `docs/workflows/local-setup.md` for the full setup workflow.
@@ -35,7 +35,7 @@ D:\AI\python.exe -m pytest -q
 For quick import/syntax validation:
 
 ```powershell
-D:\AI\python.exe -m py_compile app.py sales_forecast.py forecast_config.py forecast_models.py data_loader.py forecast_engine.py exporter.py web\form_parser.py
+D:\AI\python.exe -m py_compile app.py src\backend\app.py src\backend\sales_forecast.py src\backend\forecast_config.py src\backend\forecast_models.py src\backend\data_loader.py src\backend\forecast_engine.py src\backend\exporter.py src\backend\web\form_parser.py src\backend\web\forecast_presenter.py
 ```
 
 ## Project Structure
@@ -43,15 +43,18 @@ D:\AI\python.exe -m py_compile app.py sales_forecast.py forecast_config.py forec
 Current intended structure:
 
 ```text
-app.py                         Flask app and route wiring
+app.py                         Flask app launch wrapper
+src/backend/                   Canonical backend logic
+  app.py                       Flask app and route wiring
+  forecast_config.py           Centralized file names, sheets, columns, limits
+  forecast_models.py           ForecastTarget, ForecastRow, ForecastSummary
+  data_loader.py               Excel loading and DataFrame normalization
+  forecast_engine.py           Forecast calculation and adjustments
+  exporter.py                  Excel workbook export
+  sales_forecast.py            Compatibility facade for older imports
+  web/form_parser.py           Form parsing and validation
+  web/forecast_presenter.py    Grid presentation
 templates/index.html           Server-rendered forecast review UI
-forecast_config.py             Centralized file names, sheets, columns, limits
-forecast_models.py             ForecastTarget, ForecastRow, ForecastSummary
-data_loader.py                 Excel loading and DataFrame normalization
-forecast_engine.py             Forecast calculation and adjustments
-exporter.py                    Excel workbook export
-web/form_parser.py             Form parsing and validation
-sales_forecast.py              Compatibility facade for older imports
 tests/                         Unit and route tests
 docs/architecture/             Architecture docs
 docs/design/                   Frontend/backend/design-system docs

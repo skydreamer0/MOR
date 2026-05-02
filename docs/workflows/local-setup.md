@@ -59,7 +59,7 @@ D:\AI\python.exe -m pytest tests/test_forecast_presenter.py -q
 ## Syntax Check
 
 ```powershell
-D:\AI\python.exe -m py_compile app.py sales_forecast.py forecast_config.py forecast_models.py data_loader.py forecast_engine.py exporter.py web\form_parser.py web\forecast_presenter.py
+D:\AI\python.exe -m py_compile app.py src\backend\app.py src\backend\sales_forecast.py src\backend\forecast_config.py src\backend\forecast_models.py src\backend\data_loader.py src\backend\forecast_engine.py src\backend\exporter.py src\backend\web\form_parser.py src\backend\web\forecast_presenter.py
 ```
 
 ## Run The App

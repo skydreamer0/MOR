@@ -129,11 +129,7 @@ flowchart TD
 ## 7. System Architecture
 
 This diagram is the target architecture for the monthly operating version.
-The current implementation is still transitional: runtime imports primarily use
-root-level modules such as `data_loader.py`, `forecast_engine.py`, `exporter.py`,
-`forecast_config.py`, and `forecast_models.py`, while `src/backend/` contains a
-parallel backend copy. The roadmap must resolve this into one canonical backend
-module path before deeper feature work continues.
+The implementation has been resolved to use `src/backend/` as the canonical backend path.
 
 ```mermaid
 flowchart TD
@@ -555,7 +551,7 @@ Each monthly update should test:
 ### 15.4 Verification By Roadmap Phase
 
 1. Baseline documentation or route work: run `D:\AI\python.exe -m pytest -q`.
-2. Import or module path work: run `D:\AI\python.exe -m py_compile app.py sales_forecast.py forecast_config.py forecast_models.py data_loader.py forecast_engine.py exporter.py web\form_parser.py`.
+2. Import or module path work: run `D:\AI\python.exe -m py_compile app.py src\backend\app.py src\backend\sales_forecast.py src\backend\forecast_config.py src\backend\forecast_models.py src\backend\data_loader.py src\backend\forecast_engine.py src\backend\exporter.py src\backend\web\form_parser.py src\backend\web\forecast_presenter.py`.
 3. Forecast rule work: run focused forecast tests plus the full suite.
 4. Export work: add workbook readback tests with `openpyxl`, then run the full suite.
 5. Frontend interaction work: run route tests, start the local server, and complete the browser checklist in `docs/workflows/local-setup.md`.
