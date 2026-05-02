@@ -1,7 +1,7 @@
 import pytest
 
-from forecast_engine import ForecastTarget
-from web.form_parser import FormValidationError, parse_excluded_ids, parse_manual_quantities, parse_target_period
+from src.backend.forecast_engine import ForecastTarget
+from src.backend.web.form_parser import FormValidationError, parse_excluded_ids, parse_manual_quantities, parse_target_period
 
 
 def test_parse_target_period_uses_default_for_missing_values():

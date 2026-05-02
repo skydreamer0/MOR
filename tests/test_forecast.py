@@ -2,8 +2,8 @@ from datetime import date
 
 import pandas as pd
 
-from forecast_config import ForecastConfig
-from forecast_engine import ForecastOptions, ForecastTarget, apply_user_adjustments, build_forecast
+from src.backend.forecast_config import ForecastConfig
+from src.backend.forecast_engine import ForecastOptions, ForecastTarget, apply_user_adjustments, build_forecast
 
 
 def sample_sales_data() -> pd.DataFrame:

@@ -1,7 +1,7 @@
 from datetime import date
 
-from forecast_models import ForecastRow, ForecastSummary
-from web.forecast_presenter import column_schema, serialize_summary
+from src.backend.forecast_models import ForecastRow, ForecastSummary
+from src.backend.web.forecast_presenter import column_schema, serialize_summary
 
 
 def sample_summary() -> ForecastSummary:

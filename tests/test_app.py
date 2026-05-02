@@ -3,8 +3,8 @@ import re
 
 import pandas as pd
 
-import app
-from forecast_config import ForecastConfig
+from src.backend import app
+from src.backend.forecast_config import ForecastConfig
 
 
 def test_homepage_loads_with_forecast_table():
