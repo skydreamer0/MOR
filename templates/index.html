@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MOR</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/mor.css') }}">
+</head>
+<body>
+  <header>
+    <h1>MOR</h1>
+    <form class="toolbar" method="get" action="/">
+      <label>年份 <input name="year" type="number" min="2024" max="2030" value="{{ year }}"></label>
+      <label>月份 <input name="month" type="number" min="1" max="12" value="{{ month }}"></label>
+      <button type="submit">重新分析</button>
+    </form>
+  </header>
+
+  <main>
+    {% if error_message %}
+      <section class="alert" role="alert">{{ error_message }}</section>
+    {% endif %}
+
+    <section class="summary">
+      <div class="metric">
+        <span>預估月份</span>
+        <strong>{% if year and month %}{{ year }}/{{ "%02d"|format(month|int) }}{% else %}--{% endif %}</strong>
+      </div>
+      <div class="metric"><span>目前顯示</span><strong>{{ shown_count }} / {{ row_count }}</strong></div>
+      <div class="metric"><span>自動預估列</span><strong>{{ rows|selectattr("auto_in_month")|list|length }}</strong></div>
+      <div class="metric"><span>目前總額</span><strong id="top-total">{{ "{:,.0f}".format(total) }}</strong></div>
+    </section>
+
+    {% if not rows and not error_message %}
+      <section class="empty-state">目前沒有符合條件的預估資料。</section>
+    {% endif %}
+
+    <form method="post" action="/export" id="forecast-form">
+      <input type="hidden" name="year" value="{{ year }}">
+      <input type="hidden" name="month" value="{{ month }}">
+
+      <div class="forecast-tools" aria-label="表格工具">
+        <label>
+          搜尋客戶或商品
+          <input type="search" data-filter-search placeholder="輸入客戶、商品號或商品名稱">
+        </label>
+        <label>
+          狀態篩選
+          <select data-filter-status>
+            <option value="all">全部</option>
+            <option value="auto">本月可能跳單</option>
+            <option value="not_due">未到週期</option>
+            <option value="edited">已人工調整</option>
+            <option value="excluded">已排除</option>
+          </select>
+        </label>
+        <div class="tool-counts">
+          <span>顯示 <strong data-visible-count>{{ shown_count }}</strong> 筆</span>
+          <span>已調整 <strong data-edited-count>0</strong> 筆</span>
+          <span>已排除 <strong data-excluded-count>0</strong> 筆</span>
+        </div>
+      </div>
+      <div class="validation-message" data-validation-message role="alert" hidden>
+        人工數量必須是 0 以上的數字。
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>狀態</th>
+              <th>客戶</th>
+              <th>商品號</th>
+              <th>商品</th>
+              <th>最近叫貨日</th>
+              <th class="num">週期天數</th>
+              <th>推估下次</th>
+              <th class="num">去年同月量</th>
+              <th class="num">今年同月量</th>
+              <th class="num">最近單價</th>
+              <th class="num">系統數量</th>
+              <th class="num">人工數量</th>
+              <th class="num">預估金額</th>
+              <th>排除</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+            <tr
+              data-row
+              data-row-id="{{ row.row_id }}"
+              data-status="{{ 'auto' if row.auto_in_month else 'not_due' }}"
+              data-search="{{ row.customer }} {{ row.product_code }} {{ row.product_name }}"
+              data-price="{{ row.latest_price }}"
+              data-auto-qty="{{ row.forecast_quantity }}"
+            >
+              <td>
+                {% if row.auto_in_month %}
+                  <span class="badge">本月可能跳單</span>
+                {% else %}
+                  <span class="badge off">未到週期</span>
+                {% endif %}
+              </td>
+              <td>{{ row.customer }}</td>
+              <td>{{ row.product_code }}</td>
+              <td>{{ row.product_name }}</td>
+              <td>{{ row.latest_order_date }}</td>
+              <td class="num">{{ row.cycle_days or "" }}</td>
+              <td>{{ row.next_order_date or "" }}</td>
+              <td class="num">{{ "{:,.0f}".format(row.last_year_same_month_qty) }}</td>
+              <td class="num">{{ "{:,.0f}".format(row.this_year_same_month_qty) }}</td>
+              <td class="num">{{ "{:,.2f}".format(row.latest_price) }}</td>
+              <td class="num">{{ "{:,.2f}".format(row.forecast_quantity) }}</td>
+              <td class="num">
+                <input class="qty" name="manual_quantity__{{ row.row_id }}" type="number" min="0" step="0.01" aria-label="人工預估數量" data-manual>
+              </td>
+              <td class="num" data-amount>{{ "{:,.0f}".format(row.estimated_amount) }}</td>
+              <td><input name="exclude__{{ row.row_id }}" type="checkbox" aria-label="排除此列" data-exclude></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="bottom-bar">
+        <div>預估總金額 <strong id="grand-total">{{ "{:,.0f}".format(total) }}</strong></div>
+        <button type="submit">匯出 Excel</button>
+      </div>
+    </form>
+  </main>
+
+  <script src="{{ url_for('static', filename='js/forecast-table.js') }}"></script>
+</body>
+</html>

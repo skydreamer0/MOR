@@ -1,0 +1,6 @@
+.pytest_cache/
+.vendor/
+__pycache__/
+*.py[cod]
+*.log
+~$*.xlsx
