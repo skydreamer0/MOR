@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 
 
@@ -24,6 +24,7 @@ class ForecastTarget:
 class ForecastOptions:
     include_all: bool = False
     max_cycle_interval_days: int = 120
+    excluded_item_ids: set[str] = field(default_factory=set)
 
 
 @dataclass(frozen=True)
@@ -39,20 +40,22 @@ class ForecastRow:
     last_year_same_month_qty: float
     this_year_same_month_qty: float
     latest_price: float
-    forecast_quantity: float
-    manual_quantity: float | None
-    effective_quantity: float
+    system_forecast: float
+    manual_adjustment: float | None
+    final_forecast: float
+    adjustment_reason: str | None = None
+    budget_quantity: float = 0.0
     estimated_amount: float
     forecast_basis: str
     excluded: bool = False
 
-    def with_adjustment(self, manual_quantity: float | None, excluded: bool) -> "ForecastRow":
-        effective_quantity = float(manual_quantity) if manual_quantity is not None else float(self.forecast_quantity)
-        estimated_amount = 0.0 if excluded else effective_quantity * float(self.latest_price)
+    def with_adjustment(self, manual_adjustment: float | None, excluded: bool) -> "ForecastRow":
+        final_forecast = float(manual_adjustment) if manual_adjustment is not None else float(self.system_forecast)
+        estimated_amount = 0.0 if excluded else final_forecast * float(self.latest_price)
         return replace(
             self,
-            manual_quantity=manual_quantity,
-            effective_quantity=effective_quantity,
+            manual_adjustment=manual_adjustment,
+            final_forecast=final_forecast,
             estimated_amount=estimated_amount,
             excluded=excluded,
         )
@@ -70,9 +73,11 @@ class ForecastRow:
             "last_year_same_month_qty": self.last_year_same_month_qty,
             "this_year_same_month_qty": self.this_year_same_month_qty,
             "latest_price": self.latest_price,
-            "forecast_quantity": self.forecast_quantity,
-            "manual_quantity": self.manual_quantity,
-            "effective_quantity": self.effective_quantity,
+            "system_forecast": self.system_forecast,
+            "manual_adjustment": self.manual_adjustment,
+            "final_forecast": self.final_forecast,
+            "adjustment_reason": self.adjustment_reason,
+            "budget_quantity": self.budget_quantity,
             "estimated_amount": self.estimated_amount,
             "forecast_basis": self.forecast_basis,
             "excluded": self.excluded,

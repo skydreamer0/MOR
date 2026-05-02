@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 class ForecastConfig:
     detail_file: str = "業績明細202401-20260430-George.xlsx"
     detail_sheet: str = "業績明細"
+    excluded_items_file: str = "excluded_items.json"
     visible_row_limit: int = 300
     max_cycle_interval_days: int = 120
     required_columns: tuple[str, ...] = field(

@@ -26,16 +26,18 @@ def test_build_forecast_returns_summary_with_typed_rows():
 
     assert summary.year == 2026
     assert summary.month == 4
-    assert summary.total == (40 / 3) * 120
+    # (8 + 16 + (16+14+10)/3) / 3 = 12.4444...
+    expected_qty = (8 + 16 + 40 / 3) / 3
+    assert summary.total == expected_qty * 120
     assert len(summary.rows) == 1
 
     row = summary.rows[0]
     assert row.customer == "A客戶"
     assert row.product_code == "P1"
     assert row.latest_price == 120
-    assert row.forecast_quantity == 40 / 3
-    assert row.estimated_amount == (40 / 3) * 120
-    assert row.forecast_basis == "cycle"
+    assert abs(row.forecast_quantity - expected_qty) < 1e-8
+    assert abs(row.estimated_amount - expected_qty * 120) < 1e-8
+    assert row.forecast_basis == "data_driven"
     assert row.next_order_date == date(2026, 4, 9)
     assert row.last_year_same_month_qty == 8
 

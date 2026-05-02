@@ -58,6 +58,6 @@ def test_column_schema_describes_review_grid_fields():
 
     assert status["label"] == "狀態"
     assert status["type"] == "status"
-    assert manual_quantity["label"] == "人工數量"
+    assert manual_quantity["label"] == "人工調整"
     assert manual_quantity["editable"] is True
     assert amount["align"] == "right"

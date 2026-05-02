@@ -11,6 +11,9 @@ from src.backend.forecast_config import ForecastConfig
 from src.backend.forecast_engine import ForecastOptions, apply_user_adjustments, build_forecast
 from src.backend.forecast_models import ForecastSummary
 from src.backend.web.form_parser import FormValidationError, parse_excluded_ids, parse_manual_quantities, parse_target_period
+from src.backend.database import get_db
+from src.backend.etl import sync_excel_to_db
+import json
 
 
 BASE_PATH = Path(__file__).resolve().parent
@@ -28,6 +31,7 @@ def create_app(config: dict | None = None) -> Flask:
     app.config.update(config or {})
     forecast_config = app.config.get("FORECAST_CONFIG", ForecastConfig())
     data_base_path = Path(app.config.get("DATA_BASE_PATH", PROJECT_ROOT))
+    db = get_db(data_base_path)
 
     @app.get("/")
     def index() -> str:
@@ -35,12 +39,42 @@ def create_app(config: dict | None = None) -> Flask:
             data = load_sales_detail(data_base_path, forecast_config)
             target = default_target_from_data(data, forecast_config)
             target = parse_target_period(request.args, target)
+            
+            item_configs = _load_item_configs(db)
+            excluded_item_ids = {pid for pid, cfg in item_configs.items() if cfg['is_excluded']}
+            manual_adjustments, adjustment_reasons = _load_adjustments(db, target.year, target.month)
+            budget_targets = _load_budgets(db, target.year, target.month)
+            
             summary = build_forecast(
                 data,
                 target,
-                ForecastOptions(include_all=True, max_cycle_interval_days=forecast_config.max_cycle_interval_days),
+                ForecastOptions(
+                    include_all=True, 
+                    max_cycle_interval_days=forecast_config.max_cycle_interval_days,
+                    excluded_item_ids=excluded_item_ids
+                ),
                 forecast_config,
             )
+            # Filter by visibility
+            summary.rows = [row for row in summary.rows if item_configs.get(row.product_code, {}).get('is_visible', True)]
+            
+            # Apply adjustments and budgets
+            summary = apply_user_adjustments(
+                summary,
+                manual_adjustments=manual_adjustments,
+                excluded_ids=set(),
+            )
+            
+            for row in summary.rows:
+                # Apply reasons
+                if row.row_id in adjustment_reasons:
+                    from dataclasses import replace
+                    idx = summary.rows.index(row)
+                    summary.rows[idx] = replace(row, adjustment_reason=adjustment_reasons[row.row_id])
+                
+                # Apply budget (New field needs to be in ForecastRow or handled in presenter)
+                # For now, let's just pass it via presenter or add it to ForecastRow
+            
             error_message = None
         except (FileNotFoundError, ValueError, FormValidationError) as exc:
             summary = None
@@ -69,21 +103,39 @@ def create_app(config: dict | None = None) -> Flask:
             data = load_sales_detail(data_base_path, forecast_config)
             default_target = default_target_from_data(data, forecast_config)
             target = parse_target_period(request.form, default_target)
+            
+            excluded_item_ids = _load_exclusions(db)
+            
             summary = build_forecast(
                 data,
                 target,
-                ForecastOptions(include_all=True, max_cycle_interval_days=forecast_config.max_cycle_interval_days),
+                ForecastOptions(
+                    include_all=True, 
+                    max_cycle_interval_days=forecast_config.max_cycle_interval_days,
+                    excluded_item_ids=excluded_item_ids
+                ),
                 forecast_config,
             )
-            manual_quantities = parse_manual_quantities(request.form)
-            excluded_ids = parse_excluded_ids(request.form)
-            _validate_submitted_row_ids(summary, set(manual_quantities) | excluded_ids)
+            manual_adjustments = parse_manual_quantities(request.form, key_prefix="manual_adjustment__")
+            adjustment_reasons = parse_manual_quantities(request.form, key_prefix="adjustment_reason__", type_cast=str)
+            
+            # Global exclusions are already applied in build_forecast as 'excluded=True'
+            _validate_submitted_row_ids(summary, set(manual_adjustments))
             _validate_forecast_signature(summary, request.form.get("forecast_signature", ""))
+            
+            # Need to update apply_user_adjustments signature to accept reasons too
             summary = apply_user_adjustments(
                 summary,
-                manual_quantities=manual_quantities,
-                excluded_ids=excluded_ids,
+                manual_adjustments=manual_adjustments,
+                excluded_ids=set(), # Row-level exclusion removed
             )
+            # Add reasons to rows (could be integrated into apply_user_adjustments)
+            for row in summary.rows:
+                if row.row_id in adjustment_reasons:
+                    # Using replace to update reason
+                    from dataclasses import replace
+                    idx = summary.rows.index(row)
+                    summary.rows[idx] = replace(row, adjustment_reason=adjustment_reasons[row.row_id])
         except (FileNotFoundError, ValueError, FormValidationError) as exc:
             return Response(f"無法匯出預估：{exc}", status=400, mimetype="text/plain; charset=utf-8")
 
@@ -96,7 +148,135 @@ def create_app(config: dict | None = None) -> Flask:
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
+    @app.get("/items")
+    def items_management() -> str:
+        try:
+            data = load_sales_detail(data_base_path, forecast_config)
+            # Get unique products from sales data
+            unique_products = data[["商品號", "商品簡稱"]].drop_duplicates("商品號")
+            
+            item_configs = _load_item_configs(db)
+            
+            items = []
+            for _, row in unique_products.iterrows():
+                pid = str(row["商品號"])
+                cfg = item_configs.get(pid, {
+                    "is_excluded": False, 
+                    "is_budgeted": True, 
+                    "is_visible": True, 
+                    "status_label": ""
+                })
+                items.append({
+                    "product_code": pid,
+                    "product_name": row["商品簡稱"],
+                    **cfg
+                })
+            
+            return render_template("items.html", items=items)
+        except Exception as exc:
+            return f"載入品項管理失敗：{exc}"
+
+    @app.post("/items/save")
+    def save_items() -> Response:
+        product_codes = request.form.getlist("product_codes")
+        with db.get_connection() as conn:
+            for pid in product_codes:
+                is_excluded = 1 if request.form.get(f"is_excluded_{pid}") == "1" else 0
+                is_budgeted = 1 if request.form.get(f"is_budgeted_{pid}") == "1" else 0
+                is_visible = 1 if request.form.get(f"is_visible_{pid}") == "1" else 0
+                status_label = request.form.get(f"status_label_{pid}")
+                
+                conn.execute("""
+                    INSERT OR REPLACE INTO item_configs 
+                    (product_code, is_excluded, is_budgeted, is_visible, status_label)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (pid, is_excluded, is_budgeted, is_visible, status_label))
+            conn.commit()
+        return items_management()
+
+    @app.post("/sync")
+    def sync_data() -> str:
+        try:
+            sync_excel_to_db(db, data_base_path)
+            return "資料同步完成！請重新載入工作台。"
+        except Exception as exc:
+            return f"同步失敗：{exc}"
+
+    @app.post("/adjustments/save")
+    def save_adjustment() -> Response:
+        row_id = request.form.get("row_id")
+        manual_qty = request.form.get("manual_adjustment")
+        reason = request.form.get("reason")
+        year = request.form.get("year", type=int)
+        month = request.form.get("month", type=int)
+
+        if not row_id or year is None or month is None:
+            return Response("Missing required fields", status=400)
+
+        # Parse row_id back to customer/product if needed, but it's easier to store as is 
+        # or use the year/month/customer/product key.
+        # Our row_id is currently "{customer}__{product_code}"
+        customer, product_code = row_id.split("__", 1)
+
+        try:
+            val = float(manual_qty) if manual_qty and manual_qty.strip() else None
+        except ValueError:
+            return Response("Invalid quantity", status=400)
+
+        with db.get_connection() as conn:
+            conn.execute("""
+                INSERT OR REPLACE INTO forecast_adjustments 
+                (year, month, customer_name, product_code, manual_quantity, adjustment_reason, updated_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (year, month, customer, product_code, val, reason, "User"))
+            conn.commit()
+        
+        return Response("Saved", status=200)
+
     return app
+
+
+def _load_item_configs(db) -> dict[str, dict]:
+    with db.get_connection() as conn:
+        rows = conn.execute("SELECT * FROM item_configs").fetchall()
+        return {
+            row["product_code"]: {
+                "is_excluded": bool(row["is_excluded"]),
+                "is_budgeted": bool(row["is_budgeted"]),
+                "is_visible": bool(row["is_visible"]),
+                "status_label": row["status_label"]
+            }
+            for row in rows
+        }
+
+
+def _load_adjustments(db, year: int, month: int) -> tuple[dict[str, float], dict[str, str]]:
+    manual_adjustments = {}
+    adjustment_reasons = {}
+    with db.get_connection() as conn:
+        rows = conn.execute("""
+            SELECT customer_name, product_code, manual_quantity, adjustment_reason 
+            FROM forecast_adjustments 
+            WHERE year = ? AND month = ?
+        """, (year, month)).fetchall()
+        for row in rows:
+            row_id = f"{row['customer_name']}__{row['product_code']}"
+            if row["manual_quantity"] is not None:
+                manual_adjustments[row_id] = row["manual_quantity"]
+            if row["adjustment_reason"]:
+                adjustment_reasons[row_id] = row["adjustment_reason"]
+    return manual_adjustments, adjustment_reasons
+
+
+def _save_exclusions(db, excluded_ids: list[str]) -> None:
+    with db.get_connection() as conn:
+        conn.execute("UPDATE item_configs SET is_excluded = 0")
+        for pid in excluded_ids:
+            conn.execute(
+                "INSERT OR REPLACE INTO item_configs (product_code, is_excluded) VALUES (?, 1)",
+                (pid,)
+            )
+        conn.commit()
 
 
 def _validate_submitted_row_ids(summary: ForecastSummary, submitted_row_ids: set[str]) -> None:
@@ -120,7 +300,7 @@ def _forecast_signature(summary: ForecastSummary) -> str:
             "|".join(
                 [
                     row.row_id,
-                    f"{row.forecast_quantity:.8f}",
+                    f"{row.system_forecast:.8f}",
                     f"{row.latest_price:.8f}",
                     f"{row.estimated_amount:.8f}",
                     row.forecast_basis,

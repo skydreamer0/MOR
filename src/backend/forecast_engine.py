@@ -34,6 +34,10 @@ def build_forecast(
     for (customer, product_code), group in prepared.groupby(["客戶簡稱", "商品號"], dropna=False):
         group = group.sort_values("order_date")
         product_name = _latest_nonempty(group["商品簡稱"])
+        
+        # Global exclusion check
+        is_item_excluded = bool(options and product_code in options.excluded_item_ids)
+
         latest_row = group.iloc[-1]
         latest_price = float(latest_row["單價NT(淨)"] or 0)
         latest_order_date = latest_row["order_date"].date()
@@ -42,13 +46,29 @@ def build_forecast(
         cycle_days = _average_cycle_days(order_history["order_date"].tolist(), options.max_cycle_interval_days)
         next_order_date = latest_order_date + timedelta(days=cycle_days) if cycle_days else None
         auto_in_month = bool(next_order_date and target.start <= next_order_date <= target.end)
-        recent_avg_qty = float(order_history["銷+贈S量"].tail(3).mean()) if not order_history.empty else 0.0
+        
+        # New Forecast Logic
+        lysm_qty = _month_quantity(group, target.year - 1, target.month)
+        last_month_year = target.year if target.month > 1 else target.year - 1
+        last_month_val = target.month - 1 if target.month > 1 else 12
+        lm_qty = _month_quantity(group, last_month_year, last_month_val)
+        
+        avg_3m_qty = _recent_months_average(group, target.year, target.month, 3)
+        current_progress = _month_quantity(group, target.year, target.month)
 
-        if not options.include_all and not auto_in_month:
+        # Baseline: Average of LySM, LM, and Avg3M if they exist
+        references = [v for v in [lysm_qty, lm_qty, avg_3m_qty] if v > 0]
+        baseline_forecast = sum(references) / len(references) if references else 0.0
+        
+        # If the item is expected due to cycle but baseline is 0, use last 3 orders avg as fallback
+        if auto_in_month and baseline_forecast == 0:
+            baseline_forecast = float(order_history["銷+贈S量"].tail(3).mean()) if not order_history.empty else 0.0
+
+        if not options.include_all and not auto_in_month and baseline_forecast == 0:
             continue
 
-        forecast_quantity = recent_avg_qty if auto_in_month else 0.0
-        estimated_amount = forecast_quantity * latest_price
+        forecast_quantity = baseline_forecast
+        estimated_amount = 0.0 if is_item_excluded else forecast_quantity * latest_price
         rows.append(
             ForecastRow(
                 row_id=_row_id(customer, product_code),
@@ -59,15 +79,15 @@ def build_forecast(
                 cycle_days=cycle_days,
                 next_order_date=next_order_date,
                 auto_in_month=auto_in_month,
-                last_year_same_month_qty=_month_quantity(group, target.year - 1, target.month),
-                this_year_same_month_qty=_month_quantity(group, target.year, target.month),
+                last_year_same_month_qty=lysm_qty,
+                this_year_same_month_qty=current_progress,
                 latest_price=latest_price,
-                forecast_quantity=forecast_quantity,
-                manual_quantity=None,
-                effective_quantity=forecast_quantity,
+                system_forecast=forecast_quantity,
+                manual_adjustment=None,
+                final_forecast=forecast_quantity,
                 estimated_amount=estimated_amount,
-                forecast_basis="cycle" if auto_in_month else "not_due",
-                excluded=False,
+                forecast_basis="data_driven" if references else ("cycle_fallback" if auto_in_month else "not_due"),
+                excluded=is_item_excluded,
             )
         )
 
@@ -77,12 +97,12 @@ def build_forecast(
 
 def apply_user_adjustments(
     summary: ForecastSummary,
-    manual_quantities: dict[str, float | None],
+    manual_adjustments: dict[str, float | None],
     excluded_ids: set[str],
 ) -> ForecastSummary:
     rows = [
         row.with_adjustment(
-            manual_quantity=manual_quantities[row.row_id] if row.row_id in manual_quantities else row.manual_quantity,
+            manual_adjustment=manual_adjustments[row.row_id] if row.row_id in manual_adjustments else row.manual_adjustment,
             excluded=row.row_id in excluded_ids,
         )
         for row in summary.rows
@@ -127,6 +147,23 @@ def _latest_nonempty(values: pd.Series) -> str:
         if str(value).strip():
             return str(value)
     return ""
+
+
+def _recent_months_average(group: pd.DataFrame, target_year: int, target_month: int, n: int) -> float:
+    # Calculate average of the last N months before target
+    total_qty = 0.0
+    count = 0
+    curr_y, curr_m = target_year, target_month
+    for _ in range(n):
+        curr_m -= 1
+        if curr_m == 0:
+            curr_m = 12
+            curr_y -= 1
+        qty = _month_quantity(group, curr_y, curr_m)
+        if qty > 0:
+            total_qty += qty
+            count += 1
+    return total_qty / count if count > 0 else 0.0
 
 
 def _row_id(customer: object, product_code: object) -> str:

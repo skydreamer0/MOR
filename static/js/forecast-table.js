@@ -1,26 +1,29 @@
 const formatter = new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 0 });
+const precisionFormatter = new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 2 });
 
 function readRowState(row) {
   const manualInput = row.querySelector("[data-manual]");
-  const excludedInput = row.querySelector("[data-exclude]");
+  const reasonInput = row.querySelector("[data-reason]");
   return {
     row,
     rowId: row.dataset.rowId,
     status: row.dataset.status,
     searchText: (row.dataset.search || "").toLowerCase(),
     price: Number(row.dataset.price || 0),
-    autoQuantity: Number(row.dataset.autoQty || 0),
+    systemForecast: Number(row.dataset.systemQty || 0),
+    actualQuantity: Number(row.dataset.actualQty || 0),
     manualValue: manualInput.value,
-    excluded: excludedInput.checked,
+    reason: reasonInput.value,
+    excluded: row.dataset.excluded === "true",
   };
 }
 
-function effectiveQuantity(state) {
-  return state.manualValue === "" ? state.autoQuantity : Number(state.manualValue);
+function finalForecastQuantity(state) {
+  return state.manualValue === "" ? state.systemForecast : Number(state.manualValue);
 }
 
 function calculateAmount(state) {
-  return state.excluded ? 0 : effectiveQuantity(state) * state.price;
+  return state.excluded ? 0 : finalForecastQuantity(state) * state.price;
 }
 
 function isEdited(state) {
@@ -39,8 +42,6 @@ function matchesFilters(state, searchValue, statusValue) {
     matchesStatus = state.status === statusValue;
   } else if (statusValue === "edited") {
     matchesStatus = isEdited(state);
-  } else if (statusValue === "excluded") {
-    matchesStatus = state.excluded;
   }
 
   return matchesSearch && matchesStatus;
@@ -48,11 +49,28 @@ function matchesFilters(state, searchValue, statusValue) {
 
 function renderRow(state, amount, visible) {
   const invalid = hasInvalidManualQuantity(state);
-  state.row.classList.toggle("excluded", state.excluded);
   state.row.classList.toggle("edited", isEdited(state));
   state.row.classList.toggle("invalid", invalid);
   state.row.hidden = !visible;
-  state.row.querySelector("[data-manual]").setAttribute("aria-invalid", invalid ? "true" : "false");
+
+  const manualInput = state.row.querySelector("[data-manual]");
+  manualInput.setAttribute("aria-invalid", invalid ? "true" : "false");
+
+  const finalQty = finalForecastQuantity(state);
+  const diff = finalQty - state.actualQuantity;
+
+  // Budget & Rate
+  const budget = Number(state.row.dataset.budget || 0);
+  const rate = budget > 0 ? (finalQty / budget) * 100 : 0;
+  const rateEl = state.row.querySelector("[data-rate-display] .rate");
+  if (rateEl) {
+    rateEl.textContent = rate.toFixed(1) + "%";
+    rateEl.classList.toggle("low", rate < 80);
+    rateEl.classList.toggle("high", rate >= 100);
+  }
+
+  state.row.querySelector("[data-final-forecast]").textContent = precisionFormatter.format(finalQty);
+  state.row.querySelector("[data-diff]").textContent = precisionFormatter.format(diff);
   state.row.querySelector("[data-amount]").textContent = formatter.format(amount);
 }
 
@@ -65,7 +83,6 @@ function recalculate() {
   let total = Number(unrenderedTotalInput?.value || 0);
   let visibleCount = 0;
   let editedCount = 0;
-  let excludedCount = 0;
 
   document.querySelectorAll("[data-row]").forEach((row) => {
     const state = readRowState(row);
@@ -75,15 +92,25 @@ function recalculate() {
     total += amount;
     if (visible) visibleCount += 1;
     if (isEdited(state)) editedCount += 1;
-    if (state.excluded) excludedCount += 1;
     renderRow(state, amount, visible);
   });
 
-  document.getElementById("grand-total").textContent = formatter.format(total);
-  document.getElementById("top-total").textContent = formatter.format(total);
+  const grandTotalEl = document.getElementById("grand-total");
+  const topTotalEl = document.getElementById("top-total");
+
+  if (grandTotalEl.dataset.prevTotal && grandTotalEl.dataset.prevTotal !== String(total)) {
+    [grandTotalEl, topTotalEl].forEach(el => {
+      el.classList.remove("value-flash");
+      void el.offsetWidth; // Trigger reflow
+      el.classList.add("value-flash");
+    });
+  }
+  grandTotalEl.dataset.prevTotal = total;
+
+  grandTotalEl.textContent = formatter.format(total);
+  topTotalEl.textContent = formatter.format(total);
   document.querySelector("[data-visible-count]").textContent = formatter.format(visibleCount);
   document.querySelector("[data-edited-count]").textContent = formatter.format(editedCount);
-  document.querySelector("[data-excluded-count]").textContent = formatter.format(excludedCount);
 }
 
 function validateBeforeSubmit(event) {
@@ -112,11 +139,79 @@ function validateBeforeSubmit(event) {
   return true;
 }
 
+function debounce(func, wait) {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
+
+const saveToServer = debounce((state) => {
+  const formData = new FormData();
+  formData.append("row_id", state.rowId);
+  formData.append("manual_adjustment", state.manualValue);
+  formData.append("reason", state.reason);
+
+  // Get year/month from the URL or hidden inputs if they exist
+  const urlParams = new URLSearchParams(window.location.search);
+  formData.append("year", urlParams.get("year") || document.querySelector('input[name="year"]')?.value);
+  formData.append("month", urlParams.get("month") || document.querySelector('input[name="month"]')?.value);
+
+  const statusIndicator = document.getElementById("save-status");
+  if (statusIndicator) statusIndicator.textContent = "正在儲存...";
+
+  fetch("/adjustments/save", {
+    method: "POST",
+    body: formData,
+  })
+    .then((response) => {
+      if (!response.ok) throw new Error("Save failed");
+      if (statusIndicator) {
+        statusIndicator.textContent = "已儲存";
+        setTimeout(() => { if (statusIndicator.textContent === "已儲存") statusIndicator.textContent = ""; }, 2000);
+      }
+    })
+    .catch((err) => {
+      console.error(err);
+      if (statusIndicator) statusIndicator.textContent = "儲存失敗";
+    });
+}, 800);
+
 function bindForecastTable() {
-  document.querySelectorAll("[data-manual], [data-exclude], [data-filter-search], [data-filter-status]").forEach((input) => {
-    input.addEventListener("input", recalculate);
+  document.querySelectorAll("[data-manual], [data-reason], [data-filter-search], [data-filter-status]").forEach((input) => {
+    input.addEventListener("input", (e) => {
+      recalculate();
+      if (e.target.hasAttribute("data-manual") || e.target.hasAttribute("data-reason")) {
+        const row = e.target.closest("[data-row]");
+        const restoreBtn = row.querySelector("[data-restore]");
+        if (restoreBtn) restoreBtn.hidden = e.target.hasAttribute("data-manual") && e.target.value === "";
+        saveToServer(readRowState(row));
+      }
+    });
     input.addEventListener("change", recalculate);
   });
+
+  document.querySelectorAll("[data-restore]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const row = btn.closest("[data-row]");
+      const manualInput = row.querySelector("[data-manual]");
+      manualInput.value = "";
+      btn.hidden = true;
+      recalculate();
+      saveToServer(readRowState(row));
+    });
+  });
+
+  // Click to select all for manual quantity inputs
+  document.querySelectorAll("[data-manual]").forEach((input) => {
+    input.addEventListener("focus", (e) => e.target.select());
+  });
+
   document.getElementById("forecast-form").addEventListener("submit", validateBeforeSubmit);
   recalculate();
 }

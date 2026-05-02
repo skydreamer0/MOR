@@ -30,12 +30,11 @@ def test_homepage_renders_forecast_review_assets_and_tools():
     assert 'href="/static/css/mor.css"' in html
     assert 'src="/static/js/forecast-table.js"' in html
     assert 'class="forecast-tools"' in html
-    assert "搜尋客戶或商品" in html
+    assert "搜尋客戶或品項" in html
     assert "狀態篩選" in html
     assert "data-filter-search" in html
     assert "data-filter-status" in html
     assert "data-edited-count" in html
-    assert "data-excluded-count" in html
     assert "data-row-id=" in html
     assert "data-status=" in html
     assert "data-search=" in html
@@ -49,7 +48,6 @@ def test_homepage_renders_review_validation_and_accessibility_hooks():
 
     assert response.status_code == 200
     assert 'aria-label="人工預估數量"' in html
-    assert 'aria-label="排除此列"' in html
     assert 'data-validation-message' in html
     assert "人工數量必須是 0 以上的數字" in html
 

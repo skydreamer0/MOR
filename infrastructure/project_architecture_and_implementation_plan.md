@@ -560,13 +560,13 @@ Each monthly update should test:
 
 ### Current Architecture Priorities
 
-Before adding larger features, MOR should resolve these architecture issues:
+Before adding larger backend features, MOR will prioritize the UI/UX refactor to establish a professional "Modern Data Workbench" environment:
 
-1. Choose one canonical backend module path.
-2. Fix export authority so the workbook reflects the reviewed state, not a silently regenerated baseline.
-3. Resolve visible row limit versus export scope so users can trust totals.
-4. Align active documentation with `infrastructure/` and `docs/workflows/` only.
-5. Add regression tests around Excel input, workbook output, and encoding.
+1. **Phase 1 UI Refactor**: Implement the new design system (tokens) and layout structure.
+2. **Phase 2 UI Refactor**: Optimize the core data grid (table) for density and clarity.
+3. **Choose one canonical backend module path**: (Resolved to `src/backend/`).
+4. **Fix export authority**: (Resolved).
+5. **Align active documentation**: (In progress).
 
 Current progress:
 
@@ -589,13 +589,13 @@ Deliverables:
 3. Display Jinja page.
 4. Export basic Excel workbook.
 
-### Version 0.2: Review Workspace
+### Version 0.2: Review Workspace (UI Priority)
 
 Goal:
 
-Make the UI useful for monthly review.
+Make the UI professional and useful for monthly review using the "Modern Data Workbench" style.
 
-Status: in progress.
+Status: **Immediate Focus.**
 
 Deliverables:
 
