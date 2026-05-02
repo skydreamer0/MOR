@@ -90,6 +90,7 @@ Update documentation when changing:
 - Agent workflow or testing instructions.
 
 Use concise Markdown. Prefer diagrams only when they clarify flow or ownership.
+**IMPORTANT:** Codex and AI subagents MUST ONLY read active docs in `infrastructure/` and `docs/workflows/`. They MUST NEVER read files in `docs/archive/` or any file prefixed with `superseded-` for implementation context.
 
 ## Subagent Rules
 

@@ -1,3 +1,5 @@
+﻿DO NOT USE FOR IMPLEMENTATION
+
 # MOR Backend Design
 
 ## Goals
@@ -25,6 +27,9 @@ build_forecast(data, target, options, config) -> ForecastSummary
 apply_user_adjustments(summary, manual_quantities, excluded_ids) -> ForecastSummary
 export_forecast(summary) -> BytesIO
 ```
+
+The source-of-truth field mapping lives in `docs/design/data-contract.md`.
+The forecast calculation rules live in `docs/design/forecast-logic.md`.
 
 ## Domain Model
 
@@ -60,6 +65,8 @@ Backend errors should become user-readable messages:
 - Invalid year/month: return validation message.
 - Invalid manual quantity: reject export with `400` and explain the bad field category.
 
+Export should validate and serialize the submitted reviewed state. It should not silently regenerate a new baseline forecast that discards the user's edits.
+
 Do not allow raw tracebacks to become the normal user experience.
 
 ## Test Strategy
@@ -83,3 +90,11 @@ If MOR grows, add features in this order:
 5. Add comparison services for budget/actual/forecast.
 
 Current API gate: `web/forecast_presenter.py` may exist without public `/api/*` routes. Public API routes should be added only after presenter tests define the payload shape and the frontend has a concrete need.
+
+## Reference Docs
+
+- `docs/design/data-model.md`
+- `docs/design/data-contract.md`
+- `docs/design/forecast-logic.md`
+- `docs/design/api-spec.md`
+

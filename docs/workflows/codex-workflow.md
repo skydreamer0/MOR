@@ -154,10 +154,24 @@ Do not write code until the plan is approved.
 - For architecture work, read `docs/architecture/current-architecture.md`.
 - For frontend logic, read `docs/design/frontend-logic-architecture.md`.
 - For backend design, read `docs/design/backend-design.md`.
-- For phased frontend work, use `docs/roadmaps/airtable-retool-forecast-review-roadmap.md` as the active roadmap.
-- For the Airtable/Retool review screen implementation, use `docs/plans/2026-05-02-airtable-retool-frontend-implementation-plan.md` as the active task plan.
+- For field mapping, read `docs/design/data-contract.md`.
+- For forecast formulas, read `docs/design/forecast-logic.md`.
+- For API behavior, read `docs/design/api-spec.md`.
+- For the active roadmap, use `docs/roadmaps/airtable-retool-forecast-review-roadmap.md`.
+- For the Airtable/Retool review screen implementation, use `docs/plans/2026-05-02-airtable-retool-frontend-implementation-plan.md`.
 - For any Excel behavior change, add or update tests before implementation.
 
 ## UI Copy And Encoding Rule
 
 Never copy user-visible Chinese labels from shell output if the terminal rendering looks corrupted. Verify UI copy from UTF-8 source files, browser output, or a Python/PowerShell character-code check before adding it to templates, tests, or plans.
+
+## Solo Developer Workflow
+
+When the work is being done by one person at a time, prefer this cadence:
+
+1. Pick one small task.
+2. Make the smallest working change.
+3. Run the relevant tests.
+4. Commit while the change is still easy to reason about.
+5. Keep `main` usable at the end of the session.
+6. Reserve feature branches for larger refactors or parallel work.

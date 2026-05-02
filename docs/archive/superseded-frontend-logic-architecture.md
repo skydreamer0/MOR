@@ -1,3 +1,5 @@
+﻿DO NOT USE FOR IMPLEMENTATION
+
 # MOR Frontend Logic Architecture Analysis
 
 ## Recommendation
@@ -96,3 +98,4 @@ Consider React, Vue, or similar only if MOR gains at least two of these:
 - Multiple screens beyond the forecast table.
 
 Until then, Flask + Jinja + small JS modules is the simplest durable architecture.
+

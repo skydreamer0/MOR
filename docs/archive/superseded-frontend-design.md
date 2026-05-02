@@ -1,3 +1,5 @@
+﻿DO NOT USE FOR IMPLEMENTATION
+
 # MOR Frontend Design
 
 ## UI Role
@@ -72,3 +74,4 @@ Improve next:
 - Modal-heavy editing.
 - Authentication or account menus.
 - Client-side framework unless table interactions become too complex for vanilla JS.
+

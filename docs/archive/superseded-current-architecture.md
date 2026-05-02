@@ -1,3 +1,5 @@
+﻿DO NOT USE FOR IMPLEMENTATION
+
 # MOR Current Architecture
 
 ## Purpose
@@ -10,7 +12,7 @@ MOR is a local Flask tool for monthly sales forecasting. It reads Excel sales de
 flowchart LR
     User["User in browser"] --> Flask["Flask app"]
     Flask --> Loader["Excel data loader"]
-    Loader --> Source["業績明細 Excel"]
+    Loader --> Source["Local Excel workbook"]
     Flask --> Engine["Forecast engine"]
     Engine --> Summary["Forecast rows + total"]
     User --> Form["Manual quantities / exclusions"]
@@ -29,7 +31,7 @@ flowchart LR
 | Forecast logic | `forecast_engine.py`, `forecast_models.py` | Builds typed forecast rows and summary |
 | Export | `exporter.py` | Writes forecast workbook sheets |
 | Form parsing | `web/form_parser.py` | Parses target month, manual quantity, exclusion fields |
-| Presentation | `web/forecast_presenter.py` | Converts forecast summaries into JSON-safe review-grid payloads |
+| Presentation | `web/forecast_presenter.py` | Converts forecast summaries into JSON-safe review-grid payloads when present |
 | Config | `forecast_config.py` | Centralizes source file, sheet, required columns, row limit, cycle window |
 | Tests | `tests/` | Covers forecast, form parser, and Flask behavior |
 
@@ -37,10 +39,10 @@ flowchart LR
 
 1. `GET /` loads the sales detail workbook.
 2. The loader validates required columns and creates `order_date`.
-3. The forecast engine groups by `客戶簡稱 + 商品號`.
+3. The forecast engine groups by customer and product identity.
 4. Each group calculates latest order date, average order cycle, next expected order date, recent average quantity, latest price, and estimated amount.
 5. The page renders a maximum visible row set and recalculates totals client-side when the user edits quantity or exclusion.
-6. `POST /export` rebuilds the forecast, applies form adjustments on the server, and exports Excel.
+6. `POST /export` validates the submitted reviewed state, applies form adjustments on the server, and exports Excel.
 
 ## Architectural Direction
 
@@ -52,6 +54,7 @@ The desired direction is a clean monolith:
 - Keep UI behavior small and local until the interaction surface grows.
 - Add persistence only when monthly version history becomes a real need.
 - Keep `web/forecast_presenter.py` internal until public JSON endpoints have a concrete frontend need.
+- Keep export as a validation and serialization step, not a silent recomputation of the reviewed state.
 
 ## Known Risks
 
@@ -60,6 +63,7 @@ The desired direction is a clean monolith:
 - There is no persisted draft state; edits only exist until export.
 - Dependency management is not fully formalized yet.
 - Earlier source files showed mojibake in some shell views, so encoding should be handled carefully.
+- Forecast formulas need a dedicated spec so future changes do not drift from the implementation.
 
 ## Current Process Risks
 
@@ -67,3 +71,6 @@ The desired direction is a clean monolith:
 - The active roadmap is `docs/roadmaps/airtable-retool-forecast-review-roadmap.md`.
 - The active frontend implementation plan is `docs/plans/2026-05-02-airtable-retool-frontend-implementation-plan.md`.
 - UI copy should be verified from UTF-8 source files or browser output, not copied from a corrupted shell rendering.
+- The data contract is documented separately in `docs/design/data-contract.md`.
+- The forecast calculation rules are documented separately in `docs/design/forecast-logic.md`.
+

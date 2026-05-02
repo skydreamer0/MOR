@@ -1,3 +1,5 @@
+﻿DO NOT USE FOR IMPLEMENTATION
+
 # Airtable/Retool Frontend Implementation Plan
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
@@ -475,3 +477,4 @@ If the UI behavior changes materially, update:
 3. `refactor: extract MOR frontend assets`
 4. `feat: add forecast table filters and row states`
 5. `docs: update MOR frontend implementation notes`
+
