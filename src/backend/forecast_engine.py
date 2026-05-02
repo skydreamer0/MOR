@@ -7,8 +7,8 @@ from typing import Iterable
 import pandas as pd
 
 from src.backend.data_loader import prepare_sales_data
-from src.backend.config import ForecastConfig
-from src.backend.models import ForecastOptions, ForecastRow, ForecastSummary, ForecastTarget
+from src.backend.forecast_config import ForecastConfig
+from src.backend.forecast_models import ForecastOptions, ForecastRow, ForecastSummary, ForecastTarget
 
 __all__ = [
     "ForecastOptions",

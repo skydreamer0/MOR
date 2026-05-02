@@ -1,5 +1,3 @@
-"""Compatibility facade — preserves the old sales_forecast.py public API."""
-
 from __future__ import annotations
 
 from typing import Iterable
@@ -8,9 +6,9 @@ import pandas as pd
 
 from src.backend.data_loader import default_target_from_data, load_sales_detail, prepare_sales_data
 from src.backend.exporter import export_forecast
-from src.backend.engine import ForecastOptions, ForecastTarget, apply_user_adjustments, build_forecast
-from src.backend.models import ForecastRow, ForecastSummary
-from src.web.form_parser import parse_excluded_ids, parse_manual_quantities
+from src.backend.forecast_engine import ForecastOptions, ForecastTarget, apply_user_adjustments, build_forecast
+from src.backend.forecast_models import ForecastRow, ForecastSummary
+from src.backend.web.form_parser import parse_excluded_ids, parse_manual_quantities
 
 
 def build_forecast_rows(data: pd.DataFrame, year: int, month: int, include_all: bool = False) -> list[dict]:

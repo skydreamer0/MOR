@@ -4,7 +4,7 @@ from io import BytesIO
 
 import pandas as pd
 
-from src.backend.models import ForecastRow, ForecastSummary
+from src.backend.forecast_models import ForecastRow, ForecastSummary
 
 
 def export_forecast(summary: ForecastSummary) -> BytesIO:

@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.backend.config import ForecastConfig
-from src.backend.models import ForecastTarget
+from src.backend.forecast_config import ForecastConfig
+from src.backend.forecast_models import ForecastTarget
 
 
 def load_sales_detail(base_path: Path, config: ForecastConfig | None = None) -> pd.DataFrame:
