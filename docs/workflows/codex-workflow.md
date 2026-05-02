@@ -151,15 +151,14 @@ Do not write code until the plan is approved.
 ## MOR-Specific Notes
 
 - For UI work, read `DESIGN.md` first.
-- For architecture work, read `docs/architecture/current-architecture.md`.
-- For frontend logic, read `docs/design/frontend-logic-architecture.md`.
-- For backend design, read `docs/design/backend-design.md`.
-- For field mapping, read `docs/design/data-contract.md`.
-- For forecast formulas, read `docs/design/forecast-logic.md`.
-- For API behavior, read `docs/design/api-spec.md`.
-- For the active roadmap, use `docs/roadmaps/airtable-retool-forecast-review-roadmap.md`.
-- For the Airtable/Retool review screen implementation, use `docs/plans/2026-05-02-airtable-retool-frontend-implementation-plan.md`.
+- For architecture and roadmap work, use `infrastructure/project_architecture_and_implementation_plan.md`.
+- For API behavior, use `infrastructure/api/api_spec.md`.
+- For data model and persistence decisions, use `infrastructure/backend/database_schema.md`.
+- For architecture decisions, use `infrastructure/adr/`.
+- For local setup, verification, and Codex operating rules, use `docs/workflows/`.
+- Do not use `docs/archive/` or any `superseded-*` file as implementation context.
 - For any Excel behavior change, add or update tests before implementation.
+- For broad roadmap, architecture, or risk exploration, use subagents first and have the main agent integrate the final decision.
 
 ## UI Copy And Encoding Rule
 

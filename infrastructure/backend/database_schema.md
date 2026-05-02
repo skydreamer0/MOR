@@ -16,7 +16,7 @@ Defines the current target period of the forecasting engine.
 
 ### 2. forecast_row
 Represents a unique customer-product combination.
-- `row_id` (string): Unique identifier (e.g. `customer_name__product_code`).
+- `row_id` (string): Deterministic unique identifier for the customer-product pair. Current implementation uses `customer_name__product_code`; the target model may switch to a stable customer key plus product code after regression tests are in place.
 - `customer_name` (string): Standardized name of the customer.
 - `product_code` (string): Product identifier.
 - `product_name` (string): Display name of the product.
@@ -42,6 +42,23 @@ Represents a unique customer-product combination.
 ---
 
 ## Excel File Schema Requirements
+
+The schema below describes semantic requirements. Raw workbook labels may be
+Chinese and must be verified from UTF-8 source files or workbook fixtures before
+being copied into implementation, tests, or documentation.
+
+Required semantic input fields:
+
+1. Sales date.
+2. Customer name.
+3. Product code.
+4. Product name.
+5. Quantity.
+6. Latest price or amount.
+
+Output workbook sheet labels should preserve the existing Chinese labels in
+implementation and tests. Verify them by reading generated workbooks back with
+`openpyxl`.
 
 ### Input Source: `業績明細 Excel`
 - **Required Columns:** `日期`, `客戶簡稱`, `商品號`, `商品名稱`, `數量`, `售價`

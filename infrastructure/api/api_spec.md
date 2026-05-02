@@ -23,7 +23,11 @@ Loads the application, processes the local Excel file, and returns the interacti
   - `200 OK` (with alert message): Source Excel file missing or missing columns.
 
 ### 2. Export Forecast
-Accepts the user's manual adjustments and exclusions from the table, recalculates the forecast, and downloads the `.xlsx` workbook.
+Accepts the user's manual adjustments and exclusions from the table and downloads the `.xlsx` workbook.
+
+Current implementation reloads the source Excel file and rebuilds the baseline forecast before applying posted manual quantities and exclusions. This is acceptable for the prototype, but it is not the target authority model.
+
+Target behavior: export should use the reviewed state submitted by the user as the authority. The server may recalculate effective quantities and amounts from posted values, but it must not silently replace reviewed rows with a newly generated baseline.
 
 - **URL:** `/export`
 - **Method:** `POST`
@@ -33,6 +37,8 @@ Accepts the user's manual adjustments and exclusions from the table, recalculate
   - `target_month` (int, required): Target forecasting month.
   - `manual_qty_<row_id>` (int, optional): Manually specified quantity override.
   - `exclude_<row_id>` (bool, optional): If checked, sets the row output to 0.
+- **Open Design Issue:**
+  - The form must carry enough reviewed row state, or the server must keep a trusted review snapshot, so exported totals always match the user's review workspace.
 - **Success Response:**
   - **Code:** `200 OK`
   - **Content-Type:** `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`

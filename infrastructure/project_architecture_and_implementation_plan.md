@@ -128,6 +128,13 @@ flowchart TD
 
 ## 7. System Architecture
 
+This diagram is the target architecture for the monthly operating version.
+The current implementation is still transitional: runtime imports primarily use
+root-level modules such as `data_loader.py`, `forecast_engine.py`, `exporter.py`,
+`forecast_config.py`, and `forecast_models.py`, while `src/backend/` contains a
+parallel backend copy. The roadmap must resolve this into one canonical backend
+module path before deeper feature work continues.
+
 ```mermaid
 flowchart TD
     subgraph Client [Frontend Review Workspace]
@@ -139,7 +146,8 @@ flowchart TD
     subgraph Web [Flask Application Layer]
         Routes[app.py Routes]
         Parser[web/form_parser.py]
-        Validator[web/input_validator.py]
+        Presenter[web/forecast_presenter.py]
+        Validator[web/input_validator.py - planned]
     end
 
     subgraph Domain [Forecast Domain Layer]
@@ -147,12 +155,12 @@ flowchart TD
         Loader[data_loader.py]
         Engine[forecast_engine.py]
         Models[forecast_models.py]
-        Rules[forecast_rules.py]
+        Rules[forecast_rules.py - planned]
     end
 
     subgraph Output [Export Layer]
         Exporter[exporter.py]
-        WorkbookBuilder[workbook_builder.py]
+        WorkbookBuilder[workbook_builder.py - planned]
     end
 
     subgraph Data [File-based Persistence]
@@ -163,6 +171,7 @@ flowchart TD
     UI --> Routes
     JS --> Routes
     Routes --> Parser
+    Routes --> Presenter
     Parser --> Validator
     Routes --> Loader
     Loader --> SourceExcel
@@ -380,22 +389,39 @@ sequenceDiagram
 
 ### 13.1 Source Excel Required Fields
 
-Minimum required fields:
+The data contract separates raw Excel columns from normalized domain fields.
+Raw workbook labels may be Chinese and must be preserved in source and export
+behavior. Documentation should describe their meaning without copying corrupted
+terminal output.
 
-1. Hospital
-2. Product
-3. Sales Date
-4. Quantity
-5. Sales Amount
+Minimum semantic fields:
 
-Optional fields:
+1. Customer or hospital name.
+2. Product code.
+3. Product display name.
+4. Sales year, month, and day.
+5. Quantity.
+6. Unit price or sales amount.
 
-1. Customer code
-2. Department
-3. Doctor
-4. Sales representative
-5. Channel
-6. Remarks
+Normalized domain fields:
+
+1. `customer`
+2. `product_code`
+3. `product_name`
+4. `order_date`
+5. `quantity`
+6. `latest_price`
+7. `year`
+8. `month`
+
+Optional semantic fields:
+
+1. Customer code.
+2. Department.
+3. Doctor.
+4. Sales representative.
+5. Channel.
+6. Remarks.
 
 ### 13.2 Forecast Row Fields
 
@@ -413,14 +439,23 @@ Each forecast row should contain:
 10. edited_by_user
 11. warning_status
 
-**row_id rule:**
-`row_id = hash(customer_key + product_code)`
+### 13.3 Data Contract Clarifications
 
-`customer_key` 來源優先序：
-1. `customer_code`
-2. normalized `customer_name`
+Current `row_id` implementation uses:
 
-不可使用 `product_name` 作為主要 identity。`product_name` 只能作為 display label。
+`row_id = customer + "__" + product_code`
+
+Target row identity rules:
+
+1. Prefer a stable customer code when source data provides one.
+2. Fall back to normalized customer name.
+3. Combine the customer key with `product_code`.
+4. Do not use `product_name` as identity because it is a display label and can change.
+5. Keep generated row IDs deterministic so submitted review state and exported workbooks match.
+
+The implementation roadmap must either preserve the current readable row ID for
+Version 1 or migrate to a hashed/stable ID with regression tests for form submit
+and export behavior.
 
 ## 14. Error Handling Design
 
@@ -460,13 +495,29 @@ Expected behaviour:
 
 ## 15. Testing Plan
 
+Current automated coverage:
+
+1. Forecast engine unit tests.
+2. Form parser unit tests.
+3. Forecast presenter serialization tests.
+4. Flask route smoke tests.
+
+Known coverage gaps:
+
+1. Excel loader fixtures for required columns, missing columns, invalid dates, and Chinese labels.
+2. Successful `/export` route test with workbook readback.
+3. Workbook sheet names, column order, included/excluded rows, manual quantities, and totals.
+4. Multi-customer and multi-product forecast edge cases.
+5. Browser-level smoke tests for search, filter, manual quantity, row exclusion, and live totals.
+6. Encoding checks for user-visible Chinese labels in source files, browser output, and exported workbook.
+
 ### 15.1 Unit Tests
 
 Test modules:
 
 1. data_loader.py
 2. forecast_engine.py
-3. forecast_rules.py
+3. forecast_rules.py, when introduced
 4. exporter.py
 5. form_parser.py
 
@@ -498,14 +549,36 @@ Each monthly update should test:
 2. Same reviewed state creates same workbook.
 3. Column order remains stable.
 4. Summary total equals row-level total.
+5. UI-visible totals match exported workbook totals.
+6. Hidden, paginated, or unrendered rows cannot silently change export totals.
+
+### 15.4 Verification By Roadmap Phase
+
+1. Baseline documentation or route work: run `D:\AI\python.exe -m pytest -q`.
+2. Import or module path work: run `D:\AI\python.exe -m py_compile app.py sales_forecast.py forecast_config.py forecast_models.py data_loader.py forecast_engine.py exporter.py web\form_parser.py`.
+3. Forecast rule work: run focused forecast tests plus the full suite.
+4. Export work: add workbook readback tests with `openpyxl`, then run the full suite.
+5. Frontend interaction work: run route tests, start the local server, and complete the browser checklist in `docs/workflows/local-setup.md`.
 
 ## 16. Version Roadmap
+
+### Current Architecture Priorities
+
+Before adding larger features, MOR should resolve these architecture issues:
+
+1. Choose one canonical backend module path.
+2. Fix export authority so the workbook reflects the reviewed state, not a silently regenerated baseline.
+3. Resolve visible row limit versus export scope so users can trust totals.
+4. Align active documentation with `infrastructure/` and `docs/workflows/` only.
+5. Add regression tests around Excel input, workbook output, and encoding.
 
 ### Version 0.1: Working Prototype
 
 Goal:
 
 Create the first usable local workflow.
+
+Status: mostly complete.
 
 Deliverables:
 
@@ -520,6 +593,8 @@ Goal:
 
 Make the UI useful for monthly review.
 
+Status: in progress.
+
 Deliverables:
 
 1. Search and filter.
@@ -528,11 +603,19 @@ Deliverables:
 4. Live total summary.
 5. Adjustment reason field.
 
+Architecture notes:
+
+1. Decide whether `web/forecast_presenter.py` feeds a future JSON API or remains a testable presenter for SSR data.
+2. Ensure visible row limits do not make summary totals misleading.
+3. Keep JavaScript as preview behavior; backend validation remains authoritative.
+
 ### Version 0.3: Validation and Error Handling
 
 Goal:
 
 Make the system stable for real monthly use.
+
+Status: planned.
 
 Deliverables:
 
@@ -541,11 +624,19 @@ Deliverables:
 3. Abnormal value warnings.
 4. Invalid submission detection.
 
+Architecture notes:
+
+1. Introduce `web/input_validator.py` only when validation exceeds `web/form_parser.py`.
+2. Add structured validation errors before adding new routes or APIs.
+3. Keep Chinese UI copy sourced from UTF-8 files, not terminal output.
+
 ### Version 0.4: Export Quality
 
 Goal:
 
 Make exported workbook suitable for internal reporting.
+
+Status: planned.
 
 Deliverables:
 
@@ -555,11 +646,20 @@ Deliverables:
 4. Excluded row tab.
 5. Metadata tab.
 
+Architecture notes:
+
+1. Export must use the submitted reviewed state as the authority.
+2. Export may recalculate effective quantity and amount from submitted values.
+3. Export must not silently replace user-reviewed baseline rows with a new forecast.
+4. Add workbook readback tests before changing sheet structure or labels.
+
 ### Version 1.0: Monthly Operating Version
 
 Goal:
 
 Make MOR reliable enough for repeated monthly use.
+
+Status: planned.
 
 Deliverables:
 
@@ -569,6 +669,13 @@ Deliverables:
 4. Clear folder structure.
 5. Basic user guide.
 6. Sample data and test workbook.
+
+Exit criteria:
+
+1. One canonical backend implementation path.
+2. No active workflow doc points to archived or deleted roadmap files.
+3. Full test suite, syntax check, browser checklist, and export workbook inspection pass.
+4. Core architecture decisions are captured in ADRs.
 
 ## 17. Suggested Folder Structure
 
