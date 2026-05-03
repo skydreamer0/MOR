@@ -1,6 +1,99 @@
 const formatter = new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 0 });
 const precisionFormatter = new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 2 });
 
+/* ── Sparkline Renderer ─────────────────────────────────────────── */
+
+/**
+ * Draw a minimal sparkline on a <canvas> element.
+ * - No axes, only the trend line.
+ * - Last data point gets an emphasized dot.
+ * - Line colour shifts green→red based on trend direction.
+ */
+function drawSparkline(canvas, data) {
+  if (!canvas || !data || data.length === 0) return;
+
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth || 80;
+  const h = canvas.clientHeight || 24;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+
+  const pad = 3;
+  const plotW = w - pad * 2;
+  const plotH = h - pad * 2;
+
+  const max = Math.max(...data, 1); // avoid division by 0
+  const min = Math.min(...data, 0);
+  const range = max - min || 1;
+
+  const points = data.map((v, i) => ({
+    x: pad + (i / Math.max(data.length - 1, 1)) * plotW,
+    y: pad + plotH - ((v - min) / range) * plotH,
+  }));
+
+  // Determine trend colour: compare last vs first non-zero
+  const first = data.find((v) => v > 0) ?? 0;
+  const last = data[data.length - 1];
+  const trendUp = last >= first;
+  const lineColor = trendUp
+    ? "rgba(4, 120, 87, 0.7)"   // success-text
+    : "rgba(220, 38, 38, 0.7)"; // danger
+  const dotColor = trendUp
+    ? "rgb(4, 120, 87)"
+    : "rgb(220, 38, 38)";
+  const fillColor = trendUp
+    ? "rgba(4, 120, 87, 0.06)"
+    : "rgba(220, 38, 38, 0.06)";
+
+  // Area fill
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, h - pad);
+  points.forEach((p) => ctx.lineTo(p.x, p.y));
+  ctx.lineTo(points[points.length - 1].x, h - pad);
+  ctx.closePath();
+  ctx.fillStyle = fillColor;
+  ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  points.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+  ctx.strokeStyle = lineColor;
+  ctx.lineWidth = 1.5;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.stroke();
+
+  // Last-point dot (emphasized)
+  const lastPt = points[points.length - 1];
+  ctx.beginPath();
+  ctx.arc(lastPt.x, lastPt.y, 2.5, 0, Math.PI * 2);
+  ctx.fillStyle = dotColor;
+  ctx.fill();
+}
+
+/**
+ * Render all sparklines on the page.
+ * Called once on load.
+ */
+function renderAllSparklines() {
+  document.querySelectorAll("[data-row]").forEach((row) => {
+    const canvas = row.querySelector("[data-sparkline]");
+    if (!canvas) return;
+    try {
+      const trend = JSON.parse(row.dataset.trend || "[]");
+      drawSparkline(canvas, trend);
+    } catch {
+      // Silently skip if data is malformed
+    }
+  });
+}
+
+
+/* ── Core Table Logic ───────────────────────────────────────────── */
+
 function readRowState(row) {
   const manualInput = row.querySelector("[data-manual]");
   const reasonInput = row.querySelector("[data-reason]");
@@ -213,6 +306,10 @@ function bindForecastTable() {
   });
 
   document.getElementById("forecast-form").addEventListener("submit", validateBeforeSubmit);
+
+  // Phase 4: Render sparklines on initial load
+  renderAllSparklines();
+
   recalculate();
 }
 

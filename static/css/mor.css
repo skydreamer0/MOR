@@ -331,7 +331,7 @@ table {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  min-width: 1500px;
+  min-width: 2200px;
   font-size: var(--text-base);
 }
 
@@ -568,6 +568,59 @@ input.qty:focus {
 .rate:not(.low):not(.high) {
   color: var(--warning-text);
   background: rgba(217, 119, 6, 0.06);
+}
+
+
+/* ── Sparkline cell ─────────────────────────────────────────── */
+.sparkline-cell {
+  padding: 4px var(--sp-2);
+  min-width: 88px;
+}
+
+.sparkline-cell canvas {
+  display: block;
+  width: 80px;
+  height: 24px;
+}
+
+
+/* ── Gap value — colour-coded positive / negative ───────────── */
+.gap-value {
+  font-weight: 600;
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.gap-value.negative {
+  color: var(--danger);
+}
+
+.gap-value.positive {
+  color: var(--success-text);
+}
+
+
+/* ── Column-group visual separators ─────────────────────────── */
+th.col-group-start,
+td:nth-child(4) {
+  border-left: 2px solid var(--line);
+}
+
+th.col-group-end + th.col-group-start,
+th.col-group-end + th {
+  border-left: 2px solid var(--line);
+}
+
+/* Match td positions for group borders: review cols 4-8, current 9-12, decision 13-16 */
+tbody td:nth-child(9),
+tbody td:nth-child(13) {
+  border-left: 2px solid var(--line);
+}
+
+thead th:nth-child(9),
+thead th:nth-child(13) {
+  border-left: 2px solid var(--line);
 }
 
 

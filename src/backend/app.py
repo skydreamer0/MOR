@@ -13,6 +13,7 @@ from src.backend.forecast_models import ForecastSummary
 from src.backend.web.form_parser import FormValidationError, parse_excluded_ids, parse_manual_quantities, parse_target_period
 from src.backend.database import get_db
 from src.backend.etl import sync_excel_to_db
+from src.backend.history_service import enrich_rows_with_history
 import json
 
 
@@ -64,6 +65,10 @@ def create_app(config: dict | None = None) -> Flask:
                 rows=filtered_rows,
                 total=sum(row.estimated_amount for row in filtered_rows if not row.excluded),
             )
+            
+            # Enrich with historical trends (batch SQL — Phase 2 Data Engine)
+            enriched_rows = enrich_rows_with_history(summary.rows, db, target.year, target.month)
+            summary = replace(summary, rows=enriched_rows)
             
             # Apply adjustments and budgets
             summary = apply_user_adjustments(

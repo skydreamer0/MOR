@@ -84,14 +84,22 @@
               <th>狀態</th>
               <th>醫院 (客戶)</th>
               <th>品項名稱</th>
-              <th class="num">去年同期量</th>
+              <!-- ── 回顧區塊 ── -->
+              <th class="col-group-start">半年趨勢</th>
+              <th class="num">上月實際</th>
+              <th class="num">上月預算</th>
+              <th class="num">上月達成率</th>
+              <th class="num col-group-end">上月 GAP</th>
+              <!-- ── 現況區塊 ── -->
+              <th class="num col-group-start">去年同期量</th>
               <th class="num">實際數量 (本月)</th>
               <th class="num">系統預估</th>
-              <th class="num">人工調整</th>
-              <th class="num">最終預估</th>
+              <th class="num col-group-end">人工調整</th>
+              <!-- ── 決策區塊 ── -->
+              <th class="num col-group-start">最終預估</th>
               <th class="num">預算目標</th>
               <th class="num">達成率</th>
-              <th class="num">差異</th>
+              <th class="num col-group-end">差異</th>
               <th>調整原因</th>
               <th class="num">納入計算</th>
               <th class="num">預估金額</th>
@@ -109,6 +117,9 @@
               data-actual-qty="{{ row.this_year_same_month_qty }}"
               data-budget="{{ row.budget_quantity }}"
               data-excluded="{{ 'true' if row.excluded else 'false' }}"
+              data-trend="{{ row.trend_6m | tojson if row.trend_6m else '[0,0,0,0,0,0]' }}"
+              data-lm-actual="{{ row.last_month_actual }}"
+              data-lm-budget="{{ row.last_month_budget }}"
             >
               <td>
                 {% if row.auto_in_month %}
@@ -119,6 +130,23 @@
               </td>
               <td>{{ row.customer }}</td>
               <td>{{ row.product_name }}</td>
+              <!-- ── 回顧區塊 ── -->
+              <td class="sparkline-cell"><canvas data-sparkline width="80" height="24"></canvas></td>
+              <td class="num">{{ "{:,.0f}".format(row.last_month_actual) }}</td>
+              <td class="num">{{ "{:,.0f}".format(row.last_month_budget) }}</td>
+              <td class="num" data-lm-rate-display>
+                {% set lm_rate = (row.last_month_actual / row.last_month_budget * 100) if row.last_month_budget > 0 else 0 %}
+                <span class="rate {% if lm_rate < 80 %}low{% elif lm_rate >= 100 %}high{% endif %}">
+                  {{ "{:,.1f}%".format(lm_rate) }}
+                </span>
+              </td>
+              <td class="num">
+                {% set lm_gap = row.last_month_actual - row.last_month_budget %}
+                <span class="gap-value {% if lm_gap < 0 %}negative{% elif lm_gap > 0 %}positive{% endif %}">
+                  {{ "{:+,.0f}".format(lm_gap) }}
+                </span>
+              </td>
+              <!-- ── 現況區塊 ── -->
               <td class="num">{{ "{:,.0f}".format(row.last_year_same_month_qty) }}</td>
               <td class="num">{{ "{:,.0f}".format(row.this_year_same_month_qty) }}</td>
               <td class="num">{{ "{:,.2f}".format(row.system_forecast) }}</td>
@@ -128,6 +156,7 @@
                   <button type="button" class="icon-btn" title="還原至系統預估" data-restore {% if row.manual_adjustment is none %}hidden{% endif %}>↺</button>
                 </div>
               </td>
+              <!-- ── 決策區塊 ── -->
               <td class="num" data-final-forecast>{{ "{:,.2f}".format(row.final_forecast) }}</td>
               <td class="num" data-budget-display>{{ "{:,.2f}".format(row.budget_quantity) }}</td>
               <td class="num" data-rate-display>

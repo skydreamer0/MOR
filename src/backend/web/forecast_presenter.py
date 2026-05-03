@@ -10,6 +10,11 @@ def column_schema() -> list[dict]:
         _column("auto_in_month", "狀態", "status"),
         _column("customer", "醫院 (客戶)", "text"),
         _column("product_name", "品項名稱", "text"),
+        _column("trend_6m", "半年趨勢", "sparkline"),
+        _column("last_month_actual", "上月實際", "number", align="right"),
+        _column("last_month_budget", "上月預算", "number", align="right"),
+        _column("last_month_rate", "上月達成率", "percent", align="right"),
+        _column("last_month_gap", "上月 GAP", "number", align="right"),
         _column("last_year_same_month_qty", "去年同期量", "number", align="right"),
         _column("this_year_same_month_qty", "實際數量 (本月)", "number", align="right"),
         _column("system_forecast", "系統預估", "number", align="right"),
@@ -49,6 +54,7 @@ def _column(key: str, label: str, column_type: str, align: str = "left", editabl
 
 
 def _serialize_row(row: ForecastRow) -> dict:
+    last_month_rate = (row.last_month_actual / row.last_month_budget * 100) if row.last_month_budget > 0 else 0.0
     return {
         "row_id": row.row_id,
         "customer": row.customer,
@@ -58,6 +64,12 @@ def _serialize_row(row: ForecastRow) -> dict:
         "cycle_days": row.cycle_days,
         "next_order_date": _date_to_iso(row.next_order_date),
         "auto_in_month": row.auto_in_month,
+        "last_month_actual": row.last_month_actual,
+        "last_month_budget": row.last_month_budget,
+        "last_month_rate": round(last_month_rate, 1),
+        "last_month_gap": round(row.last_month_actual - row.last_month_budget, 2),
+        "trend_6m": row.trend_6m or [0.0] * 6,
+        "avg_3m": row.avg_3m,
         "last_year_same_month_qty": row.last_year_same_month_qty,
         "this_year_same_month_qty": row.this_year_same_month_qty,
         "latest_price": row.latest_price,

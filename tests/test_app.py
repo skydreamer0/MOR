@@ -1,10 +1,21 @@
 from pathlib import Path
 import re
+import shutil
+import sqlite3
+import uuid
 
 import pandas as pd
 
 from src.backend import app
 from src.backend.forecast_config import ForecastConfig
+
+
+def _isolated_db_base() -> Path:
+    base = Path.cwd() / ".test-dbs" / f"mor-test-{uuid.uuid4().hex}"
+    if base.exists():
+        shutil.rmtree(base)
+    base.mkdir(parents=True)
+    return base
 
 
 def test_homepage_loads_with_forecast_table():
@@ -38,6 +49,141 @@ def test_homepage_renders_forecast_review_assets_and_tools():
     assert "data-row-id=" in html
     assert "data-status=" in html
     assert "data-search=" in html
+
+
+def test_header_navigation_is_consistent_across_frontend_pages(monkeypatch):
+    db_base_path = _isolated_db_base()
+    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
+    columns = config.required_columns
+    data = pd.DataFrame(
+        [
+            {
+                columns[0]: 2026,
+                columns[1]: 4,
+                columns[2]: 10,
+                columns[3]: "Hospital A",
+                columns[4]: "P1",
+                columns[5]: "Product One",
+                columns[6]: 3,
+                columns[7]: 100,
+            }
+        ]
+    )
+    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: data)
+    client = app.create_app(
+        {"TESTING": True, "FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path}
+    ).test_client()
+
+    expectations = {
+        "/": 'href="/" aria-current="page"',
+        "/items": 'href="/items" aria-current="page"',
+        "/exclusions": 'href="/exclusions" aria-current="page"',
+    }
+    for path, active_link in expectations.items():
+        response = client.get(path)
+        html = response.get_data(as_text=True)
+
+        assert response.status_code == 200
+        assert 'href="/">工作台</a>' in html or active_link == 'href="/" aria-current="page"'
+        assert 'href="/items"' in html
+        assert 'href="/exclusions"' in html
+        assert active_link in html
+        assert "同步資料" in html
+
+
+def test_exclusions_page_loads_and_saves_item_exclusions(monkeypatch):
+    db_base_path = _isolated_db_base()
+    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
+    columns = config.required_columns
+    data = pd.DataFrame(
+        [
+            {
+                columns[0]: 2026,
+                columns[1]: 4,
+                columns[2]: 10,
+                columns[3]: "Hospital A",
+                columns[4]: "P1",
+                columns[5]: "Product One",
+                columns[6]: 3,
+                columns[7]: 100,
+            },
+            {
+                columns[0]: 2026,
+                columns[1]: 4,
+                columns[2]: 10,
+                columns[3]: "Hospital A",
+                columns[4]: "P2",
+                columns[5]: "Product Two",
+                columns[6]: 5,
+                columns[7]: 200,
+            },
+        ]
+    )
+    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: data)
+    client = app.create_app(
+        {"TESTING": True, "FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path}
+    ).test_client()
+
+    response = client.get("/exclusions")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "排除品項管理" in html
+    assert "Product One" in html
+
+    save_response = client.post("/exclusions/save", data={"excluded_item_ids": ["P2"]})
+    saved_html = save_response.get_data(as_text=True)
+
+    assert save_response.status_code == 200
+    assert 'value="P2"' in saved_html
+    assert 'value="P2" \n                       checked' in saved_html
+
+
+def test_adjustment_save_migrates_old_database_without_updated_by():
+    db_base_path = _isolated_db_base()
+    db_path = db_base_path / "mor_workbench.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE forecast_adjustments (
+                year INTEGER,
+                month INTEGER,
+                customer_name TEXT,
+                product_code TEXT,
+                manual_quantity REAL,
+                adjustment_reason TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (year, month, customer_name, product_code)
+            )
+            """
+        )
+        conn.commit()
+
+    client = app.create_app({"TESTING": True, "DB_BASE_PATH": db_base_path}).test_client()
+
+    response = client.post(
+        "/adjustments/save",
+        data={
+            "row_id": "Hospital A__P1",
+            "manual_adjustment": "12",
+            "reason": "Review",
+            "year": "2026",
+            "month": "5",
+        },
+    )
+
+    assert response.status_code == 200
+    with sqlite3.connect(db_path) as conn:
+        columns = [row[1] for row in conn.execute("PRAGMA table_info(forecast_adjustments)")]
+        saved = conn.execute(
+            """
+            SELECT manual_quantity, adjustment_reason, updated_by
+            FROM forecast_adjustments
+            WHERE year = 2026 AND month = 5 AND customer_name = 'Hospital A' AND product_code = 'P1'
+            """
+        ).fetchone()
+    assert "updated_by" in columns
+    assert saved == (12, "Review", "User")
 
 
 def test_homepage_renders_review_validation_and_accessibility_hooks():

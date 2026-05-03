@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
+from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,10 @@ class ForecastRow:
     forecast_basis: str
     adjustment_reason: str | None = None
     budget_quantity: float = 0.0
+    last_month_actual: float = 0.0
+    last_month_budget: float = 0.0
+    trend_6m: Optional[list[float]] = None
+    avg_3m: float = 0.0
     excluded: bool = False
 
     def with_adjustment(self, manual_adjustment: float | None, excluded: bool) -> "ForecastRow":
@@ -78,6 +83,10 @@ class ForecastRow:
             "final_forecast": self.final_forecast,
             "adjustment_reason": self.adjustment_reason,
             "budget_quantity": self.budget_quantity,
+            "last_month_actual": self.last_month_actual,
+            "last_month_budget": self.last_month_budget,
+            "trend_6m": self.trend_6m,
+            "avg_3m": self.avg_3m,
             "estimated_amount": self.estimated_amount,
             "forecast_basis": self.forecast_basis,
             "excluded": self.excluded,
