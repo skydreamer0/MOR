@@ -6,7 +6,7 @@ import uuid
 
 import pandas as pd
 
-from src.backend import app
+from src.backend import app, operational_views
 from src.backend.forecast_config import ForecastConfig
 
 
@@ -24,7 +24,7 @@ def _client(config: dict | None = None):
     return app.create_app(app_config).test_client()
 
 
-def test_homepage_loads_with_forecast_table():
+def test_homepage_loads_dashboard():
     client = _client()
 
     response = client.get("/")
@@ -33,14 +33,16 @@ def test_homepage_loads_with_forecast_table():
     assert response.status_code == 200
     assert "<title>MOR</title>" in html
     assert "<h1>MOR " in html
-    assert "匯出 Excel" in html
-    assert "預估總金額" in html
+    assert "業績總覽" in html
+    assert "本月目標" in html
+    assert "高風險品項" in html
+    assert 'href="/forecast"' in html
 
 
-def test_homepage_renders_forecast_review_assets_and_tools():
+def test_forecast_page_renders_forecast_review_assets_and_tools():
     client = _client()
 
-    response = client.get("/")
+    response = client.get("/forecast")
     html = response.get_data(as_text=True)
 
     assert response.status_code == 200
@@ -76,11 +78,14 @@ def test_header_navigation_is_consistent_across_frontend_pages(monkeypatch):
         ]
     )
     monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config: data)
     client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
 
     expectations = {
         "/": 'href="/" aria-current="page"',
-        "/items": 'href="/items" aria-current="page"',
+        "/forecast": 'href="/forecast" aria-current="page"',
+        "/monitor/products": 'href="/monitor/products" aria-current="page"',
+        "/settings": 'href="/settings" aria-current="page"',
     }
     for path, active_link in expectations.items():
         response = client.get(path)
@@ -88,7 +93,9 @@ def test_header_navigation_is_consistent_across_frontend_pages(monkeypatch):
 
         assert response.status_code == 200
         assert 'href="/"' in html
-        assert 'href="/items"' in html
+        assert 'href="/forecast"' in html
+        assert 'href="/monitor/products"' in html
+        assert 'href="/settings"' in html
         assert 'href="/exclusions"' not in html
         assert active_link in html
         assert "同步資料" in html
@@ -123,12 +130,13 @@ def test_old_exclusions_page_redirects_to_item_management(monkeypatch):
         ]
     )
     monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config: data)
     client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
 
     response = client.get("/exclusions")
 
     assert response.status_code == 302
-    assert response.headers["Location"].endswith("/items")
+    assert response.headers["Location"].endswith("/settings")
 
 
 def test_item_management_exclusion_is_reflected_on_workbench(monkeypatch):
@@ -160,6 +168,7 @@ def test_item_management_exclusion_is_reflected_on_workbench(monkeypatch):
         ]
     )
     monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config: data)
     client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
 
     response = client.post(
@@ -173,7 +182,7 @@ def test_item_management_exclusion_is_reflected_on_workbench(monkeypatch):
             "is_excluded_P2": "1",
         },
     )
-    workbench = client.get("/").get_data(as_text=True)
+    workbench = client.get("/forecast").get_data(as_text=True)
 
     assert response.status_code == 200
     assert re.search(r'data-search="[^"]*Product Two"[^>]*data-excluded="true"', workbench)
@@ -226,10 +235,10 @@ def test_adjustment_save_migrates_old_database_without_updated_by():
     assert saved == (12, "Review", "User")
 
 
-def test_homepage_renders_review_validation_and_accessibility_hooks():
+def test_forecast_page_renders_review_validation_and_accessibility_hooks():
     client = _client()
 
-    response = client.get("/")
+    response = client.get("/forecast")
     html = response.get_data(as_text=True)
 
     assert response.status_code == 200
@@ -246,6 +255,13 @@ def test_static_assets_define_invalid_row_validation_behavior():
     assert "validateBeforeSubmit" in js
     assert "aria-invalid" in js
     assert "data-unrendered-total" in js
+
+
+def test_forecast_table_compares_live_gap_to_budget():
+    js = Path("static/js/forecast-table.js").read_text(encoding="utf-8")
+
+    assert "const gap = finalQty - budget;" in js
+    assert "finalQty - state.actualQuantity" not in js
 
 
 def test_css_keeps_letter_spacing_neutral_for_dense_operational_ui():
@@ -291,15 +307,101 @@ def test_homepage_exposes_unrendered_total_when_rows_are_limited(monkeypatch):
                 }
             )
     monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: pd.DataFrame(rows))
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config: pd.DataFrame(rows))
     client = _client({"FORECAST_CONFIG": config})
 
-    response = client.get("/")
+    response = client.get("/forecast")
     html = response.get_data(as_text=True)
 
     assert response.status_code == 200
     assert html.count("data-row-id=") == 1
     assert 'data-unrendered-total value="1000.0"' in html
     assert "1 / 2" in html
+
+
+def test_product_monitor_page_renders_drop_table(monkeypatch):
+    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
+    columns = config.required_columns
+    data = pd.DataFrame(
+        [
+            {
+                columns[0]: 2025,
+                columns[1]: 5,
+                columns[2]: 10,
+                columns[3]: "Hospital A",
+                columns[4]: "P1",
+                columns[5]: "Product One",
+                columns[6]: 100,
+                columns[7]: 100,
+            },
+            {
+                columns[0]: 2026,
+                columns[1]: 4,
+                columns[2]: 10,
+                columns[3]: "Hospital A",
+                columns[4]: "P1",
+                columns[5]: "Product One",
+                columns[6]: 40,
+                columns[7]: 100,
+            },
+        ]
+    )
+    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config: data)
+    client = _client({"FORECAST_CONFIG": config})
+
+    response = client.get("/monitor/products?year=2026&month=5")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "產品跳單監控" in html
+    assert "去年同期數量" in html
+    assert "跳單狀態" in html
+    assert "高風險" in html
+    assert "data-monitor-search" in html
+
+
+def test_settings_page_renders_item_config_and_data_checks(monkeypatch):
+    db_base_path = _isolated_db_base()
+    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
+    columns = config.required_columns
+    data = pd.DataFrame(
+        [
+            {
+                columns[0]: 2026,
+                columns[1]: 4,
+                columns[2]: 10,
+                columns[3]: "Hospital A",
+                columns[4]: "P1",
+                columns[5]: "Product One",
+                columns[6]: 3,
+                columns[7]: 0,
+            }
+        ]
+    )
+    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config: data)
+    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
+
+    response = client.get("/settings")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "系統設定 / 資料檢核" in html
+    assert "排除預估" in html
+    assert "預算資料檢查" in html
+    assert "訂單資料檢查" in html
+    assert "品項合併設定" in html
+    assert "待建" in html
+
+
+def test_items_route_redirects_to_settings():
+    client = _client()
+
+    response = client.get("/items")
+
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/settings")
 
 
 def test_export_rejects_unknown_review_row_id_without_workbook():
@@ -338,9 +440,10 @@ def test_export_rejects_stale_forecast_signature(monkeypatch):
 
     loaded_data = [make_rows(10)]
     monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: loaded_data[-1])
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config: loaded_data[-1])
     client = _client({"FORECAST_CONFIG": config})
 
-    review_response = client.get("/")
+    review_response = client.get("/forecast")
     signature = re.search(r'name="forecast_signature" value="([^"]+)"', review_response.get_data(as_text=True)).group(1)
     loaded_data.append(make_rows(99))
 

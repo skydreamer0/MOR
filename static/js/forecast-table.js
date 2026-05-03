@@ -169,13 +169,12 @@ function renderRow(state, amount, visible) {
   manualInput.setAttribute("aria-invalid", invalid ? "true" : "false");
 
   const finalQty = finalForecastQuantity(state);
-  const diff = finalQty - state.actualQuantity;
-
   // Budget & Rate
   const budget = Number(state.row.dataset.budget || 0);
+  const gap = finalQty - budget;
   const rate = budget > 0 ? (finalQty / budget) * 100 : 0;
   updateRateElement(state.row.querySelector("[data-rate-display] .rate"), rate);
-  updateGapElement(state.row.querySelector("[data-diff-display] .gap-value"), diff);
+  updateGapElement(state.row.querySelector("[data-diff-display] .gap-value"), gap);
 
   // Last Month Stats
   const lmRate = state.lmBudget > 0 ? (state.lmActual / state.lmBudget) * 100 : 0;

@@ -78,7 +78,7 @@ def _serialize_row(row: ForecastRow) -> dict:
         "final_forecast": row.final_forecast,
         "budget_quantity": row.budget_quantity,
         "achievement_rate": (row.final_forecast / row.budget_quantity * 100) if row.budget_quantity > 0 else 0,
-        "diff": row.final_forecast - row.this_year_same_month_qty,
+        "diff": row.final_forecast - row.budget_quantity,
         "estimated_amount": row.estimated_amount,
         "forecast_basis": row.forecast_basis,
         "excluded": row.excluded,

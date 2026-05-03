@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>系統設定 - MOR</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/mor.css') }}">
+</head>
+<body>
+  {% set page_title = "系統設定 / 資料檢核" %}
+  {% set active_page = "settings" %}
+  {% set show_period_toolbar = true %}
+  {% include "_header.html" %}
+
+  <main>
+    {% if error_message %}
+      <section class="alert" role="alert">{{ error_message }}</section>
+    {% endif %}
+
+    <section class="dashboard-heading">
+      <div>
+        <h2>系統設定 / 資料檢核頁</h2>
+        <p>整理主畫面以外的資料規則，並集中檢查預算與訂單資料。</p>
+      </div>
+    </section>
+
+    {% if health %}
+    <section class="dashboard-grid settings-health" aria-label="資料檢核摘要">
+      <div class="metric">
+        <span>訂單資料檢查</span>
+        <strong>{{ "{:,.0f}".format(health.order_count) }}</strong>
+        <small>{% if health.order_start %}{{ health.order_start }} - {{ health.order_end }}{% else %}--{% endif %}</small>
+      </div>
+      <div class="metric">
+        <span>預算資料檢查</span>
+        <strong>{{ "{:,.0f}".format(health.budget_month_count) }}</strong>
+        <small>已匯入月份</small>
+      </div>
+      <div class="metric">
+        <span>缺預算列數</span>
+        <strong>{{ "{:,.0f}".format(health.missing_budget_row_count) }}</strong>
+      </div>
+      <div class="metric">
+        <span>異常資料提醒</span>
+        <strong>{{ "{:,.0f}".format(health.zero_price_row_count + health.no_last_year_row_count) }}</strong>
+        <small>零單價 / 無去年同期</small>
+      </div>
+    </section>
+    {% endif %}
+
+    <section class="management-panel">
+      <div class="section-header">
+        <h3>品項設定</h3>
+        <p>排除後仍可顯示於預估調整頁，但不納入金額計算。</p>
+      </div>
+    </section>
+
+    <form action="/items/save" method="post">
+      <div class="table-wrap settings-table-wrap">
+        <table class="management-table">
+          <thead>
+            <tr>
+              <th>品項名稱</th>
+              <th>排除預估</th>
+              <th>納入預算</th>
+              <th>顯示於主表</th>
+              <th>狀態標籤</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in items %}
+            <tr>
+              <td>
+                <strong>{{ item.product_name }}</strong><br>
+                <small class="muted">ID: {{ item.product_code }}</small>
+                <input type="hidden" name="product_codes" value="{{ item.product_code }}">
+              </td>
+              <td>
+                <label class="checkbox-label">
+                  <input type="checkbox" name="is_excluded_{{ item.product_code }}" value="1" {% if item.is_excluded %}checked{% endif %}> 排除
+                </label>
+              </td>
+              <td>
+                <label class="checkbox-label">
+                  <input type="checkbox" name="is_budgeted_{{ item.product_code }}" value="1" {% if item.is_budgeted %}checked{% endif %}> 納入
+                </label>
+              </td>
+              <td>
+                <label class="checkbox-label">
+                  <input type="checkbox" name="is_visible_{{ item.product_code }}" value="1" {% if item.is_visible %}checked{% endif %}> 顯示
+                </label>
+              </td>
+              <td>
+                <select name="status_label_{{ item.product_code }}" class="status-select">
+                  <option value="" {% if not item.status_label %}selected{% endif %}>正常</option>
+                  <option value="停用" {% if item.status_label == '停用' %}selected{% endif %}>停用</option>
+                  <option value="特殊品項" {% if item.status_label == '特殊品項' %}selected{% endif %}>特殊品項</option>
+                  <option value="新上市" {% if item.status_label == '新上市' %}selected{% endif %}>新上市</option>
+                </select>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <section class="settings-roadmap">
+        <div class="panel">
+          <h3>品項合併設定 <span class="badge off">待建</span></h3>
+          <p>後續用來處理同品項多商品號或包裝規格合併。</p>
+        </div>
+        <div class="panel">
+          <h3>商品號對應 <span class="badge off">待建</span></h3>
+          <p>後續用來維護商品號改版、停用與替代品項。</p>
+        </div>
+        <div class="panel">
+          <h3>客戶名稱對應 <span class="badge off">待建</span></h3>
+          <p>後續用來整理客戶別名與命名不一致問題。</p>
+        </div>
+      </section>
+
+      <div class="bottom-bar">
+        <button type="submit" class="primary-btn">儲存所有設定</button>
+      </div>
+    </form>
+  </main>
+</body>
+</html>

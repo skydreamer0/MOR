@@ -98,6 +98,10 @@ After frontend changes, verify in the browser:
 
 - Chinese labels render correctly.
 - Missing-file error renders as an alert.
+- Dashboard renders at `/` with quantity and amount metrics.
+- Product monitor renders at `/monitor/products` and filters by search/status.
+- Forecast adjustment renders at `/forecast`.
+- System settings and data checks render at `/settings`.
 - Search filters rows without losing input values.
 - Status filter works.
 - Manual quantity updates row amount and grand total.

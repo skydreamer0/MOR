@@ -86,10 +86,19 @@ python app.py
 
 ### 4. 使用流程
 
-1. 開啟瀏覽器進入首頁，系統自動載入業績明細並產生預估表格。
+1. 開啟首頁 `/` 查看業績總覽 Dashboard。
 2. 透過頁面上方的年 / 月控制項切換預估目標月份。
-3. 在表格中直接修改預估數量，或勾選排除特定品項。
-4. 點擊「匯出 Excel」下載最終預估報表。
+3. 進入 `/monitor/products` 每天查看低於去年同期 10% 以上的產品跳單風險。
+4. 進入 `/forecast` 直接修改預估數量、追蹤備註，並匯出 Excel。
+5. 進入 `/settings` 管理品項規則並檢查預算與訂單資料。
+
+### 5. 預算比較規則
+
+- 達成率 = 最終預估 / 預算目標 * 100。
+- GAP / 差異 = 最終預估 - 預算目標。
+- 上月達成率與上月 GAP 則使用上月實績與上月預算比較。
+- Dashboard 金額目標 = 預算量 * 最新單價。
+- 產品跳單高風險 = 預估月底數量低於去年同期數量 10% 以上。
 
 ## 專案結構
 
@@ -101,10 +110,14 @@ src/backend/                   核心預估與業務邏輯
   forecast_models.py           ForecastTarget, ForecastRow, ForecastSummary 資料模型
   data_loader.py               Excel 載入與 DataFrame 前處理
   forecast_engine.py           預估計算核心邏輯
+  operational_views.py         Dashboard、跳單監控、資料檢核共用呈現服務
   exporter.py                  Excel 報表匯出
   sales_forecast.py            向後相容用的 Facade
   web/form_parser.py           表單解析與驗證
-templates/index.html           Server-rendered 預估審閱頁面
+templates/index.html           業績總覽 Dashboard
+templates/forecast.html        預估調整與匯出工作台
+templates/product_monitor.html 產品跳單監控頁
+templates/settings.html        系統設定 / 資料檢核頁
 static/                        靜態資源
 tests/                         單元測試與路由測試
 docs/architecture/             架構文件

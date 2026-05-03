@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import date
 
 from src.backend.forecast_models import ForecastRow, ForecastSummary
@@ -47,6 +48,15 @@ def test_serialize_summary_returns_json_safe_dates_and_counts():
     assert payload["rows"][0]["latest_order_date"] == "2026-04-10"
     assert payload["rows"][0]["next_order_date"] == "2026-05-10"
     assert payload["rows"][0]["customer"] == "台北醫院"
+
+
+def test_serialize_summary_compares_forecast_gap_to_budget():
+    summary = sample_summary()
+    row = replace(summary.rows[0], budget_quantity=7)
+    payload = serialize_summary(replace(summary, rows=[row]))
+
+    assert payload["rows"][0]["achievement_rate"] == 10 / 7 * 100
+    assert payload["rows"][0]["diff"] == 3
 
 
 def test_column_schema_describes_review_grid_fields():

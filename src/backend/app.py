@@ -10,10 +10,10 @@ from src.backend.exporter import export_forecast
 from src.backend.forecast_config import ForecastConfig
 from src.backend.forecast_engine import ForecastOptions, apply_user_adjustments, build_forecast
 from src.backend.forecast_models import ForecastSummary
+from src.backend.operational_views import build_forecast_page_context, load_exclusions
 from src.backend.web.form_parser import FormValidationError, parse_manual_quantities, parse_target_period
 from src.backend.database import get_db
 from src.backend.etl import sync_excel_to_db
-from src.backend.history_service import enrich_rows_with_history
 from src.backend.snapshot_service import (
     delete_snapshot,
     is_finalized,
@@ -41,57 +41,29 @@ def create_app(config: dict | None = None) -> Flask:
     db = get_db(db_base_path)
 
     @app.get("/")
-    def index() -> str:
+    def dashboard() -> str:
         try:
-            data = load_sales_detail(data_base_path, forecast_config)
-            target = default_target_from_data(data, forecast_config)
-            target = parse_target_period(request.args, target)
-            
-            item_configs = _load_item_configs(db)
-            excluded_item_ids = {pid for pid, cfg in item_configs.items() if cfg['is_excluded']}
-            manual_adjustments, adjustment_reasons = _load_adjustments(db, target.year, target.month)
-            budget_targets = _load_budgets(db, target.year, target.month)
-            
-            summary = build_forecast(
-                data,
-                target,
-                ForecastOptions(
-                    include_all=True, 
-                    max_cycle_interval_days=forecast_config.max_cycle_interval_days,
-                    excluded_item_ids=excluded_item_ids
-                ),
-                forecast_config,
-            )
-            # Filter by visibility
-            from dataclasses import replace
-            filtered_rows = [row for row in summary.rows if item_configs.get(row.product_code, {}).get('is_visible', True)]
-            summary = replace(
-                summary,
-                rows=filtered_rows,
-                total=sum(row.estimated_amount for row in filtered_rows if not row.excluded),
-            )
-            
-            # Enrich with historical trends (batch SQL — Phase 2 Data Engine)
-            enriched_rows = enrich_rows_with_history(summary.rows, db, target.year, target.month)
-            summary = replace(summary, rows=enriched_rows)
-            
-            # Apply adjustments and budgets
-            summary = apply_user_adjustments(
-                summary,
-                manual_adjustments=manual_adjustments,
-                excluded_ids=set(),
-            )
-            
-            for row in summary.rows:
-                # Apply reasons
-                new_reason = adjustment_reasons.get(row.row_id, row.adjustment_reason)
-                # Apply budget
-                new_budget = budget_targets.get(row.row_id, 0.0)
-                
-                from dataclasses import replace
-                idx = summary.rows.index(row)
-                summary.rows[idx] = replace(row, adjustment_reason=new_reason, budget_quantity=new_budget)
-            
+            context = build_forecast_page_context(data_base_path, forecast_config, db, request.args)
+            error_message = None
+        except (FileNotFoundError, ValueError, FormValidationError) as exc:
+            context = None
+            error_message = f"無法產生預估：{exc}"
+
+        return render_template(
+            "index.html",
+            year=context.target.year if context else request.args.get("year", ""),
+            month=context.target.month if context else request.args.get("month", ""),
+            metrics=context.dashboard if context else None,
+            health=context.health if context else None,
+            monitor_rows=[row for row in context.monitor_rows if row.status_key == "high"][:10] if context else [],
+            error_message=error_message,
+        )
+
+    @app.get("/forecast")
+    def forecast() -> str:
+        try:
+            context = build_forecast_page_context(data_base_path, forecast_config, db, request.args)
+            summary = context.summary
             error_message = None
         except (FileNotFoundError, ValueError, FormValidationError) as exc:
             summary = None
@@ -102,7 +74,7 @@ def create_app(config: dict | None = None) -> Flask:
         visible_total = sum(row.estimated_amount for row in visible_rows if not row.excluded)
         unrendered_total = (summary.total if summary else 0) - visible_total
         return render_template(
-            "index.html",
+            "forecast.html",
             year=summary.year if summary else request.args.get("year", ""),
             month=summary.month if summary else request.args.get("month", ""),
             rows=visible_rows,
@@ -116,6 +88,23 @@ def create_app(config: dict | None = None) -> Flask:
             snapshots=list_snapshots(db, summary.year, summary.month) if summary else [],
         )
 
+    @app.get("/monitor/products")
+    def product_monitor() -> str:
+        try:
+            context = build_forecast_page_context(data_base_path, forecast_config, db, request.args)
+            error_message = None
+        except (FileNotFoundError, ValueError, FormValidationError) as exc:
+            context = None
+            error_message = f"無法產生跳單監控：{exc}"
+
+        return render_template(
+            "product_monitor.html",
+            year=context.target.year if context else request.args.get("year", ""),
+            month=context.target.month if context else request.args.get("month", ""),
+            rows=context.monitor_rows if context else [],
+            error_message=error_message,
+        )
+
     @app.post("/export")
     def export() -> Response:
         try:
@@ -123,7 +112,7 @@ def create_app(config: dict | None = None) -> Flask:
             default_target = default_target_from_data(data, forecast_config)
             target = parse_target_period(request.form, default_target)
             
-            excluded_item_ids = _load_exclusions(db)
+            excluded_item_ids = load_exclusions(db)
             
             summary = build_forecast(
                 data,
@@ -169,16 +158,31 @@ def create_app(config: dict | None = None) -> Flask:
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
-    @app.get("/items")
-    def items_management() -> str:
+    @app.get("/settings")
+    def settings() -> str:
         try:
-            items = _load_items_from_sales(data_base_path, forecast_config, db)
+            context = build_forecast_page_context(data_base_path, forecast_config, db, request.args)
+            items = context.items
+            health = context.health
             error_message = None
-        except (FileNotFoundError, ValueError) as exc:
+        except (FileNotFoundError, ValueError, FormValidationError) as exc:
+            context = None
             items = []
-            error_message = f"載入品項管理失敗：{exc}"
+            health = None
+            error_message = f"載入系統設定失敗：{exc}"
 
-        return render_template("items.html", items=items, error_message=error_message)
+        return render_template(
+            "settings.html",
+            items=items,
+            health=health,
+            year=context.target.year if context else request.args.get("year", ""),
+            month=context.target.month if context else request.args.get("month", ""),
+            error_message=error_message,
+        )
+
+    @app.get("/items")
+    def items_management() -> Response:
+        return redirect(url_for("settings"))
 
     @app.post("/items/save")
     def save_items() -> Response:
@@ -202,15 +206,15 @@ def create_app(config: dict | None = None) -> Flask:
                     WHERE product_code = ?
                 """, (is_excluded, is_budgeted, is_visible, status_label, pid))
             conn.commit()
-        return items_management()
+        return settings()
 
     @app.get("/exclusions")
     def exclusions_management() -> str:
-        return redirect(url_for("items_management"))
+        return redirect(url_for("settings"))
 
     @app.post("/exclusions/save")
     def save_exclusions() -> Response:
-        return redirect(url_for("items_management"))
+        return redirect(url_for("settings"))
 
     @app.post("/sync")
     def sync_data() -> str:
@@ -264,37 +268,13 @@ def create_app(config: dict | None = None) -> Flask:
             snapshot_name = f"{'定稿' if snapshot_type == 'Final' else '草稿'} {year}/{month:02d}"
 
         try:
-            data = load_sales_detail(data_base_path, forecast_config)
-            default_target = default_target_from_data(data, forecast_config)
-            target = parse_target_period({"year": str(year), "month": str(month)}, default_target)
-
-            item_configs = _load_item_configs(db)
-            excluded_item_ids = {pid for pid, cfg in item_configs.items() if cfg['is_excluded']}
-            manual_adjustments, adjustment_reasons = _load_adjustments(db, year, month)
-            budget_targets = _load_budgets(db, year, month)
-
-            summary = build_forecast(
-                data, target,
-                ForecastOptions(
-                    include_all=True,
-                    max_cycle_interval_days=forecast_config.max_cycle_interval_days,
-                    excluded_item_ids=excluded_item_ids,
-                ),
+            context = build_forecast_page_context(
+                data_base_path,
                 forecast_config,
+                db,
+                {"year": str(year), "month": str(month)},
             )
-            from dataclasses import replace as dc_replace
-            filtered_rows = [r for r in summary.rows if item_configs.get(r.product_code, {}).get('is_visible', True)]
-            summary = dc_replace(summary, rows=filtered_rows)
-
-            enriched_rows = enrich_rows_with_history(summary.rows, db, year, month)
-            summary = dc_replace(summary, rows=enriched_rows)
-
-            summary = apply_user_adjustments(summary, manual_adjustments=manual_adjustments, excluded_ids=set())
-            for row in summary.rows:
-                new_reason = adjustment_reasons.get(row.row_id, row.adjustment_reason)
-                new_budget = budget_targets.get(row.row_id, 0.0)
-                idx = summary.rows.index(row)
-                summary.rows[idx] = dc_replace(row, adjustment_reason=new_reason, budget_quantity=new_budget)
+            summary = context.summary
 
             snapshot_rows = [
                 {
@@ -307,7 +287,7 @@ def create_app(config: dict | None = None) -> Flask:
                 for r in summary.rows
             ]
             snapshot_id = save_snapshot(db, year, month, snapshot_name, snapshot_type, snapshot_rows)
-            return redirect(url_for("index", year=year, month=month))
+            return redirect(url_for("forecast", year=year, month=month))
         except ValueError as exc:
             return Response(str(exc), status=400)
         except Exception as exc:
@@ -324,7 +304,7 @@ def create_app(config: dict | None = None) -> Flask:
             delete_snapshot(db, snapshot_id)
         except ValueError as exc:
             return Response(str(exc), status=400)
-        return redirect(url_for("index", year=year, month=month))
+        return redirect(url_for("forecast", year=year, month=month))
 
     return app
 
