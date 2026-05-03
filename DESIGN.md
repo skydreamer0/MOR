@@ -62,7 +62,7 @@ Rules:
 
 ### Header
 
-Sticky top bar with title on the left and period controls on the right. It should remain compact and preserve vertical space for the table.
+Sticky top bar with title on the left and period controls on the right. It should remain compact and preserve vertical space for the table. Primary tabs should stay limited to 工作台 and 品項管理; product exclusion is configured inside 品項管理 rather than a separate page.
 
 ### Metric Summary
 

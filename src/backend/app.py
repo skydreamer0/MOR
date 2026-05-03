@@ -3,18 +3,23 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from flask import Flask, Response, render_template, request, send_file
+from flask import Flask, Response, redirect, render_template, request, send_file, url_for
 
-from src.backend.data_loader import default_target_from_data, load_sales_detail
+from src.backend.data_loader import default_target_from_data, load_sales_detail, normalize_product_code
 from src.backend.exporter import export_forecast
 from src.backend.forecast_config import ForecastConfig
 from src.backend.forecast_engine import ForecastOptions, apply_user_adjustments, build_forecast
 from src.backend.forecast_models import ForecastSummary
-from src.backend.web.form_parser import FormValidationError, parse_excluded_ids, parse_manual_quantities, parse_target_period
+from src.backend.web.form_parser import FormValidationError, parse_manual_quantities, parse_target_period
 from src.backend.database import get_db
 from src.backend.etl import sync_excel_to_db
 from src.backend.history_service import enrich_rows_with_history
-import json
+from src.backend.snapshot_service import (
+    delete_snapshot,
+    is_finalized,
+    list_snapshots,
+    save_snapshot,
+)
 
 
 BASE_PATH = Path(__file__).resolve().parent
@@ -107,6 +112,8 @@ def create_app(config: dict | None = None) -> Flask:
             row_count=len(rows),
             shown_count=len(visible_rows),
             error_message=error_message,
+            is_finalized=is_finalized(db, summary.year, summary.month) if summary else False,
+            snapshots=list_snapshots(db, summary.year, summary.month) if summary else [],
         )
 
     @app.post("/export")
@@ -165,48 +172,45 @@ def create_app(config: dict | None = None) -> Flask:
     @app.get("/items")
     def items_management() -> str:
         try:
-            data = load_sales_detail(data_base_path, forecast_config)
-            # Get unique products from sales data
-            unique_products = data[["商品號", "商品簡稱"]].drop_duplicates("商品號")
-            
-            item_configs = _load_item_configs(db)
-            
+            items = _load_items_from_sales(data_base_path, forecast_config, db)
+            error_message = None
+        except (FileNotFoundError, ValueError) as exc:
             items = []
-            for _, row in unique_products.iterrows():
-                pid = str(row["商品號"])
-                cfg = item_configs.get(pid, {
-                    "is_excluded": False, 
-                    "is_budgeted": True, 
-                    "is_visible": True, 
-                    "status_label": ""
-                })
-                items.append({
-                    "product_code": pid,
-                    "product_name": row["商品簡稱"],
-                    **cfg
-                })
-            
-            return render_template("items.html", items=items)
-        except Exception as exc:
-            return f"載入品項管理失敗：{exc}"
+            error_message = f"載入品項管理失敗：{exc}"
+
+        return render_template("items.html", items=items, error_message=error_message)
 
     @app.post("/items/save")
     def save_items() -> Response:
         product_codes = request.form.getlist("product_codes")
         with db.get_connection() as conn:
             for pid in product_codes:
+                pid = normalize_product_code(pid)
                 is_excluded = 1 if request.form.get(f"is_excluded_{pid}") == "1" else 0
                 is_budgeted = 1 if request.form.get(f"is_budgeted_{pid}") == "1" else 0
                 is_visible = 1 if request.form.get(f"is_visible_{pid}") == "1" else 0
                 status_label = request.form.get(f"status_label_{pid}")
                 
                 conn.execute("""
-                    INSERT OR REPLACE INTO item_configs 
-                    (product_code, is_excluded, is_budgeted, is_visible, status_label)
-                    VALUES (?, ?, ?, ?, ?)
-                """, (pid, is_excluded, is_budgeted, is_visible, status_label))
+                    INSERT OR IGNORE INTO item_configs
+                    (product_code, is_excluded, is_budgeted, is_visible, status_label, custom_category)
+                    VALUES (?, 0, 1, 1, NULL, NULL)
+                """, (pid,))
+                conn.execute("""
+                    UPDATE item_configs
+                    SET is_excluded = ?, is_budgeted = ?, is_visible = ?, status_label = ?
+                    WHERE product_code = ?
+                """, (is_excluded, is_budgeted, is_visible, status_label, pid))
             conn.commit()
         return items_management()
+
+    @app.get("/exclusions")
+    def exclusions_management() -> str:
+        return redirect(url_for("items_management"))
+
+    @app.post("/exclusions/save")
+    def save_exclusions() -> Response:
+        return redirect(url_for("items_management"))
 
     @app.post("/sync")
     def sync_data() -> str:
@@ -247,13 +251,110 @@ def create_app(config: dict | None = None) -> Flask:
         
         return Response("Saved", status=200)
 
+    @app.post("/snapshots/save")
+    def save_snapshot_route() -> Response:
+        year = request.form.get("year", type=int)
+        month = request.form.get("month", type=int)
+        snapshot_name = request.form.get("snapshot_name", "").strip()
+        snapshot_type = request.form.get("snapshot_type", "Draft")
+
+        if not year or not month:
+            return Response("Missing year/month", status=400)
+        if not snapshot_name:
+            snapshot_name = f"{'定稿' if snapshot_type == 'Final' else '草稿'} {year}/{month:02d}"
+
+        try:
+            data = load_sales_detail(data_base_path, forecast_config)
+            default_target = default_target_from_data(data, forecast_config)
+            target = parse_target_period({"year": str(year), "month": str(month)}, default_target)
+
+            item_configs = _load_item_configs(db)
+            excluded_item_ids = {pid for pid, cfg in item_configs.items() if cfg['is_excluded']}
+            manual_adjustments, adjustment_reasons = _load_adjustments(db, year, month)
+            budget_targets = _load_budgets(db, year, month)
+
+            summary = build_forecast(
+                data, target,
+                ForecastOptions(
+                    include_all=True,
+                    max_cycle_interval_days=forecast_config.max_cycle_interval_days,
+                    excluded_item_ids=excluded_item_ids,
+                ),
+                forecast_config,
+            )
+            from dataclasses import replace as dc_replace
+            filtered_rows = [r for r in summary.rows if item_configs.get(r.product_code, {}).get('is_visible', True)]
+            summary = dc_replace(summary, rows=filtered_rows)
+
+            enriched_rows = enrich_rows_with_history(summary.rows, db, year, month)
+            summary = dc_replace(summary, rows=enriched_rows)
+
+            summary = apply_user_adjustments(summary, manual_adjustments=manual_adjustments, excluded_ids=set())
+            for row in summary.rows:
+                new_reason = adjustment_reasons.get(row.row_id, row.adjustment_reason)
+                new_budget = budget_targets.get(row.row_id, 0.0)
+                idx = summary.rows.index(row)
+                summary.rows[idx] = dc_replace(row, adjustment_reason=new_reason, budget_quantity=new_budget)
+
+            snapshot_rows = [
+                {
+                    "customer_name": r.customer,
+                    "product_code": r.product_code,
+                    "system_forecast": r.system_forecast,
+                    "manual_adjustment": r.manual_adjustment,
+                    "final_forecast": r.final_forecast,
+                }
+                for r in summary.rows
+            ]
+            snapshot_id = save_snapshot(db, year, month, snapshot_name, snapshot_type, snapshot_rows)
+            return redirect(url_for("index", year=year, month=month))
+        except ValueError as exc:
+            return Response(str(exc), status=400)
+        except Exception as exc:
+            return Response(f"快照儲存失敗：{exc}", status=500)
+
+    @app.post("/snapshots/delete")
+    def delete_snapshot_route() -> Response:
+        snapshot_id = request.form.get("snapshot_id", type=int)
+        year = request.form.get("year", type=int)
+        month = request.form.get("month", type=int)
+        if not snapshot_id:
+            return Response("Missing snapshot_id", status=400)
+        try:
+            delete_snapshot(db, snapshot_id)
+        except ValueError as exc:
+            return Response(str(exc), status=400)
+        return redirect(url_for("index", year=year, month=month))
+
     return app
+
+
+def _load_items_from_sales(data_base_path: Path, forecast_config: ForecastConfig, db) -> list[dict]:
+    data = load_sales_detail(data_base_path, forecast_config)
+    unique_products = data[["商品號", "商品簡稱"]].drop_duplicates("商品號")
+
+    item_configs = _load_item_configs(db)
+    items = []
+    for _, row in unique_products.iterrows():
+        pid = normalize_product_code(row["商品號"])
+        cfg = item_configs.get(pid, {
+            "is_excluded": False,
+            "is_budgeted": True,
+            "is_visible": True,
+            "status_label": "",
+        })
+        items.append({
+            "product_code": pid,
+            "product_name": row["商品簡稱"],
+            **cfg,
+        })
+    return items
 
 
 def _load_item_configs(db) -> dict[str, dict]:
     with db.get_connection() as conn:
         rows = conn.execute("SELECT * FROM item_configs").fetchall()
-        return {
+        configs = {
             row["product_code"]: {
                 "is_excluded": bool(row["is_excluded"]),
                 "is_budgeted": bool(row["is_budgeted"]),
@@ -262,6 +363,10 @@ def _load_item_configs(db) -> dict[str, dict]:
             }
             for row in rows
         }
+        for row in rows:
+            normalized_code = normalize_product_code(row["product_code"])
+            configs.setdefault(normalized_code, configs[row["product_code"]])
+        return configs
 
 
 def _load_adjustments(db, year: int, month: int) -> tuple[dict[str, float], dict[str, str]]:
@@ -287,7 +392,12 @@ def _load_exclusions(db) -> set[str]:
         rows = conn.execute(
             "SELECT product_code FROM item_configs WHERE is_excluded = 1"
         ).fetchall()
-    return {row["product_code"] for row in rows}
+    excluded = set()
+    for row in rows:
+        product_code = row["product_code"]
+        excluded.add(product_code)
+        excluded.add(normalize_product_code(product_code))
+    return excluded
 
 
 def _load_budgets(db, year: int, month: int) -> dict[str, float]:
@@ -302,17 +412,6 @@ def _load_budgets(db, year: int, month: int) -> dict[str, float]:
             row_id = f"{row['customer_name']}__{row['product_code']}"
             budgets[row_id] = row["target_quantity"]
     return budgets
-
-
-def _save_exclusions(db, excluded_ids: list[str]) -> None:
-    with db.get_connection() as conn:
-        conn.execute("UPDATE item_configs SET is_excluded = 0")
-        for pid in excluded_ids:
-            conn.execute(
-                "INSERT OR REPLACE INTO item_configs (product_code, is_excluded) VALUES (?, 1)",
-                (pid,)
-            )
-        conn.commit()
 
 
 def _validate_submitted_row_ids(summary: ForecastSummary, submitted_row_ids: set[str]) -> None:

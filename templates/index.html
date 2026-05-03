@@ -10,21 +10,10 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/mor.css') }}">
 </head>
 <body>
-  <header>
-    <h1>MOR <span style="font-size: var(--text-sm); font-weight: 500; color: var(--muted); margin-left: var(--sp-2);">預估工作台</span></h1>
-    <nav>
-      <a href="/">工作台</a>
-      <a href="/items">品項管理</a>
-      <form action="/sync" method="post" style="display:inline;" onsubmit="return confirm('確定要從 Excel 同步資料嗎？這可能需要一點時間。')">
-        <button type="submit" class="link-btn">同步資料</button>
-      </form>
-    </nav>
-    <form class="toolbar" method="get" action="/">
-      <label>年份 <input name="year" type="number" min="2024" max="2030" value="{{ year }}"></label>
-      <label>月份 <input name="month" type="number" min="1" max="12" value="{{ month }}"></label>
-      <button type="submit">重新分析</button>
-    </form>
-  </header>
+  {% set page_title = "預估工作台" %}
+  {% set active_page = "forecast" %}
+  {% set show_period_toolbar = true %}
+  {% include "_header.html" %}
 
   <main>
     {% if error_message %}
@@ -39,7 +28,42 @@
       <div class="metric"><span>目前顯示</span><strong>{{ shown_count }} / {{ row_count }}</strong></div>
       <div class="metric"><span>自動預估列</span><strong>{{ rows|selectattr("auto_in_month")|list|length }}</strong></div>
       <div class="metric"><span>目前總額</span><strong id="top-total">{{ "{:,.0f}".format(total) }}</strong></div>
+      {% if is_finalized %}
+      <div class="metric metric--locked">
+        <span>版本狀態</span>
+        <strong><span class="badge">✔ 已定稿</span></strong>
+      </div>
+      {% endif %}
     </section>
+
+    {% if snapshots %}
+    <section class="snapshot-panel">
+      <details>
+        <summary class="snapshot-toggle">版本紀錄 ({{ snapshots|length }})</summary>
+        <div class="snapshot-list">
+          {% for snap in snapshots %}
+          <div class="snapshot-item">
+            <div class="snapshot-info">
+              <span class="badge {% if snap.snapshot_type == 'Final' %}{% else %}off{% endif %}">
+                {{ '定稿' if snap.snapshot_type == 'Final' else '草稿' }}
+              </span>
+              <strong>{{ snap.snapshot_name }}</strong>
+              <span class="snapshot-meta">{{ snap.created_at[:16] }} · {{ snap.row_count }} 列 · {{ snap.created_by }}</span>
+            </div>
+            {% if snap.snapshot_type != 'Final' %}
+            <form action="/snapshots/delete" method="post" class="snapshot-action" onsubmit="return confirm('確定刪除此草稿？')">
+              <input type="hidden" name="snapshot_id" value="{{ snap.id }}">
+              <input type="hidden" name="year" value="{{ year }}">
+              <input type="hidden" name="month" value="{{ month }}">
+              <button type="submit" class="icon-btn" title="刪除草稿">✕</button>
+            </form>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </details>
+    </section>
+    {% endif %}
 
     {% if not rows and not error_message %}
       <section class="empty-state">目前沒有符合條件的預估資料。</section>
@@ -78,7 +102,7 @@
       </div>
 
       <div class="table-wrap">
-        <table>
+        <table class="forecast-table">
           <thead>
             <tr>
               <th>狀態</th>
@@ -134,18 +158,8 @@
               <td class="sparkline-cell"><canvas data-sparkline width="80" height="24"></canvas></td>
               <td class="num">{{ "{:,.0f}".format(row.last_month_actual) }}</td>
               <td class="num">{{ "{:,.0f}".format(row.last_month_budget) }}</td>
-              <td class="num" data-lm-rate-display>
-                {% set lm_rate = (row.last_month_actual / row.last_month_budget * 100) if row.last_month_budget > 0 else 0 %}
-                <span class="rate {% if lm_rate < 80 %}low{% elif lm_rate >= 100 %}high{% endif %}">
-                  {{ "{:,.1f}%".format(lm_rate) }}
-                </span>
-              </td>
-              <td class="num">
-                {% set lm_gap = row.last_month_actual - row.last_month_budget %}
-                <span class="gap-value {% if lm_gap < 0 %}negative{% elif lm_gap > 0 %}positive{% endif %}">
-                  {{ "{:+,.0f}".format(lm_gap) }}
-                </span>
-              </td>
+              <td class="num" data-lm-rate-display><span class="rate"></span></td>
+              <td class="num" data-lm-gap-display><span class="gap-value"></span></td>
               <!-- ── 現況區塊 ── -->
               <td class="num">{{ "{:,.0f}".format(row.last_year_same_month_qty) }}</td>
               <td class="num">{{ "{:,.0f}".format(row.this_year_same_month_qty) }}</td>
@@ -159,13 +173,8 @@
               <!-- ── 決策區塊 ── -->
               <td class="num" data-final-forecast>{{ "{:,.2f}".format(row.final_forecast) }}</td>
               <td class="num" data-budget-display>{{ "{:,.2f}".format(row.budget_quantity) }}</td>
-              <td class="num" data-rate-display>
-                {% set rate = (row.final_forecast / row.budget_quantity * 100) if row.budget_quantity > 0 else 0 %}
-                <span class="rate {% if rate < 80 %}low{% elif rate >= 100 %}high{% endif %}">
-                  {{ "{:,.1f}%".format(rate) }}
-                </span>
-              </td>
-              <td class="num" data-diff>{{ "{:,.2f}".format(row.final_forecast - row.this_year_same_month_qty) }}</td>
+              <td class="num" data-rate-display><span class="rate"></span></td>
+              <td class="num" data-diff-display><span class="gap-value"></span></td>
               <td>
                 <input class="reason" name="adjustment_reason__{{ row.row_id }}" type="text" placeholder="原因..." data-reason value="{{ row.adjustment_reason or '' }}">
               </td>
@@ -184,7 +193,13 @@
       </div>
       <div class="bottom-bar">
         <div>預估總金額 <strong id="grand-total">{{ "{:,.0f}".format(total) }}</strong></div>
-        <button type="submit">匯出 Excel</button>
+        <div class="bottom-bar-actions">
+          {% if not is_finalized %}
+          <button type="button" id="btn-save-snapshot" class="btn-secondary">儲存草稿</button>
+          <button type="button" id="btn-finalize" class="btn-danger">定稿</button>
+          {% endif %}
+          <button type="submit">匯出 Excel</button>
+        </div>
       </div>
     </form>
   </main>

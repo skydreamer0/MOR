@@ -38,6 +38,12 @@ Run all tests:
 D:\AI\python.exe -m pytest -q
 ```
 
+If Windows temp permissions block pytest setup, keep the temp directory inside the project:
+
+```powershell
+D:\AI\python.exe -m pytest -q --basetemp=.test-dbs\pytest-tmp
+```
+
 Run route/template tests:
 
 ```powershell

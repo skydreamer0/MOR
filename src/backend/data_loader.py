@@ -24,6 +24,7 @@ def prepare_sales_data(data: pd.DataFrame, config: ForecastConfig | None = None)
         raise ValueError(f"業績明細缺少欄位: {', '.join(missing)}")
 
     prepared = data.copy()
+    prepared["商品號"] = prepared["商品號"].map(normalize_product_code)
     prepared["銷+贈S量"] = pd.to_numeric(prepared["銷+贈S量"], errors="coerce").fillna(0)
     prepared["單價NT(淨)"] = pd.to_numeric(prepared["單價NT(淨)"], errors="coerce").fillna(0)
     prepared["order_date"] = pd.to_datetime(
@@ -35,6 +36,19 @@ def prepare_sales_data(data: pd.DataFrame, config: ForecastConfig | None = None)
         errors="coerce",
     )
     return prepared.dropna(subset=["order_date", "客戶簡稱", "商品號"])
+
+
+def normalize_product_code(value: object) -> str:
+    if pd.isna(value):
+        return ""
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    text = str(value).strip()
+    if text.endswith(".0"):
+        head = text[:-2]
+        if head.isdigit():
+            return head
+    return text
 
 
 def default_target_from_data(data: pd.DataFrame, config: ForecastConfig | None = None) -> ForecastTarget:

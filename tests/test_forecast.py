@@ -56,3 +56,22 @@ def test_user_adjustments_override_quantity_and_exclusion_removes_amount():
     assert excluded.rows[0].excluded is True
     assert excluded.rows[0].estimated_amount == 0
     assert excluded.total == 0
+
+
+def test_excluded_item_ids_match_numeric_excel_product_codes():
+    data = sample_sales_data().assign(**{"商品號": 1001})
+
+    summary = build_forecast(
+        data,
+        ForecastTarget(2026, 4),
+        ForecastOptions(
+            include_all=True,
+            excluded_item_ids={"1001"},
+            max_cycle_interval_days=ForecastConfig().max_cycle_interval_days,
+        ),
+    )
+
+    assert summary.rows[0].product_code == "1001"
+    assert summary.rows[0].excluded is True
+    assert summary.rows[0].estimated_amount == 0
+    assert summary.total == 0

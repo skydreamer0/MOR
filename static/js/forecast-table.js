@@ -105,10 +105,29 @@ function readRowState(row) {
     price: Number(row.dataset.price || 0),
     systemForecast: Number(row.dataset.systemQty || 0),
     actualQuantity: Number(row.dataset.actualQty || 0),
+    lmActual: Number(row.dataset.lmActual || 0),
+    lmBudget: Number(row.dataset.lmBudget || 0),
     manualValue: manualInput.value,
     reason: reasonInput.value,
     excluded: row.dataset.excluded === "true",
   };
+}
+
+function updateRateElement(el, rateValue) {
+  if (!el) return;
+  el.textContent = rateValue.toFixed(1) + "%";
+  el.classList.toggle("low", rateValue < 80);
+  el.classList.toggle("high", rateValue >= 100);
+}
+
+function updateGapElement(el, gapValue) {
+  if (!el) return;
+  const isPositive = gapValue > 0;
+  const isNegative = gapValue < 0;
+  const sign = isPositive ? "+" : "";
+  el.textContent = sign + formatter.format(gapValue);
+  el.classList.toggle("positive", isPositive);
+  el.classList.toggle("negative", isNegative);
 }
 
 function finalForecastQuantity(state) {
@@ -155,15 +174,16 @@ function renderRow(state, amount, visible) {
   // Budget & Rate
   const budget = Number(state.row.dataset.budget || 0);
   const rate = budget > 0 ? (finalQty / budget) * 100 : 0;
-  const rateEl = state.row.querySelector("[data-rate-display] .rate");
-  if (rateEl) {
-    rateEl.textContent = rate.toFixed(1) + "%";
-    rateEl.classList.toggle("low", rate < 80);
-    rateEl.classList.toggle("high", rate >= 100);
-  }
+  updateRateElement(state.row.querySelector("[data-rate-display] .rate"), rate);
+  updateGapElement(state.row.querySelector("[data-diff-display] .gap-value"), diff);
+
+  // Last Month Stats
+  const lmRate = state.lmBudget > 0 ? (state.lmActual / state.lmBudget) * 100 : 0;
+  const lmGap = state.lmActual - state.lmBudget;
+  updateRateElement(state.row.querySelector("[data-lm-rate-display] .rate"), lmRate);
+  updateGapElement(state.row.querySelector("[data-lm-gap-display] .gap-value"), lmGap);
 
   state.row.querySelector("[data-final-forecast]").textContent = precisionFormatter.format(finalQty);
-  state.row.querySelector("[data-diff]").textContent = precisionFormatter.format(diff);
   state.row.querySelector("[data-amount]").textContent = formatter.format(amount);
 }
 
@@ -314,3 +334,69 @@ function bindForecastTable() {
 }
 
 bindForecastTable();
+
+
+/* ── Snapshot Modal Logic ───────────────────────────────────── */
+
+function showSnapshotModal(snapshotType) {
+  const year = document.querySelector('input[name="year"]')?.value;
+  const month = document.querySelector('input[name="month"]')?.value;
+  const isFinalize = snapshotType === "Final";
+  const defaultName = isFinalize
+    ? `定稿 ${year}/${String(month).padStart(2, "0")}`
+    : `草稿 ${year}/${String(month).padStart(2, "0")}`;
+
+  const backdrop = document.createElement("div");
+  backdrop.className = "modal-backdrop";
+  backdrop.innerHTML = `
+    <div class="modal-card">
+      <h2>${isFinalize ? "確認定稿" : "儲存草稿"}</h2>
+      ${isFinalize ? '<p style="color: var(--danger); font-weight: 600; margin: 0 0 16px 0;">定稿後將無法再修改本月預估。</p>' : ""}
+      <label>
+        版本名稱
+        <input type="text" id="snapshot-name-input" value="${defaultName}" placeholder="請輸入版本名稱">
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" id="modal-cancel">取消</button>
+        <button type="button" class="${isFinalize ? "btn-danger" : ""}" id="modal-confirm">
+          ${isFinalize ? "確認定稿" : "儲存"}
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(backdrop);
+  const nameInput = backdrop.querySelector("#snapshot-name-input");
+  nameInput.select();
+
+  backdrop.querySelector("#modal-cancel").addEventListener("click", () => backdrop.remove());
+  backdrop.addEventListener("click", (e) => { if (e.target === backdrop) backdrop.remove(); });
+
+  backdrop.querySelector("#modal-confirm").addEventListener("click", () => {
+    const form = document.createElement("form");
+    form.method = "POST";
+    form.action = "/snapshots/save";
+    form.style.display = "none";
+
+    const fields = {
+      year: year,
+      month: month,
+      snapshot_name: nameInput.value.trim() || defaultName,
+      snapshot_type: snapshotType,
+    };
+
+    for (const [key, value] of Object.entries(fields)) {
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = key;
+      input.value = value;
+      form.appendChild(input);
+    }
+
+    document.body.appendChild(form);
+    form.submit();
+  });
+}
+
+document.getElementById("btn-save-snapshot")?.addEventListener("click", () => showSnapshotModal("Draft"));
+document.getElementById("btn-finalize")?.addEventListener("click", () => showSnapshotModal("Final"));

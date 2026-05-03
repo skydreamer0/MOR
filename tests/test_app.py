@@ -18,8 +18,14 @@ def _isolated_db_base() -> Path:
     return base
 
 
+def _client(config: dict | None = None):
+    app_config = {"TESTING": True, "DB_BASE_PATH": _isolated_db_base()}
+    app_config.update(config or {})
+    return app.create_app(app_config).test_client()
+
+
 def test_homepage_loads_with_forecast_table():
-    client = app.create_app({"TESTING": True}).test_client()
+    client = _client()
 
     response = client.get("/")
     html = response.get_data(as_text=True)
@@ -32,7 +38,7 @@ def test_homepage_loads_with_forecast_table():
 
 
 def test_homepage_renders_forecast_review_assets_and_tools():
-    client = app.create_app({"TESTING": True}).test_client()
+    client = _client()
 
     response = client.get("/")
     html = response.get_data(as_text=True)
@@ -70,28 +76,25 @@ def test_header_navigation_is_consistent_across_frontend_pages(monkeypatch):
         ]
     )
     monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: data)
-    client = app.create_app(
-        {"TESTING": True, "FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path}
-    ).test_client()
+    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
 
     expectations = {
         "/": 'href="/" aria-current="page"',
         "/items": 'href="/items" aria-current="page"',
-        "/exclusions": 'href="/exclusions" aria-current="page"',
     }
     for path, active_link in expectations.items():
         response = client.get(path)
         html = response.get_data(as_text=True)
 
         assert response.status_code == 200
-        assert 'href="/">工作台</a>' in html or active_link == 'href="/" aria-current="page"'
+        assert 'href="/"' in html
         assert 'href="/items"' in html
-        assert 'href="/exclusions"' in html
+        assert 'href="/exclusions"' not in html
         assert active_link in html
         assert "同步資料" in html
 
 
-def test_exclusions_page_loads_and_saves_item_exclusions(monkeypatch):
+def test_old_exclusions_page_redirects_to_item_management(monkeypatch):
     db_base_path = _isolated_db_base()
     config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
     columns = config.required_columns
@@ -120,23 +123,60 @@ def test_exclusions_page_loads_and_saves_item_exclusions(monkeypatch):
         ]
     )
     monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: data)
-    client = app.create_app(
-        {"TESTING": True, "FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path}
-    ).test_client()
+    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
 
     response = client.get("/exclusions")
-    html = response.get_data(as_text=True)
+
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/items")
+
+
+def test_item_management_exclusion_is_reflected_on_workbench(monkeypatch):
+    db_base_path = _isolated_db_base()
+    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
+    columns = config.required_columns
+    data = pd.DataFrame(
+        [
+            {
+                columns[0]: 2026,
+                columns[1]: 4,
+                columns[2]: 10,
+                columns[3]: "Hospital A",
+                columns[4]: "P1",
+                columns[5]: "Product One",
+                columns[6]: 3,
+                columns[7]: 100,
+            },
+            {
+                columns[0]: 2026,
+                columns[1]: 4,
+                columns[2]: 10,
+                columns[3]: "Hospital A",
+                columns[4]: "P2",
+                columns[5]: "Product Two",
+                columns[6]: 5,
+                columns[7]: 200,
+            },
+        ]
+    )
+    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: data)
+    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
+
+    response = client.post(
+        "/items/save",
+        data={
+            "product_codes": ["P1", "P2"],
+            "is_budgeted_P1": "1",
+            "is_visible_P1": "1",
+            "is_budgeted_P2": "1",
+            "is_visible_P2": "1",
+            "is_excluded_P2": "1",
+        },
+    )
+    workbench = client.get("/").get_data(as_text=True)
 
     assert response.status_code == 200
-    assert "排除品項管理" in html
-    assert "Product One" in html
-
-    save_response = client.post("/exclusions/save", data={"excluded_item_ids": ["P2"]})
-    saved_html = save_response.get_data(as_text=True)
-
-    assert save_response.status_code == 200
-    assert 'value="P2"' in saved_html
-    assert 'value="P2" \n                       checked' in saved_html
+    assert re.search(r'data-search="[^"]*Product Two"[^>]*data-excluded="true"', workbench)
 
 
 def test_adjustment_save_migrates_old_database_without_updated_by():
@@ -159,7 +199,7 @@ def test_adjustment_save_migrates_old_database_without_updated_by():
         )
         conn.commit()
 
-    client = app.create_app({"TESTING": True, "DB_BASE_PATH": db_base_path}).test_client()
+    client = _client({"DB_BASE_PATH": db_base_path})
 
     response = client.post(
         "/adjustments/save",
@@ -187,7 +227,7 @@ def test_adjustment_save_migrates_old_database_without_updated_by():
 
 
 def test_homepage_renders_review_validation_and_accessibility_hooks():
-    client = app.create_app({"TESTING": True}).test_client()
+    client = _client()
 
     response = client.get("/")
     html = response.get_data(as_text=True)
@@ -208,9 +248,21 @@ def test_static_assets_define_invalid_row_validation_behavior():
     assert "data-unrendered-total" in js
 
 
+def test_css_keeps_letter_spacing_neutral_for_dense_operational_ui():
+    css = Path("static/css/mor.css").read_text(encoding="utf-8")
+
+    non_zero_letter_spacing = [
+        value.strip()
+        for value in re.findall(r"letter-spacing:\s*([^;]+);", css)
+        if value.strip() not in {"0", "0em", "0px"}
+    ]
+
+    assert non_zero_letter_spacing == []
+
+
 def test_homepage_shows_friendly_error_for_missing_data_file():
     missing_base = Path.cwd() / "__missing_sales_data__"
-    client = app.create_app({"TESTING": True, "DATA_BASE_PATH": missing_base}).test_client()
+    client = _client({"DATA_BASE_PATH": missing_base})
 
     response = client.get("/")
     html = response.get_data(as_text=True)
@@ -239,7 +291,7 @@ def test_homepage_exposes_unrendered_total_when_rows_are_limited(monkeypatch):
                 }
             )
     monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: pd.DataFrame(rows))
-    client = app.create_app({"TESTING": True, "FORECAST_CONFIG": config}).test_client()
+    client = _client({"FORECAST_CONFIG": config})
 
     response = client.get("/")
     html = response.get_data(as_text=True)
@@ -251,7 +303,7 @@ def test_homepage_exposes_unrendered_total_when_rows_are_limited(monkeypatch):
 
 
 def test_export_rejects_unknown_review_row_id_without_workbook():
-    client = app.create_app({"TESTING": True}).test_client()
+    client = _client()
 
     response = client.post(
         "/export",
@@ -286,7 +338,7 @@ def test_export_rejects_stale_forecast_signature(monkeypatch):
 
     loaded_data = [make_rows(10)]
     monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: loaded_data[-1])
-    client = app.create_app({"TESTING": True, "FORECAST_CONFIG": config}).test_client()
+    client = _client({"FORECAST_CONFIG": config})
 
     review_response = client.get("/")
     signature = re.search(r'name="forecast_signature" value="([^"]+)"', review_response.get_data(as_text=True)).group(1)
@@ -302,7 +354,7 @@ def test_export_rejects_stale_forecast_signature(monkeypatch):
 
 
 def test_export_rejects_invalid_manual_quantity_without_500():
-    client = app.create_app({"TESTING": True}).test_client()
+    client = _client()
 
     response = client.post(
         "/export",

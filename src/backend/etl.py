@@ -3,6 +3,7 @@ import sqlite3
 import json
 from pathlib import Path
 from src.backend.database import MORDatabase
+from src.backend.data_loader import normalize_product_code
 
 def sync_excel_to_db(db: MORDatabase, project_root: Path, config_file: str = "excluded_items.json"):
     # 1. Sync Sales Detail
@@ -22,6 +23,7 @@ def sync_excel_to_db(db: MORDatabase, project_root: Path, config_file: str = "ex
             "order_date", "客戶簡稱", "商品號", "商品簡稱", "銷+贈S量", "單價NT(淨)"
         ]].copy()
         to_db.columns = ["order_date", "customer_name", "product_code", "product_name", "quantity", "unit_price"]
+        to_db["product_code"] = to_db["product_code"].map(normalize_product_code)
         
         with db.get_connection() as conn:
             conn.execute("DELETE FROM sales_records")
@@ -36,8 +38,16 @@ def sync_excel_to_db(db: MORDatabase, project_root: Path, config_file: str = "ex
         with db.get_connection() as conn:
             for pid in excluded_ids:
                 conn.execute(
-                    "INSERT OR REPLACE INTO item_configs (product_code, is_excluded) VALUES (?, 1)",
-                    (pid,)
+                    """
+                    INSERT OR IGNORE INTO item_configs
+                    (product_code, is_excluded, is_budgeted, is_visible, status_label, custom_category)
+                    VALUES (?, 0, 1, 1, NULL, NULL)
+                    """,
+                    (normalize_product_code(pid),)
+                )
+                conn.execute(
+                    "UPDATE item_configs SET is_excluded = 1 WHERE product_code = ?",
+                    (normalize_product_code(pid),)
                 )
             print(f"Migrated {len(excluded_ids)} exclusions from JSON.")
 
@@ -71,6 +81,7 @@ def sync_excel_to_db(db: MORDatabase, project_root: Path, config_file: str = "ex
             )
             melted["year"] = 2026 # Hardcoded for this specific file, or extract from name
             melted = melted.rename(columns={"客戶簡稱": "customer_name", "商品號": "product_code"})
+            melted["product_code"] = melted["product_code"].map(normalize_product_code)
 
             # Aggregate duplicates to avoid IntegrityError
             melted = melted.groupby(["year", "month", "customer_name", "product_code"], as_index=False)["target_quantity"].sum()

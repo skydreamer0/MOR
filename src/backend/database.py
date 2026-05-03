@@ -51,6 +51,8 @@ class MORDatabase:
                 conn.execute("ALTER TABLE item_configs ADD COLUMN is_visible INTEGER DEFAULT 1")
             if 'status_label' not in cols:
                 conn.execute("ALTER TABLE item_configs ADD COLUMN status_label TEXT")
+            if 'custom_category' not in cols:
+                conn.execute("ALTER TABLE item_configs ADD COLUMN custom_category TEXT")
 
             # Forecast Adjustments (User overrides)
             conn.execute("""
@@ -66,6 +68,10 @@ class MORDatabase:
                     PRIMARY KEY (year, month, customer_name, product_code)
                 )
             """)
+            cursor.execute("PRAGMA table_info(forecast_adjustments)")
+            adjustment_cols = [col[1] for col in cursor.fetchall()]
+            if 'updated_by' not in adjustment_cols:
+                conn.execute("ALTER TABLE forecast_adjustments ADD COLUMN updated_by TEXT DEFAULT 'System'")
 
             # Snapshots (Versioning)
             conn.execute("""

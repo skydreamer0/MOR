@@ -103,7 +103,7 @@ def apply_user_adjustments(
     rows = [
         row.with_adjustment(
             manual_adjustment=manual_adjustments[row.row_id] if row.row_id in manual_adjustments else row.manual_adjustment,
-            excluded=row.row_id in excluded_ids,
+            excluded=row.excluded or row.row_id in excluded_ids,
         )
         for row in summary.rows
     ]
