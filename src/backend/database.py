@@ -41,6 +41,17 @@ class MORDatabase:
                 )
             """)
 
+            # Simple migration for item_configs
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(item_configs)")
+            cols = [col[1] for col in cursor.fetchall()]
+            if 'is_budgeted' not in cols:
+                conn.execute("ALTER TABLE item_configs ADD COLUMN is_budgeted INTEGER DEFAULT 1")
+            if 'is_visible' not in cols:
+                conn.execute("ALTER TABLE item_configs ADD COLUMN is_visible INTEGER DEFAULT 1")
+            if 'status_label' not in cols:
+                conn.execute("ALTER TABLE item_configs ADD COLUMN status_label TEXT")
+
             # Forecast Adjustments (User overrides)
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS forecast_adjustments (

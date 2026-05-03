@@ -31,7 +31,8 @@ def create_app(config: dict | None = None) -> Flask:
     app.config.update(config or {})
     forecast_config = app.config.get("FORECAST_CONFIG", ForecastConfig())
     data_base_path = Path(app.config.get("DATA_BASE_PATH", PROJECT_ROOT))
-    db = get_db(data_base_path)
+    db_base_path = Path(app.config.get("DB_BASE_PATH", PROJECT_ROOT))
+    db = get_db(db_base_path)
 
     @app.get("/")
     def index() -> str:
@@ -56,7 +57,13 @@ def create_app(config: dict | None = None) -> Flask:
                 forecast_config,
             )
             # Filter by visibility
-            summary.rows = [row for row in summary.rows if item_configs.get(row.product_code, {}).get('is_visible', True)]
+            from dataclasses import replace
+            filtered_rows = [row for row in summary.rows if item_configs.get(row.product_code, {}).get('is_visible', True)]
+            summary = replace(
+                summary,
+                rows=filtered_rows,
+                total=sum(row.estimated_amount for row in filtered_rows if not row.excluded),
+            )
             
             # Apply adjustments and budgets
             summary = apply_user_adjustments(
@@ -67,13 +74,13 @@ def create_app(config: dict | None = None) -> Flask:
             
             for row in summary.rows:
                 # Apply reasons
-                if row.row_id in adjustment_reasons:
-                    from dataclasses import replace
-                    idx = summary.rows.index(row)
-                    summary.rows[idx] = replace(row, adjustment_reason=adjustment_reasons[row.row_id])
+                new_reason = adjustment_reasons.get(row.row_id, row.adjustment_reason)
+                # Apply budget
+                new_budget = budget_targets.get(row.row_id, 0.0)
                 
-                # Apply budget (New field needs to be in ForecastRow or handled in presenter)
-                # For now, let's just pass it via presenter or add it to ForecastRow
+                from dataclasses import replace
+                idx = summary.rows.index(row)
+                summary.rows[idx] = replace(row, adjustment_reason=new_reason, budget_quantity=new_budget)
             
             error_message = None
         except (FileNotFoundError, ValueError, FormValidationError) as exc:
@@ -117,6 +124,8 @@ def create_app(config: dict | None = None) -> Flask:
                 forecast_config,
             )
             manual_adjustments = parse_manual_quantities(request.form, key_prefix="manual_adjustment__")
+            legacy_manual_adjustments = parse_manual_quantities(request.form)
+            manual_adjustments = {**legacy_manual_adjustments, **manual_adjustments}
             adjustment_reasons = parse_manual_quantities(request.form, key_prefix="adjustment_reason__", type_cast=str)
             
             # Global exclusions are already applied in build_forecast as 'excluded=True'
@@ -266,6 +275,28 @@ def _load_adjustments(db, year: int, month: int) -> tuple[dict[str, float], dict
             if row["adjustment_reason"]:
                 adjustment_reasons[row_id] = row["adjustment_reason"]
     return manual_adjustments, adjustment_reasons
+
+
+def _load_exclusions(db) -> set[str]:
+    with db.get_connection() as conn:
+        rows = conn.execute(
+            "SELECT product_code FROM item_configs WHERE is_excluded = 1"
+        ).fetchall()
+    return {row["product_code"] for row in rows}
+
+
+def _load_budgets(db, year: int, month: int) -> dict[str, float]:
+    budgets = {}
+    with db.get_connection() as conn:
+        rows = conn.execute("""
+            SELECT customer_name, product_code, target_quantity
+            FROM budget_targets
+            WHERE year = ? AND month = ?
+        """, (year, month)).fetchall()
+        for row in rows:
+            row_id = f"{row['customer_name']}__{row['product_code']}"
+            budgets[row_id] = row["target_quantity"]
+    return budgets
 
 
 def _save_exclusions(db, excluded_ids: list[str]) -> None:

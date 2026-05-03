@@ -21,21 +21,25 @@ def parse_target_period(values: Mapping[str, object], default_target: ForecastTa
     return ForecastTarget(year, month)
 
 
-def parse_manual_quantities(form: Mapping[str, object]) -> dict[str, float | None]:
-    result: dict[str, float | None] = {}
+def parse_manual_quantities(
+    form: Mapping[str, object],
+    key_prefix: str = "manual_quantity__",
+    type_cast: type = float,
+) -> dict[str, object | None]:
+    result: dict[str, object | None] = {}
     for key, value in form.items():
-        if not key.startswith("manual_quantity__"):
+        if not key.startswith(key_prefix):
             continue
-        row_id = key.removeprefix("manual_quantity__")
+        row_id = key.removeprefix(key_prefix)
         clean = str(value).strip()
         if clean == "":
             result[row_id] = None
             continue
         try:
-            quantity = float(clean)
+            quantity = type_cast(clean)
         except ValueError as exc:
             raise FormValidationError("人工數量必須是數字。") from exc
-        if quantity < 0:
+        if type_cast is float and quantity < 0:
             raise FormValidationError("人工數量不可小於 0。")
         result[row_id] = quantity
     return result

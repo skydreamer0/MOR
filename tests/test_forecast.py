@@ -35,7 +35,7 @@ def test_build_forecast_returns_summary_with_typed_rows():
     assert row.customer == "A客戶"
     assert row.product_code == "P1"
     assert row.latest_price == 120
-    assert abs(row.forecast_quantity - expected_qty) < 1e-8
+    assert abs(row.system_forecast - expected_qty) < 1e-8
     assert abs(row.estimated_amount - expected_qty * 120) < 1e-8
     assert row.forecast_basis == "data_driven"
     assert row.next_order_date == date(2026, 4, 9)
@@ -45,13 +45,13 @@ def test_build_forecast_returns_summary_with_typed_rows():
 def test_user_adjustments_override_quantity_and_exclusion_removes_amount():
     summary = build_forecast(sample_sales_data(), ForecastTarget(2026, 4))
 
-    adjusted = apply_user_adjustments(summary, manual_quantities={summary.rows[0].row_id: 5}, excluded_ids=set())
+    adjusted = apply_user_adjustments(summary, manual_adjustments={summary.rows[0].row_id: 5}, excluded_ids=set())
 
-    assert adjusted.rows[0].effective_quantity == 5
+    assert adjusted.rows[0].final_forecast == 5
     assert adjusted.rows[0].estimated_amount == 600
     assert adjusted.total == 600
 
-    excluded = apply_user_adjustments(adjusted, manual_quantities={}, excluded_ids={summary.rows[0].row_id})
+    excluded = apply_user_adjustments(adjusted, manual_adjustments={}, excluded_ids={summary.rows[0].row_id})
 
     assert excluded.rows[0].excluded is True
     assert excluded.rows[0].estimated_amount == 0

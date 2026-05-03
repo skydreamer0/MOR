@@ -3,20 +3,18 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>品項進階管理 - MOR</title>
-  <link rel="stylesheet" href="/static/css/mor.css">
-  <style>
-    .item-grid { width: 100%; border-collapse: collapse; margin-top: 20px; }
-    .item-grid th, .item-grid td { padding: 12px; text-align: left; border-bottom: 1px solid var(--line); }
-    .item-grid tr:hover { background: var(--bg); }
-    .status-select { padding: 4px; border-radius: 4px; border: 1px solid var(--cloud); }
-  </style>
+  <title>品項管理 - MOR</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/mor.css') }}">
 </head>
 <body>
   <header>
-    <h1>品項進階管理</h1>
+    <h1>MOR <span style="font-size: var(--text-sm); font-weight: 500; color: var(--muted); margin-left: var(--sp-2);">品項管理</span></h1>
     <nav>
-      <a href="/">返回預估工作台</a>
+      <a href="/">工作台</a>
+      <a href="/items">品項管理</a>
     </nav>
   </header>
 
@@ -40,7 +38,7 @@
             <tr>
               <td>
                 <strong>{{ item.product_name }}</strong><br>
-                <small style="color: var(--slate);">ID: {{ item.product_code }}</small>
+                <small style="color: var(--muted);">ID: {{ item.product_code }}</small>
                 <input type="hidden" name="product_codes" value="{{ item.product_code }}">
               </td>
               <td>

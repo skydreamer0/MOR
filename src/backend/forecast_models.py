@@ -43,10 +43,10 @@ class ForecastRow:
     system_forecast: float
     manual_adjustment: float | None
     final_forecast: float
-    adjustment_reason: str | None = None
-    budget_quantity: float = 0.0
     estimated_amount: float
     forecast_basis: str
+    adjustment_reason: str | None = None
+    budget_quantity: float = 0.0
     excluded: bool = False
 
     def with_adjustment(self, manual_adjustment: float | None, excluded: bool) -> "ForecastRow":

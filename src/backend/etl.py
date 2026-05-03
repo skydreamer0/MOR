@@ -44,30 +44,46 @@ def sync_excel_to_db(db: MORDatabase, project_root: Path, config_file: str = "ex
     # 3. Sync Budgets (2026預算報表)
     budget_file = project_root / "2026預算報表-George-20260430.xlsx"
     if budget_file.exists():
-        df_budget = pd.read_excel(budget_file)
-        # Identify month columns (1-12)
-        month_cols = [c for c in df_budget.columns if isinstance(c, int) and 1 <= c <= 12]
-        
-        # Melt/Unpivot
-        melted = df_budget.melt(
-            id_vars=["客戶簡稱", "商品號"], 
-            value_vars=month_cols, 
-            var_name="month", 
-            value_name="target_quantity"
-        )
-        melted["year"] = 2026 # Hardcoded for this specific file, or extract from name
-        melted = melted.rename(columns={"客戶簡稱": "customer_name", "商品號": "product_code"})
-        
-        # Aggregate duplicates to avoid IntegrityError
-        melted = melted.groupby(["year", "month", "customer_name", "product_code"], as_index=False)["target_quantity"].sum()
-        melted = melted.dropna(subset=["target_quantity"])
-        
-        with db.get_connection() as conn:
-            conn.execute("DELETE FROM budget_targets WHERE year = 2026")
-            melted[["year", "month", "customer_name", "product_code", "target_quantity"]].to_sql(
-                "budget_targets", conn, if_exists="append", index=False
+        try:
+            xl = pd.ExcelFile(budget_file)
+            # Find the sheet starting with '07' or containing '預算'
+            target_sheet = next((s for s in xl.sheet_names if "07" in s and "預算" in s), xl.sheet_names[0])
+            print(f"Loading budget from sheet: {target_sheet}")
+
+            df_budget = pd.read_excel(budget_file, sheet_name=target_sheet)
+            # Identify month columns (1-12)
+            month_cols = [c for c in df_budget.columns if isinstance(c, int) and 1 <= c <= 12]
+
+            if not month_cols:
+                # Try to see if they are strings like "1月"
+                month_cols = [c for c in df_budget.columns if any(str(m) in str(c) for m in range(1, 13))]
+
+            if not month_cols:
+                print("Warning: No month columns found in budget sheet.")
+                return
+
+            # Melt/Unpivot
+            melted = df_budget.melt(
+                id_vars=["客戶簡稱", "商品號"],
+                value_vars=month_cols,
+                var_name="month",
+                value_name="target_quantity"
             )
-            print(f"Synced budget for 2026.")
+            melted["year"] = 2026 # Hardcoded for this specific file, or extract from name
+            melted = melted.rename(columns={"客戶簡稱": "customer_name", "商品號": "product_code"})
+
+            # Aggregate duplicates to avoid IntegrityError
+            melted = melted.groupby(["year", "month", "customer_name", "product_code"], as_index=False)["target_quantity"].sum()
+            melted = melted.dropna(subset=["target_quantity"])
+
+            with db.get_connection() as conn:
+                conn.execute("DELETE FROM budget_targets WHERE year = 2026")
+                melted[["year", "month", "customer_name", "product_code", "target_quantity"]].to_sql(
+                    "budget_targets", conn, if_exists="append", index=False
+                )
+                print(f"Synced budget for 2026.")
+        except Exception as e:
+            print(f"Error syncing budgets: {e}")
 
 if __name__ == "__main__":
     # Quick test run

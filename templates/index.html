@@ -11,12 +11,12 @@
 </head>
 <body>
   <header>
-    <h1>MOR</h1>
+    <h1>MOR <span style="font-size: var(--text-sm); font-weight: 500; color: var(--muted); margin-left: var(--sp-2);">預估工作台</span></h1>
     <nav>
-      <a href="/">預估工作台</a> |
-      <a href="/items">品項進階管理</a> |
+      <a href="/">工作台</a>
+      <a href="/items">品項管理</a>
       <form action="/sync" method="post" style="display:inline;" onsubmit="return confirm('確定要從 Excel 同步資料嗎？這可能需要一點時間。')">
-        <button type="submit" class="link-btn">同步原始資料 (Excel)</button>
+        <button type="submit" class="link-btn">同步資料</button>
       </form>
     </nav>
     <form class="toolbar" method="get" action="/">
@@ -66,11 +66,11 @@
           </select>
         </label>
         <div class="filter-group">
-        <span>顯示範圍: </span>
-        <span data-visible-count>0</span> / {{ row_count }} 列
-        <span style="margin-left: 10px;">已手動調整: </span>
-        <span data-edited-count>0</span> 列
-        <span id="save-status" style="margin-left: 15px; font-weight: bold; color: var(--teal);"></span>
+        <span>顯示: </span>
+        <strong data-visible-count>0</strong> / {{ row_count }}
+        <span style="margin-left: var(--sp-3);">已調整: </span>
+        <strong data-edited-count>0</strong>
+        <span id="save-status"></span>
       </div>
       </div>
       <div class="validation-message" data-validation-message role="alert" hidden>

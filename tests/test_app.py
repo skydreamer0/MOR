@@ -15,7 +15,7 @@ def test_homepage_loads_with_forecast_table():
 
     assert response.status_code == 200
     assert "<title>MOR</title>" in html
-    assert "<h1>MOR</h1>" in html
+    assert "<h1>MOR " in html
     assert "匯出 Excel" in html
     assert "預估總金額" in html
 
@@ -47,7 +47,7 @@ def test_homepage_renders_review_validation_and_accessibility_hooks():
     html = response.get_data(as_text=True)
 
     assert response.status_code == 200
-    assert 'aria-label="人工預估數量"' in html
+    assert 'aria-label="人工調整數量"' in html
     assert 'data-validation-message' in html
     assert "人工數量必須是 0 以上的數字" in html
 

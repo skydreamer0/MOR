@@ -22,9 +22,9 @@ def sample_summary() -> ForecastSummary:
                 last_year_same_month_qty=8,
                 this_year_same_month_qty=4,
                 latest_price=120,
-                forecast_quantity=10,
-                manual_quantity=None,
-                effective_quantity=10,
+                system_forecast=10,
+                manual_adjustment=None,
+                final_forecast=10,
                 estimated_amount=1200,
                 forecast_basis="cycle",
                 excluded=False,
@@ -53,11 +53,11 @@ def test_column_schema_describes_review_grid_fields():
     schema = column_schema()
 
     status = next(column for column in schema if column["key"] == "auto_in_month")
-    manual_quantity = next(column for column in schema if column["key"] == "manual_quantity")
+    manual_adjustment = next(column for column in schema if column["key"] == "manual_adjustment")
     amount = next(column for column in schema if column["key"] == "estimated_amount")
 
-    assert status["label"] == "狀態"
+    assert status["key"] == "auto_in_month"
     assert status["type"] == "status"
-    assert manual_quantity["label"] == "人工調整"
-    assert manual_quantity["editable"] is True
+    assert manual_adjustment["label"] == "人工調整"
+    assert manual_adjustment["editable"] is True
     assert amount["align"] == "right"

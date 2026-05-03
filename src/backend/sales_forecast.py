@@ -37,6 +37,9 @@ def _prepare_data(data: pd.DataFrame) -> pd.DataFrame:
 
 
 def _row_from_dict(row: dict) -> ForecastRow:
+    system_forecast = row.get("system_forecast", row.get("forecast_quantity", 0.0))
+    manual_adjustment = row.get("manual_adjustment", row.get("manual_quantity"))
+    final_forecast = row.get("final_forecast", row.get("effective_quantity", system_forecast))
     return ForecastRow(
         row_id=row["row_id"],
         customer=row["customer"],
@@ -49,9 +52,9 @@ def _row_from_dict(row: dict) -> ForecastRow:
         last_year_same_month_qty=row["last_year_same_month_qty"],
         this_year_same_month_qty=row["this_year_same_month_qty"],
         latest_price=row["latest_price"],
-        forecast_quantity=row["forecast_quantity"],
-        manual_quantity=row.get("manual_quantity"),
-        effective_quantity=row["effective_quantity"],
+        system_forecast=system_forecast,
+        manual_adjustment=manual_adjustment,
+        final_forecast=final_forecast,
         estimated_amount=row["estimated_amount"],
         forecast_basis=row["forecast_basis"],
         excluded=row.get("excluded", False),
