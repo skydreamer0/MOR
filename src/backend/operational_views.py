@@ -55,6 +55,16 @@ class ProductMonitorRow:
     status: str
     status_key: str
     note: str
+    latest_price: float = 0.0
+    amount_impact: float = 0.0
+
+
+@dataclass(frozen=True)
+class CustomerRiskItem:
+    customer: str
+    gap_amount: float
+    gap_quantity: float
+    item_count: int
 
 
 @dataclass(frozen=True)
@@ -127,21 +137,20 @@ def build_forecast_page_context(
         target=target,
         sales_data=data,
         summary=summary,
-        dashboard=build_dashboard_metrics(summary.rows),
+        dashboard=build_dashboard_metrics(summary.rows, budget_targets.values()),
         monitor_rows=build_product_monitor_rows(summary.rows),
         health=build_data_health_summary(data, summary, budget_months),
         items=build_items_from_sales_data(data, db),
     )
 
 
-def build_dashboard_metrics(rows: Iterable[ForecastRow]) -> DashboardMetrics:
+def build_dashboard_metrics(
+    rows: Iterable[ForecastRow],
+    company_budgets: Iterable[BudgetTarget] | None = None,
+) -> DashboardMetrics:
     included_rows = [row for row in rows if not row.excluded]
     budgeted_rows = [row for row in included_rows if row.budget_quantity > 0]
-    target_quantity = sum(row.budget_quantity for row in budgeted_rows)
-    target_amount = sum(
-        row.budget_amount if row.budget_amount > 0 else row.budget_quantity * row.latest_price
-        for row in budgeted_rows
-    )
+    target_quantity, target_amount = _target_totals(budgeted_rows, company_budgets)
     actual_quantity = sum(row.this_year_same_month_qty for row in budgeted_rows)
     actual_amount = sum(_dashboard_amount(row.this_year_same_month_qty, row) for row in budgeted_rows)
     forecast_quantity = sum(row.final_forecast for row in budgeted_rows)
@@ -161,6 +170,27 @@ def build_dashboard_metrics(rows: Iterable[ForecastRow]) -> DashboardMetrics:
         amount_gap=forecast_amount - target_amount,
         high_risk_product_count=len({row.product_code for row in high_risk_rows}),
         high_risk_customer_count=len({row.customer for row in high_risk_rows}),
+    )
+
+
+def _target_totals(
+    budgeted_rows: Iterable[ForecastRow],
+    company_budgets: Iterable[BudgetTarget] | None,
+) -> tuple[float, float]:
+    if company_budgets is not None:
+        budgets = list(company_budgets)
+        return (
+            sum(budget.target_quantity for budget in budgets),
+            sum(budget.target_amount for budget in budgets),
+        )
+
+    rows = list(budgeted_rows)
+    return (
+        sum(row.budget_quantity for row in rows),
+        sum(
+            row.budget_amount if row.budget_amount > 0 else row.budget_quantity * row.latest_price
+            for row in rows
+        ),
     )
 
 
@@ -357,6 +387,7 @@ def _to_monitor_row(row: ForecastRow) -> ProductMonitorRow:
             status = "正常/成長"
             status_key = "ok"
 
+    amount_impact = diff_quantity * row.latest_price
     return ProductMonitorRow(
         customer=row.customer,
         product_code=row.product_code,
@@ -370,4 +401,36 @@ def _to_monitor_row(row: ForecastRow) -> ProductMonitorRow:
         status=status,
         status_key=status_key,
         note=row.adjustment_reason or "",
+        latest_price=row.latest_price,
+        amount_impact=amount_impact,
     )
+
+
+def build_status_distribution(monitor_rows: list[ProductMonitorRow]) -> dict[str, int]:
+    dist = {"high": 0, "slight": 0, "ok": 0, "no_history": 0}
+    for row in monitor_rows:
+        if row.status_key in dist:
+            dist[row.status_key] += 1
+    return dist
+
+
+def build_customer_risk_ranking(
+    monitor_rows: list[ProductMonitorRow],
+    top_n: int = 5,
+) -> list[CustomerRiskItem]:
+    customer_gaps: dict[str, dict] = {}
+    for row in monitor_rows:
+        if row.status_key not in ("high", "slight"):
+            continue
+        if row.customer not in customer_gaps:
+            customer_gaps[row.customer] = {"gap_amount": 0.0, "gap_quantity": 0.0, "item_count": 0}
+        agg = customer_gaps[row.customer]
+        agg["gap_amount"] += row.amount_impact
+        agg["gap_quantity"] += row.diff_quantity
+        agg["item_count"] += 1
+    ranking = [
+        CustomerRiskItem(customer=name, **data)
+        for name, data in customer_gaps.items()
+    ]
+    ranking.sort(key=lambda x: x.gap_amount)
+    return ranking[:top_n]

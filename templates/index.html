@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MOR</title>
+  <title>MOR — 業績總覽</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -20,99 +20,186 @@
       <section class="alert" role="alert">{{ error_message }}</section>
     {% endif %}
 
-    <section class="dashboard-heading">
-      <div>
-        <h2>業績總覽 Dashboard</h2>
-        <p>{% if year and month %}{{ year }}/{{ "%02d"|format(month|int) }}{% else %}--{% endif %} 金額總覽</p>
-      </div>
-      <a class="btn-link" href="{{ url_for('forecast', year=year, month=month) }}">進入預估調整</a>
-    </section>
-
     {% if metrics %}
-    <section class="dashboard-grid" aria-label="業績總覽指標">
-      <div class="metric metric-wide">
-        <span>本月預算金額</span>
-        <strong>{{ "{:,.0f}".format(metrics.target_amount) }}</strong>
+    {% set rate = metrics.amount_achievement_rate %}
+
+    {# ── Zone 1: 目標進度 Hero ────────────────────────────── #}
+    <section class="progress-hero" aria-label="目標進度">
+      <div class="progress-hero-header">
+        <div class="progress-hero-titles">
+          <h2>業績總覽</h2>
+          <p>{{ year }}/{{ "%02d"|format(month|int) }} 金額總覽</p>
+        </div>
+        <div class="progress-hero-actions">
+          <span class="remaining-tag">
+            <span class="remaining-dot"></span>
+            本月剩餘 <strong>{{ remaining_days }}</strong> 天
+          </span>
+          <a class="btn-link" href="{{ url_for('forecast', year=year, month=month) }}">進入預估調整</a>
+        </div>
       </div>
-      <div class="metric metric-wide">
-        <span>目前實績金額</span>
-        <strong>{{ "{:,.0f}".format(metrics.actual_amount) }}</strong>
-      </div>
-      <div class="metric metric-wide">
-        <span>預估月底金額</span>
-        <strong>{{ "{:,.0f}".format(metrics.forecast_amount) }}</strong>
-      </div>
-      <div class="metric metric-wide">
-        <span>金額達成率</span>
-        <strong>{{ "{:.1f}%".format(metrics.amount_achievement_rate) }}</strong>
-      </div>
-      <div class="metric metric-wide">
-        <span>金額 GAP</span>
-        <strong class="{% if metrics.amount_gap < 0 %}danger-text{% else %}success-text{% endif %}">
-          {{ "{:+,.0f}".format(metrics.amount_gap) }}
-        </strong>
-      </div>
-      <div class="metric">
-        <span>高風險品項</span>
-        <strong>{{ "{:,.0f}".format(metrics.high_risk_product_count) }}</strong>
-      </div>
-      <div class="metric">
-        <span>高風險客戶</span>
-        <strong>{{ "{:,.0f}".format(metrics.high_risk_customer_count) }}</strong>
+
+      <div class="progress-body">
+        <div class="progress-main">
+          <div class="progress-target-row">
+            <span class="progress-label-muted">預算目標</span>
+            <strong class="progress-target-value">{{ "{:,.0f}".format(metrics.target_amount) }}</strong>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill {% if rate >= 100 %}fill-success{% elif rate >= 90 %}fill-warning{% else %}fill-danger{% endif %}"
+                 style="width: {{ [rate, 100] | min }}%"
+                 role="progressbar"
+                 aria-valuenow="{{ rate | round(1) }}"
+                 aria-valuemin="0"
+                 aria-valuemax="100">
+            </div>
+          </div>
+          <div class="progress-footer-row">
+            <span class="progress-label-muted">預估達成</span>
+            <strong class="progress-forecast-value">{{ "{:,.0f}".format(metrics.forecast_amount) }}</strong>
+            <span class="progress-rate {% if rate >= 100 %}rate-success{% elif rate >= 90 %}rate-warning{% else %}rate-danger{% endif %}">
+              {{ "{:.1f}%".format(rate) }}
+            </span>
+          </div>
+        </div>
+
+        <div class="sub-metrics">
+          <div class="sub-metric">
+            <span class="sub-metric-label">目前實績</span>
+            <strong class="sub-metric-value">{{ "{:,.0f}".format(metrics.actual_amount) }}</strong>
+            <small class="sub-metric-note">已入帳金額</small>
+          </div>
+          <div class="sub-metric">
+            <span class="sub-metric-label">預估新增</span>
+            <strong class="sub-metric-value">{{ "{:,.0f}".format(metrics.forecast_amount - metrics.actual_amount) }}</strong>
+            <small class="sub-metric-note">月底前預期</small>
+          </div>
+          <div class="sub-metric">
+            <span class="sub-metric-label">金額 GAP</span>
+            <strong class="sub-metric-value {% if metrics.amount_gap < 0 %}danger-text{% else %}success-text{% endif %}">
+              {{ "{:+,.0f}".format(metrics.amount_gap) }}
+            </strong>
+            <small class="sub-metric-note">預估 − 預算</small>
+          </div>
+          <div class="sub-metric">
+            <span class="sub-metric-label">風險追蹤</span>
+            <strong class="sub-metric-value">{{ metrics.high_risk_product_count }} <small class="sub-metric-unit">品項</small> / {{ metrics.high_risk_customer_count }} <small class="sub-metric-unit">客戶</small></strong>
+            <small class="sub-metric-note">高風險數量</small>
+          </div>
+        </div>
       </div>
     </section>
 
-    <section class="split-layout">
-      <div class="panel">
-        <div class="section-header">
-          <h3>高風險追蹤</h3>
-          <a class="link-btn" href="{{ url_for('product_monitor', year=year, month=month) }}">查看全部</a>
+    {# ── Zone 2: 風險儀表板 ────────────────────────────────── #}
+    {% if status_dist %}
+    <section class="risk-dashboard" aria-label="風險儀表板">
+      <div class="risk-summary panel">
+        <h3>風險分佈</h3>
+        <div class="status-dist">
+          <div class="dist-item">
+            <span class="dist-dot dist-dot-high"></span>
+            <span class="dist-label">高風險</span>
+            <strong class="dist-count danger-text">{{ status_dist.high }}</strong>
+          </div>
+          <div class="dist-item">
+            <span class="dist-dot dist-dot-slight"></span>
+            <span class="dist-label">輕微下滑</span>
+            <strong class="dist-count" style="color:var(--accent-2)">{{ status_dist.slight }}</strong>
+          </div>
+          <div class="dist-item">
+            <span class="dist-dot dist-dot-ok"></span>
+            <span class="dist-label">正常 / 成長</span>
+            <strong class="dist-count success-text">{{ status_dist.ok }}</strong>
+          </div>
+          <div class="dist-item">
+            <span class="dist-dot dist-dot-none"></span>
+            <span class="dist-label">無去年同期</span>
+            <strong class="dist-count">{{ status_dist.no_history }}</strong>
+          </div>
         </div>
-        <div class="table-wrap compact-table">
-          <table>
-            <thead>
-              <tr>
-                <th>客戶</th>
-                <th>品項</th>
-                <th class="num">去年同期</th>
-                <th class="num">預估月底</th>
-                <th class="num">差異</th>
-                <th>狀態</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for row in monitor_rows %}
-              <tr>
-                <td>{{ row.customer }}</td>
-                <td>{{ row.product_name }}</td>
-                <td class="num">{{ "{:,.0f}".format(row.last_year_quantity) }}</td>
-                <td class="num">{{ "{:,.0f}".format(row.forecast_quantity) }}</td>
-                <td class="num"><span class="gap-value {% if row.diff_quantity < 0 %}negative{% elif row.diff_quantity > 0 %}positive{% endif %}">{{ "{:+,.0f}".format(row.diff_quantity) }}</span></td>
-                <td><span class="badge status-{{ row.status_key }}">{{ row.status }}</span></td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
+        <div class="dist-total">
+          <span>品項總數</span>
+          <strong>{{ status_dist.high + status_dist.slight + status_dist.ok + status_dist.no_history }}</strong>
         </div>
       </div>
 
-      <div class="panel">
-        <div class="section-header">
-          <h3>資料檢核</h3>
-          <a class="link-btn" href="{{ url_for('settings', year=year, month=month) }}">系統設定</a>
+      <div class="customer-rank panel">
+        <h3>客戶風險排名</h3>
+        {% if customer_ranking %}
+        {% set max_gap = (customer_ranking[0].gap_amount | abs) if customer_ranking[0].gap_amount != 0 else 1 %}
+        <div class="rank-list">
+          {% for item in customer_ranking %}
+          <div class="rank-item">
+            <div class="rank-info">
+              <span class="rank-customer">{{ item.customer }}</span>
+              <span class="rank-count">{{ item.item_count }} 品項</span>
+            </div>
+            <div class="rank-bar-wrap">
+              <div class="rank-bar" style="width: {{ (item.gap_amount | abs / max_gap * 100) | round(1) }}%"></div>
+            </div>
+            <strong class="rank-gap danger-text">{{ "{:+,.0f}".format(item.gap_amount) }}</strong>
+          </div>
+          {% endfor %}
         </div>
-        {% if health %}
-        <dl class="health-list">
-          <div><dt>訂單筆數</dt><dd>{{ health.order_count }} 筆</dd></div>
-          <div><dt>訂單日期範圍</dt><dd>{% if health.order_start %}{{ health.order_start }} - {{ health.order_end }}{% else %}--{% endif %}</dd></div>
-          <div><dt>預算月份覆蓋</dt><dd>{{ health.budget_month_count }} 個月份</dd></div>
-          <div><dt>缺預算列數</dt><dd>{{ health.missing_budget_row_count }}</dd></div>
-          <div><dt>單價為 0 列數</dt><dd>{{ health.zero_price_row_count }}</dd></div>
-          <div><dt>無去年同期列數</dt><dd>{{ health.no_last_year_row_count }}</dd></div>
-        </dl>
+        {% else %}
+        <p class="muted" style="margin:var(--sp-4) 0 0;">目前無高風險或輕微下滑的客戶</p>
         {% endif %}
       </div>
     </section>
+    {% endif %}
+
+    {# ── Zone 3: 高風險明細 ───────────────────────────────── #}
+    <section class="panel" aria-label="高風險追蹤">
+      <div class="section-header">
+        <h3>高風險追蹤</h3>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <a class="link-btn" href="{{ url_for('product_monitor', year=year, month=month) }}">查看全部</a>
+          <a class="link-btn" href="{{ url_for('forecast', year=year, month=month) }}">進入調整</a>
+        </div>
+      </div>
+      <div class="table-wrap compact-table">
+        <table>
+          <thead>
+            <tr>
+              <th>客戶</th>
+              <th>品項</th>
+              <th class="num">去年同期</th>
+              <th class="num">預估月底</th>
+              <th class="num">差異</th>
+              <th class="num">金額影響</th>
+              <th>狀態</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in monitor_rows %}
+            <tr>
+              <td>{{ row.customer }}</td>
+              <td>{{ row.product_name }}</td>
+              <td class="num">{{ "{:,.0f}".format(row.last_year_quantity) }}</td>
+              <td class="num">{{ "{:,.0f}".format(row.forecast_quantity) }}</td>
+              <td class="num"><span class="gap-value {% if row.diff_quantity < 0 %}negative{% elif row.diff_quantity > 0 %}positive{% endif %}">{{ "{:+,.0f}".format(row.diff_quantity) }}</span></td>
+              <td class="num"><span class="gap-value {% if row.amount_impact < 0 %}negative{% elif row.amount_impact > 0 %}positive{% endif %}">{{ "{:+,.0f}".format(row.amount_impact) }}</span></td>
+              <td><span class="badge status-{{ row.status_key }}">{{ row.status }}</span></td>
+              <td><a class="jump-link" href="{{ url_for('forecast', year=year, month=month) }}#row-{{ row.customer }}__{{ row.product_code }}" title="前往調整">→</a></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    {# ── Data health alert (only shown when issues exist) ─── #}
+    {% if health and (health.missing_budget_row_count > 0 or health.zero_price_row_count > 0) %}
+    <section class="alert alert-info" role="alert">
+      ⚠
+      {% if health.missing_budget_row_count > 0 %}有 {{ health.missing_budget_row_count }} 列缺預算目標{% endif %}
+      {% if health.missing_budget_row_count > 0 and health.zero_price_row_count > 0 %}，{% endif %}
+      {% if health.zero_price_row_count > 0 %}有 {{ health.zero_price_row_count }} 列單價為 0{% endif %}
+      — <a href="{{ url_for('settings', year=year, month=month) }}">前往系統設定查看</a>
+    </section>
+    {% endif %}
+
     {% endif %}
   </main>
 </body>

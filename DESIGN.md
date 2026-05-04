@@ -64,9 +64,17 @@ Rules:
 
 Sticky top bar with title on the left and period controls on the right. It should remain compact and preserve vertical space for the table. Primary tabs should stay limited to 工作台 and 品項管理; product exclusion is configured inside 品項管理 rather than a separate page.
 
-### Metric Summary
+### Dashboard Layout
 
-Use four metric tiles for target month, shown rows, auto-forecast rows, and current total. Metrics should be visible before the table and should not become decorative cards inside other cards.
+The dashboard follows a three-zone information hierarchy: **Status → Risk → Action**.
+
+**Zone 1 — Progress Hero:** A single card showing budget target, forecast amount, a visual progress bar with conditional coloring (green ≥100%, amber 90-99%, red <90%), remaining days in the month, and four sub-metrics (actual, forecast delta, GAP, risk counts). This replaces the old flat metric tiles.
+
+**Zone 2 — Risk Dashboard:** A two-column layout. Left panel shows status distribution (high risk, slight decline, normal/growth, no history) with color-coded dot indicators. Right panel shows the top-5 customer risk ranking with inline bar charts sorted by GAP amount.
+
+**Zone 3 — High-Risk Detail:** A compact table of high-risk items sorted by amount impact (largest negative first), with columns for quantity diff, amount impact, status badge, and an inline jump link to the forecast adjustment page.
+
+**Data Health Alert:** Shown as a warning banner only when data issues exist (missing budget rows or zero-price rows). Does not appear on a clean dashboard. Full health details remain on the Settings page.
 
 ### Table
 

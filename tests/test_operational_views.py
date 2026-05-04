@@ -5,6 +5,7 @@ import pandas as pd
 
 from src.backend.forecast_models import ForecastRow, ForecastSummary
 from src.backend.operational_views import (
+    BudgetTarget,
     build_dashboard_metrics,
     build_data_health_summary,
     build_product_monitor_rows,
@@ -24,6 +25,7 @@ def _row(
     budget: float,
     price: float,
     budget_amount: float = 0,
+    excluded: bool = False,
     reason: str | None = None,
 ) -> ForecastRow:
     return ForecastRow(
@@ -48,7 +50,7 @@ def _row(
         budget_amount=budget_amount,
         last_month_actual=last_month,
         last_month_budget=budget,
-        excluded=False,
+        excluded=excluded,
     )
 
 
@@ -119,6 +121,51 @@ def test_dashboard_metrics_summarize_quantity_amount_and_high_risk_counts():
     assert metrics.achievement_rate == 145 / 170 * 100
     assert metrics.high_risk_product_count == 1
     assert metrics.high_risk_customer_count == 1
+
+
+def test_dashboard_metrics_use_company_budget_totals_above_workbench_rules():
+    rows = [
+        _row(
+            row_id="A__P1",
+            customer="A",
+            product_code="P1",
+            product_name="Alpha",
+            last_year=100,
+            last_month=80,
+            current=20,
+            final=80,
+            budget=120,
+            price=10,
+            budget_amount=1500,
+        ),
+        _row(
+            row_id="B__P2",
+            customer="B",
+            product_code="P2",
+            product_name="Excluded Budget",
+            last_year=20,
+            last_month=10,
+            current=5,
+            final=10,
+            budget=30,
+            price=20,
+            budget_amount=600,
+            excluded=True,
+        ),
+    ]
+    company_budgets = [
+        BudgetTarget(target_quantity=120, target_amount=1500),
+        BudgetTarget(target_quantity=30, target_amount=600),
+        BudgetTarget(target_quantity=7, target_amount=250),
+    ]
+
+    metrics = build_dashboard_metrics(rows, company_budgets)
+
+    assert metrics.target_quantity == 157
+    assert metrics.target_amount == 2350
+    assert metrics.forecast_quantity == 80
+    assert metrics.forecast_amount == 1000
+    assert metrics.amount_gap == -1350
 
 
 def test_product_monitor_rows_classify_yoy_drop_statuses_and_notes():

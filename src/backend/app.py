@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import calendar
 import hashlib
+from datetime import date
 from pathlib import Path
 
 from flask import Flask, Response, redirect, render_template, request, send_file, url_for
@@ -10,7 +12,12 @@ from src.backend.exporter import export_forecast
 from src.backend.forecast_config import ForecastConfig
 from src.backend.forecast_engine import ForecastOptions, apply_user_adjustments, build_forecast
 from src.backend.forecast_models import ForecastSummary
-from src.backend.operational_views import build_forecast_page_context, load_exclusions
+from src.backend.operational_views import (
+    build_customer_risk_ranking,
+    build_forecast_page_context,
+    build_status_distribution,
+    load_exclusions,
+)
 from src.backend.web.form_parser import FormValidationError, parse_manual_quantities, parse_target_period
 from src.backend.database import get_db
 from src.backend.etl import sync_excel_to_db
@@ -49,13 +56,37 @@ def create_app(config: dict | None = None) -> Flask:
             context = None
             error_message = f"無法產生預估：{exc}"
 
+        remaining_days = 0
+        if context:
+            today = date.today()
+            t_year, t_month = context.target.year, context.target.month
+            _, last_day = calendar.monthrange(t_year, t_month)
+            month_end = date(t_year, t_month, last_day)
+            month_start = date(t_year, t_month, 1)
+            if today > month_end:
+                remaining_days = 0
+            elif today < month_start:
+                remaining_days = last_day
+            else:
+                remaining_days = (month_end - today).days
+
+        all_monitor = context.monitor_rows if context else []
+        status_dist = build_status_distribution(all_monitor) if context else {}
+        customer_ranking = build_customer_risk_ranking(all_monitor) if context else []
+
+        high_risk_rows = [row for row in all_monitor if row.status_key == "high"]
+        high_risk_rows.sort(key=lambda r: r.amount_impact)
+
         return render_template(
             "index.html",
             year=context.target.year if context else request.args.get("year", ""),
             month=context.target.month if context else request.args.get("month", ""),
             metrics=context.dashboard if context else None,
             health=context.health if context else None,
-            monitor_rows=[row for row in context.monitor_rows if row.status_key == "high"][:10] if context else [],
+            monitor_rows=high_risk_rows[:15] if context else [],
+            remaining_days=remaining_days,
+            status_dist=status_dist,
+            customer_ranking=customer_ranking,
             error_message=error_message,
         )
 
