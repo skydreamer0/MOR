@@ -33,9 +33,12 @@ def test_homepage_loads_dashboard():
     assert response.status_code == 200
     assert "<title>MOR</title>" in html
     assert "<h1>MOR " in html
-    assert "業績總覽" in html
-    assert "本月目標" in html
+    assert "業績總覽 Dashboard" in html
+    assert "本月預算金額" in html
+    assert "預估月底金額" in html
+    assert "金額達成率" in html
     assert "高風險品項" in html
+    assert "metrics.target_quantity" not in html
     assert 'href="/forecast"' in html
 
 
