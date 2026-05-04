@@ -23,7 +23,7 @@
     <section class="dashboard-heading">
       <div>
         <h2>業績總覽 Dashboard</h2>
-        <p>{% if year and month %}{{ year }}/{{ "%02d"|format(month|int) }}{% else %}--{% endif %} 預估月份</p>
+        <p>{% if year and month %}{{ year }}/{{ "%02d"|format(month|int) }}{% else %}--{% endif %} 金額總覽</p>
       </div>
       <a class="btn-link" href="{{ url_for('forecast', year=year, month=month) }}">進入預估調整</a>
     </section>
@@ -31,31 +31,26 @@
     {% if metrics %}
     <section class="dashboard-grid" aria-label="業績總覽指標">
       <div class="metric metric-wide">
-        <span>本月目標</span>
-        <strong>{{ "{:,.0f}".format(metrics.target_quantity) }}</strong>
-        <small>金額 {{ "{:,.0f}".format(metrics.target_amount) }}</small>
+        <span>本月預算金額</span>
+        <strong>{{ "{:,.0f}".format(metrics.target_amount) }}</strong>
       </div>
       <div class="metric metric-wide">
-        <span>目前實績</span>
-        <strong>{{ "{:,.0f}".format(metrics.actual_quantity) }}</strong>
-        <small>金額 {{ "{:,.0f}".format(metrics.actual_amount) }}</small>
+        <span>目前實績金額</span>
+        <strong>{{ "{:,.0f}".format(metrics.actual_amount) }}</strong>
       </div>
       <div class="metric metric-wide">
-        <span>預估月底</span>
-        <strong>{{ "{:,.0f}".format(metrics.forecast_quantity) }}</strong>
-        <small>金額 {{ "{:,.0f}".format(metrics.forecast_amount) }}</small>
+        <span>預估月底金額</span>
+        <strong>{{ "{:,.0f}".format(metrics.forecast_amount) }}</strong>
       </div>
       <div class="metric metric-wide">
-        <span>達成率</span>
-        <strong>{{ "{:.1f}%".format(metrics.achievement_rate) }}</strong>
-        <small>金額 {{ "{:.1f}%".format(metrics.amount_achievement_rate) }}</small>
+        <span>金額達成率</span>
+        <strong>{{ "{:.1f}%".format(metrics.amount_achievement_rate) }}</strong>
       </div>
       <div class="metric metric-wide">
-        <span>業績 GAP</span>
-        <strong class="{% if metrics.quantity_gap < 0 %}danger-text{% else %}success-text{% endif %}">
-          {{ "{:+,.0f}".format(metrics.quantity_gap) }}
+        <span>金額 GAP</span>
+        <strong class="{% if metrics.amount_gap < 0 %}danger-text{% else %}success-text{% endif %}">
+          {{ "{:+,.0f}".format(metrics.amount_gap) }}
         </strong>
-        <small>金額 {{ "{:+,.0f}".format(metrics.amount_gap) }}</small>
       </div>
       <div class="metric">
         <span>高風險品項</span>
@@ -70,7 +65,7 @@
     <section class="split-layout">
       <div class="panel">
         <div class="section-header">
-          <h3>高風險跳單</h3>
+          <h3>高風險追蹤</h3>
           <a class="link-btn" href="{{ url_for('product_monitor', year=year, month=month) }}">查看全部</a>
         </div>
         <div class="table-wrap compact-table">
@@ -108,9 +103,9 @@
         </div>
         {% if health %}
         <dl class="health-list">
-          <div><dt>訂單資料檢查</dt><dd>{{ health.order_count }} 筆</dd></div>
-          <div><dt>資料期間</dt><dd>{% if health.order_start %}{{ health.order_start }} - {{ health.order_end }}{% else %}--{% endif %}</dd></div>
-          <div><dt>預算資料檢查</dt><dd>{{ health.budget_month_count }} 個月份</dd></div>
+          <div><dt>訂單筆數</dt><dd>{{ health.order_count }} 筆</dd></div>
+          <div><dt>訂單日期範圍</dt><dd>{% if health.order_start %}{{ health.order_start }} - {{ health.order_end }}{% else %}--{% endif %}</dd></div>
+          <div><dt>預算月份覆蓋</dt><dd>{{ health.budget_month_count }} 個月份</dd></div>
           <div><dt>缺預算列數</dt><dd>{{ health.missing_budget_row_count }}</dd></div>
           <div><dt>單價為 0 列數</dt><dd>{{ health.zero_price_row_count }}</dd></div>
           <div><dt>無去年同期列數</dt><dd>{{ health.no_last_year_row_count }}</dd></div>

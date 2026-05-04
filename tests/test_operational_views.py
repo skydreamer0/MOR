@@ -23,6 +23,7 @@ def _row(
     final: float,
     budget: float,
     price: float,
+    budget_amount: float = 0,
     reason: str | None = None,
 ) -> ForecastRow:
     return ForecastRow(
@@ -44,6 +45,7 @@ def _row(
         forecast_basis="data_driven",
         adjustment_reason=reason,
         budget_quantity=budget,
+        budget_amount=budget_amount,
         last_month_actual=last_month,
         last_month_budget=budget,
         excluded=False,
@@ -63,6 +65,7 @@ def test_dashboard_metrics_summarize_quantity_amount_and_high_risk_counts():
             final=80,
             budget=120,
             price=10,
+            budget_amount=1500,
         ),
         _row(
             row_id="B__P1",
@@ -75,6 +78,7 @@ def test_dashboard_metrics_summarize_quantity_amount_and_high_risk_counts():
             final=60,
             budget=40,
             price=20,
+            budget_amount=900,
         ),
         _row(
             row_id="C__P2",
@@ -88,18 +92,30 @@ def test_dashboard_metrics_summarize_quantity_amount_and_high_risk_counts():
             budget=10,
             price=30,
         ),
+        _row(
+            row_id="D__P3",
+            customer="D",
+            product_code="P3",
+            product_name="Unbudgeted",
+            last_year=0,
+            last_month=0,
+            current=999,
+            final=999,
+            budget=0,
+            price=999,
+        ),
     ]
 
     metrics = build_dashboard_metrics(rows)
 
     assert metrics.target_quantity == 170
-    assert metrics.target_amount == 2300
+    assert metrics.target_amount == 2700
     assert metrics.actual_quantity == 55
-    assert metrics.actual_amount == 950
+    assert metrics.actual_amount == 1075
     assert metrics.forecast_quantity == 145
-    assert metrics.forecast_amount == 2150
+    assert metrics.forecast_amount == 2500
     assert metrics.quantity_gap == -25
-    assert metrics.amount_gap == -150
+    assert metrics.amount_gap == -200
     assert metrics.achievement_rate == 145 / 170 * 100
     assert metrics.high_risk_product_count == 1
     assert metrics.high_risk_customer_count == 1

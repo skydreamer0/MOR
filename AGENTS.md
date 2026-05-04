@@ -1,5 +1,49 @@
 # MOR Agent Instructions
 
+## Fast Codex Workflow
+
+Default response style for MOR work:
+
+1. Keep answers short.
+2. Read only the necessary active docs and core files before editing.
+3. Before edits, list the files that will be inspected or changed.
+4. Handle one feature or fix at a time.
+5. Avoid broad refactors unless explicitly requested.
+6. Do not repeat known project background.
+7. Prefer diff summaries over long explanations.
+8. After edits, run the relevant test or syntax check.
+9. Final reports should include changed files, completed work, verification, risk, and up to 3 next steps.
+
+Reusable prompt for small tasks:
+
+```text
+請用最少 token 完成以下任務。
+
+任務：
+[貼需求]
+
+限制：
+1. 先不要改檔，先列出你會檢查哪些檔案。
+2. 只讀必要檔案。
+3. 不要重複說明背景。
+4. 不要大改架構。
+5. 修改完成後跑測試。
+6. 最後只回報：
+   A. 修改檔案
+   B. 完成內容
+   C. 驗證結果
+   D. 下一步
+```
+
+Quick development loop:
+
+1. Analyze one small task.
+2. Confirm direction or file scope.
+3. Edit only scoped files.
+4. Run tests or syntax checks.
+5. Review `git diff`.
+6. Prepare a concise commit message.
+
 ## Project Context
 
 MOR is a local Flask-based sales forecast tool. It reads Excel sales detail files, estimates monthly customer/product demand, lets the user manually override quantities or exclude rows, and exports the final forecast workbook.
@@ -44,17 +88,22 @@ Current intended structure:
 
 ```text
 app.py                         Flask app launch wrapper
+ROADMAP.md                     Small-task roadmap and priority queue
 src/backend/                   Canonical backend logic
   app.py                       Flask app and route wiring
   forecast_config.py           Centralized file names, sheets, columns, limits
   forecast_models.py           ForecastTarget, ForecastRow, ForecastSummary
   data_loader.py               Excel loading and DataFrame normalization
   forecast_engine.py           Forecast calculation and adjustments
+  operational_views.py         Dashboard, monitor, and data health presentation service
   exporter.py                  Excel workbook export
   sales_forecast.py            Compatibility facade for older imports
   web/form_parser.py           Form parsing and validation
   web/forecast_presenter.py    Grid presentation
-templates/index.html           Server-rendered forecast review UI
+templates/index.html           Dashboard
+templates/forecast.html        Forecast adjustment and export UI
+templates/product_monitor.html Product drop monitor
+templates/settings.html        Settings and data checks
 tests/                         Unit and route tests
 docs/architecture/             Architecture docs
 docs/design/                   Frontend/backend/design-system docs
@@ -94,6 +143,12 @@ Update documentation when changing:
 
 Use concise Markdown. Prefer diagrams only when they clarify flow or ownership.
 **IMPORTANT:** Codex and AI subagents MUST ONLY read active docs in `infrastructure/` and `docs/workflows/`. They MUST NEVER read files in `docs/archive/` or any file prefixed with `superseded-` for implementation context.
+
+For MOR-specific prompt and skill workflows, see:
+
+- `ROADMAP.md`
+- `docs/workflows/codex-prompt-workflow.md`
+- `docs/workflows/mor-skills.md`
 
 ## Subagent Rules
 

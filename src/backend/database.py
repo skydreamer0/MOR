@@ -107,9 +107,17 @@ class MORDatabase:
                     customer_name TEXT,
                     product_code TEXT,
                     target_quantity REAL DEFAULT 0,
+                    target_amount REAL DEFAULT 0,
+                    base_target_quantity REAL DEFAULT 0,
                     PRIMARY KEY (year, month, customer_name, product_code)
                 )
             """)
+            cursor.execute("PRAGMA table_info(budget_targets)")
+            budget_cols = [col[1] for col in cursor.fetchall()]
+            if 'target_amount' not in budget_cols:
+                conn.execute("ALTER TABLE budget_targets ADD COLUMN target_amount REAL DEFAULT 0")
+            if 'base_target_quantity' not in budget_cols:
+                conn.execute("ALTER TABLE budget_targets ADD COLUMN base_target_quantity REAL DEFAULT 0")
 
             conn.commit()
 

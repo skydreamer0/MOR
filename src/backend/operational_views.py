@@ -19,6 +19,13 @@ DROP_RISK_THRESHOLD = 0.9
 
 
 @dataclass(frozen=True)
+class BudgetTarget:
+    target_quantity: float
+    target_amount: float
+    base_target_quantity: float = 0.0
+
+
+@dataclass(frozen=True)
 class DashboardMetrics:
     target_quantity: float
     target_amount: float
@@ -129,12 +136,16 @@ def build_forecast_page_context(
 
 def build_dashboard_metrics(rows: Iterable[ForecastRow]) -> DashboardMetrics:
     included_rows = [row for row in rows if not row.excluded]
-    target_quantity = sum(row.budget_quantity for row in included_rows)
-    target_amount = sum(row.budget_quantity * row.latest_price for row in included_rows)
-    actual_quantity = sum(row.this_year_same_month_qty for row in included_rows)
-    actual_amount = sum(row.this_year_same_month_qty * row.latest_price for row in included_rows)
-    forecast_quantity = sum(row.final_forecast for row in included_rows)
-    forecast_amount = sum(row.final_forecast * row.latest_price for row in included_rows)
+    budgeted_rows = [row for row in included_rows if row.budget_quantity > 0]
+    target_quantity = sum(row.budget_quantity for row in budgeted_rows)
+    target_amount = sum(
+        row.budget_amount if row.budget_amount > 0 else row.budget_quantity * row.latest_price
+        for row in budgeted_rows
+    )
+    actual_quantity = sum(row.this_year_same_month_qty for row in budgeted_rows)
+    actual_amount = sum(_dashboard_amount(row.this_year_same_month_qty, row) for row in budgeted_rows)
+    forecast_quantity = sum(row.final_forecast for row in budgeted_rows)
+    forecast_amount = sum(_dashboard_amount(row.final_forecast, row) for row in budgeted_rows)
     high_risk_rows = [row for row in included_rows if is_high_risk_drop(row)]
 
     return DashboardMetrics(
@@ -151,6 +162,12 @@ def build_dashboard_metrics(rows: Iterable[ForecastRow]) -> DashboardMetrics:
         high_risk_product_count=len({row.product_code for row in high_risk_rows}),
         high_risk_customer_count=len({row.customer for row in high_risk_rows}),
     )
+
+
+def _dashboard_amount(quantity: float, row: ForecastRow) -> float:
+    if row.budget_amount > 0 and row.budget_quantity > 0:
+        return quantity * row.budget_amount / row.budget_quantity
+    return quantity * row.latest_price
 
 
 def build_product_monitor_rows(rows: Iterable[ForecastRow]) -> list[ProductMonitorRow]:
@@ -261,12 +278,12 @@ def load_exclusions(db) -> set[str]:
     return excluded
 
 
-def load_budgets(db, year: int, month: int) -> dict[str, float]:
+def load_budgets(db, year: int, month: int) -> dict[str, BudgetTarget]:
     budgets = {}
     with db.get_connection() as conn:
         rows = conn.execute(
             """
-            SELECT customer_name, product_code, target_quantity
+            SELECT customer_name, product_code, target_quantity, target_amount, base_target_quantity
             FROM budget_targets
             WHERE year = ? AND month = ?
             """,
@@ -274,7 +291,11 @@ def load_budgets(db, year: int, month: int) -> dict[str, float]:
         ).fetchall()
     for row in rows:
         row_id = f"{row['customer_name']}__{row['product_code']}"
-        budgets[row_id] = row["target_quantity"]
+        budgets[row_id] = BudgetTarget(
+            target_quantity=float(row["target_quantity"] or 0),
+            target_amount=float(row["target_amount"] or 0),
+            base_target_quantity=float(row["base_target_quantity"] or 0),
+        )
     return budgets
 
 
@@ -294,17 +315,28 @@ def list_budget_months(db) -> list[tuple[int, int]]:
 def _apply_reasons_and_budgets(
     summary: ForecastSummary,
     adjustment_reasons: dict[str, str],
-    budget_targets: dict[str, float],
+    budget_targets: dict[str, BudgetTarget],
 ) -> ForecastSummary:
     rows = [
-        replace(
-            row,
-            adjustment_reason=adjustment_reasons.get(row.row_id, row.adjustment_reason),
-            budget_quantity=budget_targets.get(row.row_id, 0.0),
-        )
+        _apply_reason_and_budget(row, adjustment_reasons, budget_targets)
         for row in summary.rows
     ]
     return replace(summary, rows=rows)
+
+
+def _apply_reason_and_budget(
+    row: ForecastRow,
+    adjustment_reasons: dict[str, str],
+    budget_targets: dict[str, BudgetTarget],
+) -> ForecastRow:
+    budget = budget_targets.get(row.row_id, BudgetTarget(0.0, 0.0))
+    return replace(
+        row,
+        adjustment_reason=adjustment_reasons.get(row.row_id, row.adjustment_reason),
+        budget_quantity=budget.target_quantity,
+        budget_amount=budget.target_amount,
+        base_budget_quantity=budget.base_target_quantity,
+    )
 
 
 def _to_monitor_row(row: ForecastRow) -> ProductMonitorRow:
