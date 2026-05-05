@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import calendar
 import hashlib
+import os
 from datetime import date
 from pathlib import Path
 
 from flask import Flask, Response, redirect, render_template, request, send_file, url_for
+from flask_caching import Cache
 
 from src.backend.data_loader import default_target_from_data, load_sales_detail, normalize_product_code
 from src.backend.exporter import export_forecast
@@ -47,11 +49,40 @@ def create_app(config: dict | None = None) -> Flask:
     data_base_path = Path(app.config.get("DATA_BASE_PATH", PROJECT_ROOT))
     db_base_path = Path(app.config.get("DB_BASE_PATH", PROJECT_ROOT))
     db = get_db(db_base_path)
+    cache = Cache(config={"CACHE_TYPE": "SimpleCache", "CACHE_DEFAULT_TIMEOUT": 0})
+    cache.init_app(app)
+
+    def _make_cache_key(year: int, month: int) -> str:
+        detail_path = data_base_path / forecast_config.detail_file
+        try:
+            mtime = int(os.path.getmtime(detail_path))
+        except FileNotFoundError:
+            mtime = 0
+        return f"forecast-context:{mtime}:{year}:{month}"
+
+    def _build_cached_context(year: int, month: int):
+        key = _make_cache_key(year, month)
+        context = cache.get(key)
+        if context is None:
+            context = build_forecast_page_context(
+                data_base_path,
+                forecast_config,
+                db,
+                {"year": str(year), "month": str(month)},
+            )
+            cache.set(key, context)
+        return context
+
+    def _load_context_from_request():
+        data = load_sales_detail(data_base_path, forecast_config)
+        default_target = default_target_from_data(data, forecast_config)
+        target = parse_target_period(request.args, default_target)
+        return _build_cached_context(target.year, target.month)
 
     @app.get("/")
     def dashboard() -> str:
         try:
-            context = build_forecast_page_context(data_base_path, forecast_config, db, request.args)
+            context = _load_context_from_request()
             error_message = None
         except (FileNotFoundError, ValueError, FormValidationError) as exc:
             context = None
@@ -94,7 +125,7 @@ def create_app(config: dict | None = None) -> Flask:
     @app.get("/forecast")
     def forecast() -> str:
         try:
-            context = build_forecast_page_context(data_base_path, forecast_config, db, request.args)
+            context = _load_context_from_request()
             summary = context.summary
             error_message = None
         except (FileNotFoundError, ValueError, FormValidationError) as exc:

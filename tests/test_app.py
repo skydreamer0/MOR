@@ -43,6 +43,44 @@ def test_homepage_loads_dashboard():
     assert 'href="/forecast"' in html
 
 
+def test_dashboard_reuses_forecast_context_when_excel_mtime_is_unchanged(monkeypatch):
+    calls = {"count": 0}
+    real_builder = app.build_forecast_page_context
+
+    def counting_builder(*args, **kwargs):
+        calls["count"] += 1
+        return real_builder(*args, **kwargs)
+
+    monkeypatch.setattr(app, "build_forecast_page_context", counting_builder)
+    client = _client()
+
+    first = client.get("/")
+    second = client.get("/")
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert calls["count"] == 1
+
+
+def test_forecast_reuses_dashboard_context_cache(monkeypatch):
+    calls = {"count": 0}
+    real_builder = app.build_forecast_page_context
+
+    def counting_builder(*args, **kwargs):
+        calls["count"] += 1
+        return real_builder(*args, **kwargs)
+
+    monkeypatch.setattr(app, "build_forecast_page_context", counting_builder)
+    client = _client()
+
+    dashboard_response = client.get("/")
+    forecast_response = client.get("/forecast")
+
+    assert dashboard_response.status_code == 200
+    assert forecast_response.status_code == 200
+    assert calls["count"] == 1
+
+
 def test_homepage_data_health_alert_appears_before_progress_hero():
     client = _client()
 
