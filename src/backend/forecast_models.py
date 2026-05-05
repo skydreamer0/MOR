@@ -56,6 +56,7 @@ class ForecastRow:
     trend_6m: Optional[list[float]] = None
     avg_3m: float = 0.0
     excluded: bool = False
+    status_label: str = ""
 
     def with_adjustment(self, manual_adjustment: float | None, excluded: bool) -> "ForecastRow":
         final_forecast = float(manual_adjustment) if manual_adjustment is not None else float(self.system_forecast)
@@ -96,6 +97,7 @@ class ForecastRow:
             "estimated_amount": self.estimated_amount,
             "forecast_basis": self.forecast_basis,
             "excluded": self.excluded,
+            "status_label": self.status_label,
         }
 
 

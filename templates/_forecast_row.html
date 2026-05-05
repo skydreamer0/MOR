@@ -5,6 +5,7 @@
   data-customer="{{ row.customer }}"
   data-risk="{{ risk_levels.get(row.row_id, 'normal') if risk_levels is defined else 'normal' }}"
   data-status="{{ 'auto' if row.auto_in_month else 'not_due' }}"
+  data-item-status="{{ 'discontinued' if row.status_label == '停用' else 'active' }}"
   data-search="{{ row.customer }} {{ row.product_name }}"
   data-price="{{ row.latest_price }}"
   data-price-quantity="{% if row.price_quantity > 0 %}{{ row.price_quantity }}{% elif row.budget_quantity > 0 and row.base_budget_quantity > 0 %}{{ row.budget_quantity / row.base_budget_quantity }}{% else %}1{% endif %}"
@@ -21,6 +22,9 @@
       <span class="badge">自動預估</span>
     {% else %}
       <span class="badge off">未到期</span>
+    {% endif %}
+    {% if row.status_label == "停用" %}
+      <span class="badge off">停用</span>
     {% endif %}
   </td>
   <td>{{ row.customer }}</td>

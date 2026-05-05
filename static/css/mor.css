@@ -888,6 +888,26 @@ details[open] .snapshot-toggle {
   border-bottom: none;
 }
 
+.discontinued-panel {
+  margin: var(--sp-4) 0 var(--sp-7);
+}
+
+.discontinued-toggle {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-subtle);
+  user-select: none;
+}
+
+details[open] .discontinued-toggle {
+  margin-bottom: var(--sp-2);
+}
+
 .snapshot-item:hover {
   background: var(--surface-subtle);
 }

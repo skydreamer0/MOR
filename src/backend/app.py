@@ -20,6 +20,7 @@ from src.backend.operational_views import (
     build_customer_risk_ranking,
     build_forecast_page_context,
     forecast_amount_total,
+    last_year_amount_total,
     recalculate_forecast_amounts,
     build_status_distribution,
 )
@@ -193,7 +194,10 @@ def create_app(config: dict | None = None) -> Flask:
 
         rows = summary.rows if summary else []
         sorted_rows = sorted(rows, key=lambda row: (0 if _forecast_row_risk(row) == "high" else 1, row.customer, row.product_code))
-        visible_rows = sorted_rows[: forecast_config.visible_row_limit]
+        active_rows = [row for row in sorted_rows if row.status_label != "停用"]
+        discontinued_rows = [row for row in sorted_rows if row.status_label == "停用"]
+        visible_rows = active_rows[: forecast_config.visible_row_limit]
+        rendered_rows = visible_rows + discontinued_rows
         visible_total = forecast_amount_total(visible_rows)
         unrendered_total = (summary.total if summary else 0) - visible_total
         customers = sorted({row.customer for row in visible_rows})
@@ -202,16 +206,18 @@ def create_app(config: dict | None = None) -> Flask:
             year=summary.year if summary else request.args.get("year", ""),
             month=summary.month if summary else request.args.get("month", ""),
             rows=visible_rows,
+            discontinued_rows=discontinued_rows,
+            discontinued_last_year_total=last_year_amount_total(discontinued_rows),
             total=summary.total if summary else 0,
             unrendered_total=unrendered_total,
             forecast_signature=_forecast_signature(summary) if summary else "",
             row_count=len(rows),
-            shown_count=len(visible_rows),
+            shown_count=len(rendered_rows),
             error_message=error_message,
             is_finalized=is_finalized(db, summary.year, summary.month) if summary else False,
             snapshots=list_snapshots(db, summary.year, summary.month) if summary else [],
             customers=customers,
-            risk_levels=_risk_levels(visible_rows),
+            risk_levels=_risk_levels(rendered_rows),
         )
 
     @app.patch("/forecast/row/<path:row_id>")

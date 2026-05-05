@@ -178,6 +178,10 @@ def forecast_amount_total(rows: Iterable[ForecastRow]) -> float:
     return sum(_dashboard_amount(row.final_forecast, row) for row in rows if _is_amount_included(row))
 
 
+def last_year_amount_total(rows: Iterable[ForecastRow]) -> float:
+    return sum(_dashboard_amount(row.last_year_same_month_qty, row) for row in rows if not row.excluded)
+
+
 def recalculate_forecast_amounts(rows: Iterable[ForecastRow]) -> list[ForecastRow]:
     return [
         replace(row, estimated_amount=0.0 if row.excluded else _dashboard_amount(row.final_forecast, row))
@@ -402,6 +406,7 @@ def _apply_reason_and_budget(
         budget_amount=budget.target_amount,
         base_budget_quantity=budget.base_target_quantity,
         price_quantity=float(item_config.get("price_quantity") or 0),
+        status_label=str(item_config.get("status_label") or ""),
     )
     return replace(row, estimated_amount=0.0 if row.excluded else _dashboard_amount(row.final_forecast, row))
 

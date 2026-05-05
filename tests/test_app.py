@@ -367,6 +367,58 @@ def test_item_management_exclusion_is_reflected_on_workbench(monkeypatch):
     assert re.search(r'data-search="[^"]*Product Two"[^>]*data-excluded="true"', workbench)
 
 
+def test_forecast_page_layers_discontinued_items_below_active_rows(monkeypatch):
+    db_base_path = _isolated_db_base()
+    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
+    columns = config.required_columns
+    data = pd.DataFrame(
+        [
+            {
+                columns[0]: year,
+                columns[1]: month,
+                columns[2]: 10,
+                columns[3]: customer,
+                columns[4]: product_code,
+                columns[5]: product_name,
+                columns[6]: quantity,
+                columns[7]: price,
+            }
+            for year, month, customer, product_code, product_name, quantity, price in (
+                (2026, 2, "Hospital A", "P1", "Product Active", 10, 100),
+                (2026, 3, "Hospital A", "P1", "Product Active", 10, 100),
+                (2026, 4, "Hospital A", "P1", "Product Active", 10, 100),
+                (2025, 5, "Hospital A", "P2", "Product Old", 100, 100),
+            )
+        ]
+    )
+    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config: data)
+    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
+
+    response = client.post(
+        "/items/save",
+        data={
+            "product_codes": ["P1", "P2"],
+            "is_budgeted_P1": "1",
+            "is_visible_P1": "1",
+            "status_label_P1": "",
+            "is_budgeted_P2": "1",
+            "is_visible_P2": "1",
+            "status_label_P2": "停用",
+        },
+    )
+    forecast = client.get("/forecast?year=2026&month=5").get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "已停用品項" in forecast
+    assert "共 1 項" in forecast
+    assert "去年業績合計" in forecast
+    assert "10,000" in forecast
+    assert 'data-item-status="active"' in forecast
+    assert 'data-item-status="discontinued"' in forecast
+    assert forecast.index("Product Active") < forecast.index("已停用品項") < forecast.index("Product Old")
+
+
 def test_item_settings_save_price_quantity_and_forecast_uses_it(monkeypatch):
     db_base_path = _isolated_db_base()
     config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")

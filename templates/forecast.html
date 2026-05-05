@@ -141,6 +141,47 @@
           </tbody>
         </table>
       </div>
+      {% if discontinued_rows %}
+      <section class="discontinued-panel">
+        <details>
+          <summary class="discontinued-toggle">
+            已停用品項（共 {{ discontinued_rows|length }} 項，去年業績合計：{{ "{:,.0f}".format(discontinued_last_year_total) }}）
+          </summary>
+          <div class="table-wrap">
+            <table class="forecast-table">
+              <thead>
+                <tr>
+                  <th>???/th>
+                  <th>摰Ｘ</th>
+                  <th>??</th>
+                  <th class="col-group-start">頞典</th>
+                  <th class="num">銝?撖衣蜀</th>
+                  <th class="num">銝???</th>
+                  <th class="num">銝???</th>
+                  <th class="num col-group-end">銝? GAP</th>
+                  <th class="num col-group-start">?餃僑??</th>
+                  <th class="num">隞僑??</th>
+                  <th class="num">蝟餌絞?摯</th>
+                  <th class="num col-group-end">鈭箏極隤踵</th>
+                  <th class="num col-group-start">?敺?隡?/th>
+                  <th class="num">???格?</th>
+                  <th class="num">????/th>
+                  <th class="num col-group-end">撌桃</th>
+                  <th>隤踵??</th>
+                  <th class="num">蝝閮?</th>
+                  <th class="num">?摯??</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in discontinued_rows %}
+                {% include "_forecast_row.html" %}
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </section>
+      {% endif %}
       <div class="bottom-bar">
         <div>預估總金額 <strong id="grand-total">{{ "{:,.0f}".format(total) }}</strong></div>
         <div class="bottom-bar-actions">
