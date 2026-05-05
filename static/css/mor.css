@@ -223,6 +223,16 @@ input:focus, select:focus {
   box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
+.htmx-indicator {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.htmx-request .htmx-indicator,
+.htmx-request.htmx-indicator {
+  opacity: 1;
+}
+
 input::placeholder {
   color: var(--muted-light);
 }

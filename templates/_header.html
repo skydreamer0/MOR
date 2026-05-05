@@ -3,21 +3,23 @@
     <div class="brand-block">
       <h1>MOR <span class="app-subtitle">{{ page_title }}</span></h1>
     </div>
-    <nav class="app-nav" aria-label="主要分頁">
-      <a href="/" {% if active_page == "dashboard" %}aria-current="page"{% endif %}>業績總覽</a>
-      <a href="/forecast" {% if active_page == "forecast" %}aria-current="page"{% endif %}>預估調整</a>
-      <a href="/monitor/products" {% if active_page == "product_monitor" %}aria-current="page"{% endif %}>跳單監控</a>
-      <a href="/settings" {% if active_page == "settings" %}aria-current="page"{% endif %}>系統設定</a>
-      <form action="/sync" method="post" class="nav-action-form" onsubmit="return confirm('確定要從 Excel 同步資料嗎？這可能需要一點時間。')">
+    <nav class="app-nav" aria-label="銝餉???">
+      <a href="/" {% if active_page == "dashboard" %}aria-current="page"{% endif %}>璆剔蜀蝮質汗</a>
+      <a href="/forecast" {% if active_page == "forecast" %}aria-current="page"{% endif %}>?摯隤踵</a>
+      <a href="/monitor/products" {% if active_page == "product_monitor" %}aria-current="page"{% endif %}>頝喳??</a>
+      <a href="/settings" {% if active_page == "settings" %}aria-current="page"{% endif %}>蝟餌絞閮剖?</a>
+      <form action="/sync" method="post" class="nav-action-form" onsubmit="return confirm('蝣箏?閬? Excel ?郊鞈?????賡?閬?暺???)">
         <button type="submit" class="nav-action-btn">同步資料</button>
       </form>
     </nav>
   </div>
   {% if show_period_toolbar %}
     <form class="toolbar" method="get" action="{{ period_action | default(request.path, true) }}">
-      <label>年份 <input name="year" type="number" min="2024" max="2030" value="{{ year }}"></label>
-      <label>月份 <input name="month" type="number" min="1" max="12" value="{{ month }}"></label>
-      <button type="submit">重新分析</button>
+      <label>撟港遢 <input name="year" type="number" min="2024" max="2030" value="{{ year }}"
+        {% if active_page == "dashboard" %}hx-get="/dashboard/metrics" hx-target="#metrics-zone" hx-include="closest form" hx-swap="innerHTML" hx-trigger="change"{% endif %}></label>
+      <label>?遢 <input name="month" type="number" min="1" max="12" value="{{ month }}"
+        {% if active_page == "dashboard" %}hx-get="/dashboard/metrics" hx-target="#metrics-zone" hx-include="closest form" hx-swap="innerHTML" hx-trigger="change"{% endif %}></label>
+      <button type="submit">???</button>
     </form>
   {% endif %}
 </header>

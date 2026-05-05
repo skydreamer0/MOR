@@ -1,0 +1,68 @@
+<tr
+  id="row-{{ row.row_id }}"
+  data-row
+  data-row-id="{{ row.row_id }}"
+  data-status="{{ 'auto' if row.auto_in_month else 'not_due' }}"
+  data-search="{{ row.customer }} {{ row.product_name }}"
+  data-price="{{ row.latest_price }}"
+  data-system-qty="{{ row.system_forecast }}"
+  data-actual-qty="{{ row.this_year_same_month_qty }}"
+  data-budget="{{ row.budget_quantity }}"
+  data-excluded="{{ 'true' if row.excluded else 'false' }}"
+  data-trend="{{ row.trend_6m | tojson if row.trend_6m else '[0,0,0,0,0,0]' }}"
+  data-lm-actual="{{ row.last_month_actual }}"
+  data-lm-budget="{{ row.last_month_budget }}"
+>
+  <td>
+    {% if row.auto_in_month %}
+      <span class="badge">?祆??航頝喳</span>
+    {% else %}
+      <span class="badge off">?芸?望?</span>
+    {% endif %}
+  </td>
+  <td>{{ row.customer }}</td>
+  <td>{{ row.product_name }}</td>
+  <td class="sparkline-cell"><canvas data-sparkline width="80" height="24"></canvas></td>
+  <td class="num">{{ "{:,.0f}".format(row.last_month_actual) }}</td>
+  <td class="num">{{ "{:,.0f}".format(row.last_month_budget) }}</td>
+  <td class="num" data-lm-rate-display><span class="rate"></span></td>
+  <td class="num" data-lm-gap-display><span class="gap-value"></span></td>
+  <td class="num">{{ "{:,.0f}".format(row.last_year_same_month_qty) }}</td>
+  <td class="num">{{ "{:,.0f}".format(row.this_year_same_month_qty) }}</td>
+  <td class="num">{{ "{:,.2f}".format(row.system_forecast) }}</td>
+  <td class="num">
+    <div class="qty-wrapper">
+      <input class="qty" name="manual_adjustment__{{ row.row_id }}" type="number" min="0" step="0.01" aria-label="人工調整數量" data-manual value="{{ row.manual_adjustment or '' }}"
+             hx-patch="{{ url_for('patch_forecast_row', row_id=row.row_id) }}"
+             hx-target="#row-{{ row.row_id }}"
+             hx-swap="outerHTML"
+             hx-include="closest tr"
+             hx-trigger="change">
+      <input type="hidden" name="year" value="{{ year }}">
+      <input type="hidden" name="month" value="{{ month }}">
+      <button type="button" class="icon-btn" title="???喟頂蝯梢?隡? data-restore {% if row.manual_adjustment is none %}hidden{% endif %}>??/button>
+    </div>
+  </td>
+  <td class="num" data-final-forecast>{{ "{:,.2f}".format(row.final_forecast) }}</td>
+  <td class="num" data-budget-display>{{ "{:,.2f}".format(row.budget_quantity) }}</td>
+  <td class="num" data-rate-display><span class="rate"></span></td>
+  <td class="num" data-diff-display><span class="gap-value"></span></td>
+  <td>
+    <input class="reason" name="adjustment_reason__{{ row.row_id }}" type="text" placeholder="??..." data-reason value="{{ row.adjustment_reason or '' }}"
+           hx-patch="{{ url_for('patch_forecast_row', row_id=row.row_id) }}"
+           hx-target="#row-{{ row.row_id }}"
+           hx-swap="outerHTML"
+           hx-include="closest tr"
+           hx-trigger="change">
+  </td>
+  <td class="num">
+    {% if row.excluded %}
+      <span class="badge off">??/span>
+    {% elif row.budget_quantity <= 0 %}
+      <span class="badge off">??/span>
+    {% else %}
+      <span class="badge">??/span>
+    {% endif %}
+  </td>
+  <td class="num" data-amount>{{ "{:,.0f}".format(row.estimated_amount if row.budget_quantity > 0 and not row.excluded else 0) }}</td>
+</tr>

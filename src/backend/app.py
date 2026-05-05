@@ -79,6 +79,62 @@ def create_app(config: dict | None = None) -> Flask:
         target = parse_target_period(request.args, default_target)
         return _build_cached_context(target.year, target.month)
 
+    def _dashboard_template_context(context) -> dict:
+        remaining_days = 0
+        today = date.today()
+        t_year, t_month = context.target.year, context.target.month
+        _, last_day = calendar.monthrange(t_year, t_month)
+        month_end = date(t_year, t_month, last_day)
+        month_start = date(t_year, t_month, 1)
+        if today > month_end:
+            remaining_days = 0
+        elif today < month_start:
+            remaining_days = last_day
+        else:
+            remaining_days = (month_end - today).days
+
+        all_monitor = context.monitor_rows
+        status_dist = build_status_distribution(all_monitor)
+        customer_ranking = build_customer_risk_ranking(all_monitor)
+        high_risk_rows = [row for row in all_monitor if row.status_key == "high"]
+        high_risk_rows.sort(key=lambda r: r.amount_impact)
+        return {
+            "year": context.target.year,
+            "month": context.target.month,
+            "metrics": context.dashboard,
+            "health": context.health,
+            "monitor_rows": high_risk_rows[:15],
+            "remaining_days": remaining_days,
+            "status_dist": status_dist,
+            "customer_ranking": customer_ranking,
+        }
+
+    def _save_row_override(row_id: str, manual_qty: str | None, reason: str | None, year: int, month: int) -> None:
+        customer, product_code = row_id.split("__", 1)
+        try:
+            val = float(manual_qty) if manual_qty and manual_qty.strip() else None
+        except ValueError as exc:
+            raise FormValidationError("Invalid quantity") from exc
+
+        with db.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO forecast_adjustments
+                (year, month, customer_name, product_code, manual_quantity, adjustment_reason, updated_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (year, month, customer, product_code, val, reason, "User"),
+            )
+            conn.commit()
+        cache.clear()
+
+    def _find_forecast_row(row_id: str, year: int, month: int):
+        context = _build_cached_context(year, month)
+        for row in context.summary.rows:
+            if row.row_id == row_id:
+                return row
+        raise FormValidationError(f"Unknown forecast row: {row_id}")
+
     @app.get("/")
     def dashboard() -> str:
         try:
@@ -88,39 +144,30 @@ def create_app(config: dict | None = None) -> Flask:
             context = None
             error_message = f"無法產生預估：{exc}"
 
-        remaining_days = 0
-        if context:
-            today = date.today()
-            t_year, t_month = context.target.year, context.target.month
-            _, last_day = calendar.monthrange(t_year, t_month)
-            month_end = date(t_year, t_month, last_day)
-            month_start = date(t_year, t_month, 1)
-            if today > month_end:
-                remaining_days = 0
-            elif today < month_start:
-                remaining_days = last_day
-            else:
-                remaining_days = (month_end - today).days
-
-        all_monitor = context.monitor_rows if context else []
-        status_dist = build_status_distribution(all_monitor) if context else {}
-        customer_ranking = build_customer_risk_ranking(all_monitor) if context else []
-
-        high_risk_rows = [row for row in all_monitor if row.status_key == "high"]
-        high_risk_rows.sort(key=lambda r: r.amount_impact)
-
+        template_context = _dashboard_template_context(context) if context else {
+            "year": request.args.get("year", ""),
+            "month": request.args.get("month", ""),
+            "metrics": None,
+            "health": None,
+            "monitor_rows": [],
+            "remaining_days": 0,
+            "status_dist": {},
+            "customer_ranking": [],
+        }
         return render_template(
             "index.html",
-            year=context.target.year if context else request.args.get("year", ""),
-            month=context.target.month if context else request.args.get("month", ""),
-            metrics=context.dashboard if context else None,
-            health=context.health if context else None,
-            monitor_rows=high_risk_rows[:15] if context else [],
-            remaining_days=remaining_days,
-            status_dist=status_dist,
-            customer_ranking=customer_ranking,
             error_message=error_message,
+            **template_context,
         )
+
+    @app.get("/dashboard/metrics")
+    def dashboard_metrics() -> str:
+        try:
+            context = _load_context_from_request()
+            template_context = _dashboard_template_context(context)
+        except (FileNotFoundError, ValueError, FormValidationError) as exc:
+            return Response(f"?⊥??Ｙ??摯嚗{exc}", status=400, mimetype="text/plain; charset=utf-8")
+        return render_template("_dashboard_metrics.html", **template_context)
 
     @app.get("/forecast")
     def forecast() -> str:
@@ -150,6 +197,21 @@ def create_app(config: dict | None = None) -> Flask:
             is_finalized=is_finalized(db, summary.year, summary.month) if summary else False,
             snapshots=list_snapshots(db, summary.year, summary.month) if summary else [],
         )
+
+    @app.patch("/forecast/row/<path:row_id>")
+    def patch_forecast_row(row_id: str) -> str | Response:
+        year = request.form.get("year", type=int)
+        month = request.form.get("month", type=int)
+        if year is None or month is None:
+            return Response("Missing year/month", status=400)
+        reason = request.form.get("note", request.form.get(f"adjustment_reason__{row_id}", ""))
+        try:
+            qty = request.form.get("qty", request.form.get(f"manual_adjustment__{row_id}"))
+            _save_row_override(row_id, qty, reason, year, month)
+            row = _find_forecast_row(row_id, year, month)
+        except FormValidationError as exc:
+            return Response(str(exc), status=400)
+        return render_template("_forecast_row.html", row=row, year=year, month=month)
 
     @app.get("/monitor/products")
     def product_monitor() -> str:
@@ -301,20 +363,10 @@ def create_app(config: dict | None = None) -> Flask:
         # Parse row_id back to customer/product if needed, but it's easier to store as is 
         # or use the year/month/customer/product key.
         # Our row_id is currently "{customer}__{product_code}"
-        customer, product_code = row_id.split("__", 1)
-
         try:
-            val = float(manual_qty) if manual_qty and manual_qty.strip() else None
-        except ValueError:
+            _save_row_override(row_id, manual_qty, reason, year, month)
+        except FormValidationError:
             return Response("Invalid quantity", status=400)
-
-        with db.get_connection() as conn:
-            conn.execute("""
-                INSERT OR REPLACE INTO forecast_adjustments 
-                (year, month, customer_name, product_code, manual_quantity, adjustment_reason, updated_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (year, month, customer, product_code, val, reason, "User"))
-            conn.commit()
         
         return Response("Saved", status=200)
 

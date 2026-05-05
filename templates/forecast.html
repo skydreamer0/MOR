@@ -8,6 +8,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/mor.css') }}">
+  <script src="https://unpkg.com/htmx.org@1.9.10"
+          integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5ViYgSibmK"
+          crossorigin="anonymous"></script>
 </head>
 <body>
   {% set page_title = "預估調整" %}
@@ -128,6 +131,8 @@
           </thead>
           <tbody>
             {% for row in rows %}
+            {% include "_forecast_row.html" %}
+            {% if false %}
             <tr
               id="row-{{ row.row_id }}"
               data-row
@@ -184,6 +189,7 @@
               </td>
               <td class="num" data-amount>{{ "{:,.0f}".format(row.estimated_amount if row.budget_quantity > 0 and not row.excluded else 0) }}</td>
             </tr>
+            {% endif %}
             {% endfor %}
           </tbody>
         </table>

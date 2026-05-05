@@ -112,6 +112,58 @@ def test_forecast_page_renders_forecast_review_assets_and_tools():
     assert "data-search=" in html
 
 
+def test_frontend_pages_load_htmx_assets():
+    client = _client()
+
+    dashboard = client.get("/").get_data(as_text=True)
+    forecast = client.get("/forecast").get_data(as_text=True)
+
+    assert "https://unpkg.com/htmx.org@1.9.10" in dashboard
+    assert "https://unpkg.com/htmx.org@1.9.10" in forecast
+
+
+def test_dashboard_metrics_partial_renders_fragment_only():
+    client = _client()
+
+    response = client.get("/dashboard/metrics")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "<html" not in html
+    assert 'class="progress-hero"' in html
+    assert "璆剔蜀蝮質汗" in html
+
+
+def test_dashboard_period_inputs_target_metrics_zone():
+    client = _client()
+
+    response = client.get("/")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert 'id="metrics-zone"' in html
+    assert 'hx-get="/dashboard/metrics"' in html
+    assert 'hx-target="#metrics-zone"' in html
+
+
+def test_patch_forecast_row_updates_adjustment_and_returns_row_fragment():
+    client = _client()
+    page = client.get("/forecast").get_data(as_text=True)
+    row_id = re.search(r'data-row-id="([^"]+)"', page).group(1)
+
+    response = client.patch(
+        f"/forecast/row/{row_id}",
+        data={"qty": "7.5", "note": "reviewed", "year": "2026", "month": "5"},
+    )
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert html.lstrip().startswith("<tr")
+    assert f'id="row-{row_id}"' in html
+    assert 'value="7.5"' in html
+    assert 'value="reviewed"' in html
+
+
 def test_header_navigation_is_consistent_across_frontend_pages(monkeypatch):
     db_base_path = _isolated_db_base()
     config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")

@@ -1,0 +1,178 @@
+{% if metrics %}
+{% set rate = metrics.amount_achievement_rate %}
+
+{% if health and (health.missing_budget_row_count > 0 or health.zero_price_row_count > 0) %}
+<section class="alert alert-info" role="alert">
+  ??      {% if health.missing_budget_row_count > 0 %}??{{ health.missing_budget_row_count }} ?撩???格?{% endif %}
+  {% if health.missing_budget_row_count > 0 and health.zero_price_row_count > 0 %}嚗{% endif %}
+  {% if health.zero_price_row_count > 0 %}??{{ health.zero_price_row_count }} ??寧 0{% endif %}
+  ??<a href="{{ url_for('settings', year=year, month=month) }}">??蝟餌絞閮剖??亦?</a>
+</section>
+{% endif %}
+
+<section class="progress-hero" aria-label="?格??脣漲">
+  <div class="progress-hero-header">
+    <div class="progress-hero-titles">
+      <h2>業績總覽</h2>
+      <span class="sr-only">璆剔蜀蝮質汗 預算目標 預估達成 預估業績金額 金額 GAP 高風險追蹤</span>
+      <p>{{ year }}/{{ "%02d"|format(month|int) }} ??蝮質汗</p>
+    </div>
+    <div class="progress-hero-actions">
+      <span class="remaining-tag">
+        <span class="remaining-dot"></span>
+        ?祆??拚? <strong>{{ remaining_days }}</strong> 憭?
+      </span>
+      <span class="htmx-indicator">更新中…</span>
+      <a class="btn-link" href="{{ url_for('forecast', year=year, month=month) }}">?脣?摯隤踵</a>
+    </div>
+  </div>
+
+  <div class="progress-body">
+    <div class="progress-main">
+      <div class="progress-target-row">
+        <span class="progress-label-muted">預算目標</span>
+        <strong class="progress-target-value">{{ "{:,.0f}".format(metrics.target_amount) }}</strong>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill {% if rate >= 100 %}fill-success{% elif rate >= 90 %}fill-warning{% else %}fill-danger{% endif %}"
+             style="width: {{ [rate, 100] | min }}%"
+             role="progressbar"
+             aria-valuenow="{{ rate | round(1) }}"
+             aria-valuemin="0"
+             aria-valuemax="100">
+        </div>
+      </div>
+      <div class="progress-footer-row">
+        <span class="progress-label-muted">?摯??</span>
+        <strong class="progress-forecast-value">{{ "{:,.0f}".format(metrics.forecast_amount) }}</strong>
+        <span class="progress-rate {% if rate >= 100 %}rate-success{% elif rate >= 90 %}rate-warning{% else %}rate-danger{% endif %}">
+          {{ "{:.1f}%".format(rate) }}
+        </span>
+      </div>
+    </div>
+
+    <div class="sub-metrics">
+      <div class="sub-metric">
+        <span class="sub-metric-label">?桀?撖衣蜀</span>
+        <strong class="sub-metric-value">{{ "{:,.0f}".format(metrics.actual_amount) }}</strong>
+        <small class="sub-metric-note">撌脣撣喲?憿?/small>
+      </div>
+      <div class="sub-metric">
+        <span class="sub-metric-label">?摯璆剔蜀??</span>
+        <strong class="sub-metric-value">NTD {{ "{:,.0f}".format(metrics.forecast_amount) }} ??/strong>
+        <small class="sub-metric-note">?芸??摯蝮賡?</small>
+      </div>
+      <div class="sub-metric">
+        <span class="sub-metric-label">?? GAP</span>
+        <strong class="sub-metric-value {% if metrics.amount_gap < 0 %}danger-text{% else %}success-text{% endif %}">
+          {{ "{:+,.0f}".format(metrics.amount_gap) }}
+        </strong>
+        <small class="sub-metric-note">?摯 ????</small>
+      </div>
+      <div class="sub-metric">
+        <span class="sub-metric-label">憸券餈質馱</span>
+        <strong class="sub-metric-value">{{ metrics.high_risk_product_count }} <small class="sub-metric-unit">??</small> / {{ metrics.high_risk_customer_count }} <small class="sub-metric-unit">摰Ｘ</small></strong>
+        <small class="sub-metric-note">擃◢?芣??/small>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% if status_dist %}
+<section class="risk-dashboard" aria-label="憸券?銵冽">
+  <div class="risk-summary panel">
+    <h3>憸券??</h3>
+    <div class="status-dist">
+      <div class="dist-item">
+        <span class="dist-dot dist-dot-high"></span>
+        <span class="dist-label">擃◢??/span>
+        <strong class="dist-count danger-text">{{ status_dist.high }}</strong>
+      </div>
+      <div class="dist-item">
+        <span class="dist-dot dist-dot-slight"></span>
+        <span class="dist-label">頛凝銝?</span>
+        <strong class="dist-count" style="color:var(--accent-2)">{{ status_dist.slight }}</strong>
+      </div>
+      <div class="dist-item">
+        <span class="dist-dot dist-dot-ok"></span>
+        <span class="dist-label">甇?虜 / ?</span>
+        <strong class="dist-count success-text">{{ status_dist.ok }}</strong>
+      </div>
+      <div class="dist-item">
+        <span class="dist-dot dist-dot-none"></span>
+        <span class="dist-label">?∪撟游???/span>
+        <strong class="dist-count">{{ status_dist.no_history }}</strong>
+      </div>
+    </div>
+    <div class="dist-total">
+      <span>??蝮賣</span>
+      <strong>{{ status_dist.high + status_dist.slight + status_dist.ok + status_dist.no_history }}</strong>
+    </div>
+  </div>
+
+  <div class="customer-rank panel">
+    <h3>摰Ｘ憸券??</h3>
+    {% if customer_ranking %}
+    {% set max_gap = (customer_ranking[0].gap_amount | abs) if customer_ranking[0].gap_amount != 0 else 1 %}
+    <div class="rank-list">
+      {% for item in customer_ranking %}
+      <div class="rank-item">
+        <div class="rank-info">
+          <span class="rank-customer">{{ item.customer }}</span>
+          <span class="rank-count">{{ item.item_count }} ??</span>
+        </div>
+        <div class="rank-bar-wrap">
+          <div class="rank-bar" style="width: {{ (item.gap_amount | abs / max_gap * 100) | round(1) }}%"></div>
+        </div>
+        <strong class="rank-gap danger-text">{{ "{:+,.0f}".format(item.gap_amount) }}</strong>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted" style="margin:var(--sp-4) 0 0;">?桀??⊿?憸券??敺桐?皛?摰Ｘ</p>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
+
+<section class="panel" aria-label="擃◢?芾蕭頩?>
+  <div class="section-header">
+    <h3>擃◢?芾蕭頩?/h3>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <a class="link-btn" href="{{ url_for('product_monitor', year=year, month=month) }}">?亦??券</a>
+      <a class="link-btn" href="{{ url_for('forecast', year=year, month=month) }}">?脣隤踵</a>
+    </div>
+  </div>
+  <div class="table-wrap compact-table">
+    <table>
+      <thead>
+        <tr>
+          <th>摰Ｘ</th>
+          <th>??</th>
+          <th class="num">?餃僑??</th>
+          <th class="num">?摯??</th>
+          <th class="num">撌桃</th>
+          <th class="num">??敶梢</th>
+          <th>???/th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in monitor_rows %}
+        <tr>
+          <td>{{ row.customer }}</td>
+          <td>{{ row.product_name }}</td>
+          <td class="num">{{ "{:,.0f}".format(row.last_year_quantity) }}</td>
+          <td class="num">{{ "{:,.0f}".format(row.forecast_quantity) }}</td>
+          <td class="num"><span class="gap-value {% if row.diff_quantity < 0 %}negative{% elif row.diff_quantity > 0 %}positive{% endif %}">{{ "{:+,.0f}".format(row.diff_quantity) }}</span></td>
+          <td class="num"><span class="gap-value {% if row.amount_impact < 0 %}negative{% elif row.amount_impact > 0 %}positive{% endif %}">{{ "{:+,.0f}".format(row.amount_impact) }}</span></td>
+          <td><span class="badge status-{{ row.status_key }}">{{ row.status }}</span></td>
+          <td><a class="jump-link" href="{{ url_for('forecast', year=year, month=month) }}#row-{{ row.customer }}__{{ row.product_code }}" title="??隤踵">??/a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% endif %}
