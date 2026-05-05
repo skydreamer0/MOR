@@ -24,31 +24,25 @@
     {% endif %}
 
     <section class="summary">
-      <div class="metric">
-        <span>預估月份</span>
-        <strong>{% if year and month %}{{ year }}/{{ "%02d"|format(month|int) }}{% else %}--{% endif %}</strong>
-      </div>
-      <div class="metric"><span>目前顯示</span><strong>{{ shown_count }} / {{ row_count }}</strong></div>
+      <div class="metric"><span>預估月份</span><strong>{% if year and month %}{{ year }}/{{ "%02d"|format(month|int) }}{% else %}--{% endif %}</strong></div>
+      <div class="metric"><span>顯示列數</span><strong>{{ shown_count }} / {{ row_count }}</strong></div>
       <div class="metric"><span>自動預估列</span><strong>{{ rows|selectattr("auto_in_month")|list|length }}</strong></div>
       <div class="metric"><span>目前總額</span><strong id="top-total">{{ "{:,.0f}".format(total) }}</strong></div>
       {% if is_finalized %}
-      <div class="metric metric--locked">
-        <span>版本狀態</span>
-        <strong><span class="badge">已定稿</span></strong>
-      </div>
+      <div class="metric metric--locked"><span>鎖定狀態</span><strong><span class="badge">已定稿</span></strong></div>
       {% endif %}
     </section>
 
     {% if snapshots %}
     <section class="snapshot-panel">
       <details>
-        <summary class="snapshot-toggle">版本紀錄 ({{ snapshots|length }})</summary>
+        <summary class="snapshot-toggle">版本記錄 ({{ snapshots|length }})</summary>
         <div class="snapshot-list">
           {% for snap in snapshots %}
           <div class="snapshot-item">
             <div class="snapshot-info">
               <span class="badge {% if snap.snapshot_type == 'Final' %}{% else %}off{% endif %}">
-                {{ '定稿' if snap.snapshot_type == 'Final' else '草稿' }}
+                {{ 'Final' if snap.snapshot_type == 'Final' else 'Draft' }}
               </span>
               <strong>{{ snap.snapshot_name }}</strong>
               <span class="snapshot-meta">{{ snap.created_at[:16] }} · {{ snap.row_count }} 列 · {{ snap.created_by }}</span>
@@ -69,7 +63,7 @@
     {% endif %}
 
     {% if not rows and not error_message %}
-      <section class="empty-state">目前沒有符合條件的預估資料。</section>
+      <section class="empty-state">沒有可調整的預估資料。</section>
     {% endif %}
 
     <form method="post" action="/export" id="forecast-form">
@@ -78,28 +72,39 @@
       <input type="hidden" name="forecast_signature" value="{{ forecast_signature }}">
       <input type="hidden" data-unrendered-total value="{{ unrendered_total }}">
 
-      <div class="forecast-tools" aria-label="表格工具">
+      <div class="forecast-tools" aria-label="篩選工具">
+        <span class="sr-only">搜尋客戶與產品 狀態篩選</span>
+        <label>
+          客戶
+          <select id="customer-filter" onchange="filterRows(this.value)">
+            <option value="">全部客戶</option>
+            {% for customer in customers %}
+              <option value="{{ customer }}">{{ customer }}</option>
+            {% endfor %}
+          </select>
+        </label>
         <label>
           搜尋客戶或品項
-          <input type="search" data-filter-search placeholder="輸入客戶或品項名稱">
+          <input type="search" data-filter-search placeholder="輸入客戶、產品或代號">
         </label>
         <label>
           狀態篩選
           <select data-filter-status>
             <option value="all">全部</option>
-            <option value="auto">本月可能跳單</option>
-            <option value="not_due">未到週期</option>
-            <option value="edited">已人工調整</option>
+            <option value="auto">自動預估</option>
+            <option value="not_due">未到期</option>
+            <option value="edited">已手動調整</option>
           </select>
         </label>
         <div class="filter-group">
           <span>顯示: </span>
           <strong data-visible-count>0</strong> / {{ row_count }}
-          <span style="margin-left: var(--sp-3);">已調整: </span>
+          <span style="margin-left: var(--sp-3);">已調整 </span>
           <strong data-edited-count>0</strong>
           <span id="save-status"></span>
         </div>
       </div>
+      <button type="button" id="expand-all-btn" onclick="expandAll()" style="display:none;margin-bottom:8px"></button>
       <div class="validation-message" data-validation-message role="alert" hidden>
         人工數量必須是 0 以上的數字。
       </div>
@@ -109,18 +114,18 @@
           <thead>
             <tr>
               <th>狀態</th>
-              <th>醫院 (客戶)</th>
-              <th>品項名稱</th>
-              <th class="col-group-start">半年趨勢</th>
-              <th class="num">上月實際</th>
+              <th>客戶</th>
+              <th>品項</th>
+              <th class="col-group-start">趨勢</th>
+              <th class="num">上月實績</th>
               <th class="num">上月預算</th>
-              <th class="num">上月達成率</th>
+              <th class="num">上月達成</th>
               <th class="num col-group-end">上月 GAP</th>
-              <th class="num col-group-start">去年同期量</th>
-              <th class="num">實際數量 (本月)</th>
+              <th class="num col-group-start">去年同期</th>
+              <th class="num">今年同期</th>
               <th class="num">系統預估</th>
               <th class="num col-group-end">人工調整</th>
-              <th class="num col-group-start">最終預估</th>
+              <th class="num col-group-start">最後預估</th>
               <th class="num">預算目標</th>
               <th class="num">達成率</th>
               <th class="num col-group-end">差異</th>
@@ -132,64 +137,6 @@
           <tbody>
             {% for row in rows %}
             {% include "_forecast_row.html" %}
-            {% if false %}
-            <tr
-              id="row-{{ row.row_id }}"
-              data-row
-              data-row-id="{{ row.row_id }}"
-              data-status="{{ 'auto' if row.auto_in_month else 'not_due' }}"
-              data-search="{{ row.customer }} {{ row.product_name }}"
-              data-price="{{ row.latest_price }}"
-              data-system-qty="{{ row.system_forecast }}"
-              data-actual-qty="{{ row.this_year_same_month_qty }}"
-              data-budget="{{ row.budget_quantity }}"
-              data-excluded="{{ 'true' if row.excluded else 'false' }}"
-              data-trend="{{ row.trend_6m | tojson if row.trend_6m else '[0,0,0,0,0,0]' }}"
-              data-lm-actual="{{ row.last_month_actual }}"
-              data-lm-budget="{{ row.last_month_budget }}"
-            >
-              <td>
-                {% if row.auto_in_month %}
-                  <span class="badge">本月可能跳單</span>
-                {% else %}
-                  <span class="badge off">未到週期</span>
-                {% endif %}
-              </td>
-              <td>{{ row.customer }}</td>
-              <td>{{ row.product_name }}</td>
-              <td class="sparkline-cell"><canvas data-sparkline width="80" height="24"></canvas></td>
-              <td class="num">{{ "{:,.0f}".format(row.last_month_actual) }}</td>
-              <td class="num">{{ "{:,.0f}".format(row.last_month_budget) }}</td>
-              <td class="num" data-lm-rate-display><span class="rate"></span></td>
-              <td class="num" data-lm-gap-display><span class="gap-value"></span></td>
-              <td class="num">{{ "{:,.0f}".format(row.last_year_same_month_qty) }}</td>
-              <td class="num">{{ "{:,.0f}".format(row.this_year_same_month_qty) }}</td>
-              <td class="num">{{ "{:,.2f}".format(row.system_forecast) }}</td>
-              <td class="num">
-                <div class="qty-wrapper">
-                  <input class="qty" name="manual_adjustment__{{ row.row_id }}" type="number" min="0" step="0.01" aria-label="人工調整數量" data-manual value="{{ row.manual_adjustment or '' }}">
-                  <button type="button" class="icon-btn" title="還原至系統預估" data-restore {% if row.manual_adjustment is none %}hidden{% endif %}>↺</button>
-                </div>
-              </td>
-              <td class="num" data-final-forecast>{{ "{:,.2f}".format(row.final_forecast) }}</td>
-              <td class="num" data-budget-display>{{ "{:,.2f}".format(row.budget_quantity) }}</td>
-              <td class="num" data-rate-display><span class="rate"></span></td>
-              <td class="num" data-diff-display><span class="gap-value"></span></td>
-              <td>
-                <input class="reason" name="adjustment_reason__{{ row.row_id }}" type="text" placeholder="原因..." data-reason value="{{ row.adjustment_reason or '' }}">
-              </td>
-              <td class="num">
-                {% if row.excluded %}
-                  <span class="badge off">否</span>
-                {% elif row.budget_quantity <= 0 %}
-                  <span class="badge off">否</span>
-                {% else %}
-                  <span class="badge">是</span>
-                {% endif %}
-              </td>
-              <td class="num" data-amount>{{ "{:,.0f}".format(row.estimated_amount if row.budget_quantity > 0 and not row.excluded else 0) }}</td>
-            </tr>
-            {% endif %}
             {% endfor %}
           </tbody>
         </table>
@@ -208,5 +155,38 @@
   </main>
 
   <script src="{{ url_for('static', filename='js/forecast-table.js') }}"></script>
+  <script>
+    function filterRows(customer) {
+      document.querySelectorAll('tr[data-customer]').forEach((tr) => {
+        tr.style.display = (!customer || tr.dataset.customer === customer) ? '' : 'none';
+      });
+    }
+
+    function expandAll() {
+      document.querySelectorAll('.forecast-table__row--collapsed').forEach((tr) => {
+        tr.classList.remove('forecast-table__row--collapsed');
+      });
+      document.getElementById('expand-all-btn').style.display = 'none';
+    }
+
+    (function() {
+      const rows = document.querySelectorAll('tr[data-risk]');
+      if (rows.length <= 50) return;
+
+      let hidden = 0;
+      rows.forEach((tr) => {
+        if (tr.dataset.risk !== 'high') {
+          tr.classList.add('forecast-table__row--collapsed');
+          hidden++;
+        }
+      });
+
+      if (hidden > 0) {
+        const btn = document.getElementById('expand-all-btn');
+        btn.textContent = `顯示全部 ${rows.length} 筆（目前隱藏 ${hidden} 筆低風險）`;
+        btn.style.display = 'inline-block';
+      }
+    })();
+  </script>
 </body>
 </html>

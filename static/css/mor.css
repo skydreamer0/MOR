@@ -399,6 +399,10 @@ table {
   min-width: 2200px;
 }
 
+.forecast-table__row--collapsed {
+  display: none;
+}
+
 th, td {
   border-bottom: 1px solid var(--line);
   padding: 7px var(--sp-3);

@@ -2,6 +2,8 @@
   id="row-{{ row.row_id }}"
   data-row
   data-row-id="{{ row.row_id }}"
+  data-customer="{{ row.customer }}"
+  data-risk="{{ risk_levels.get(row.row_id, 'normal') if risk_levels is defined else 'normal' }}"
   data-status="{{ 'auto' if row.auto_in_month else 'not_due' }}"
   data-search="{{ row.customer }} {{ row.product_name }}"
   data-price="{{ row.latest_price }}"

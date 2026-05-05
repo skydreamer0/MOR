@@ -135,6 +135,14 @@ def create_app(config: dict | None = None) -> Flask:
                 return row
         raise FormValidationError(f"Unknown forecast row: {row_id}")
 
+    def _forecast_row_risk(row) -> str:
+        if row.last_year_same_month_qty > 0 and row.final_forecast < row.last_year_same_month_qty * 0.9:
+            return "high"
+        return "normal"
+
+    def _risk_levels(rows) -> dict[str, str]:
+        return {row.row_id: _forecast_row_risk(row) for row in rows}
+
     @app.get("/")
     def dashboard() -> str:
         try:
@@ -180,9 +188,11 @@ def create_app(config: dict | None = None) -> Flask:
             error_message = f"無法產生預估：{exc}"
 
         rows = summary.rows if summary else []
-        visible_rows = rows[: forecast_config.visible_row_limit]
+        sorted_rows = sorted(rows, key=lambda row: (0 if _forecast_row_risk(row) == "high" else 1, row.customer, row.product_code))
+        visible_rows = sorted_rows[: forecast_config.visible_row_limit]
         visible_total = forecast_amount_total(visible_rows)
         unrendered_total = (summary.total if summary else 0) - visible_total
+        customers = sorted({row.customer for row in visible_rows})
         return render_template(
             "forecast.html",
             year=summary.year if summary else request.args.get("year", ""),
@@ -196,6 +206,8 @@ def create_app(config: dict | None = None) -> Flask:
             error_message=error_message,
             is_finalized=is_finalized(db, summary.year, summary.month) if summary else False,
             snapshots=list_snapshots(db, summary.year, summary.month) if summary else [],
+            customers=customers,
+            risk_levels=_risk_levels(visible_rows),
         )
 
     @app.patch("/forecast/row/<path:row_id>")
@@ -211,7 +223,13 @@ def create_app(config: dict | None = None) -> Flask:
             row = _find_forecast_row(row_id, year, month)
         except FormValidationError as exc:
             return Response(str(exc), status=400)
-        return render_template("_forecast_row.html", row=row, year=year, month=month)
+        return render_template(
+            "_forecast_row.html",
+            row=row,
+            year=year,
+            month=month,
+            risk_levels={row.row_id: _forecast_row_risk(row)},
+        )
 
     @app.get("/monitor/products")
     def product_monitor() -> str:

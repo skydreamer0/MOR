@@ -164,6 +164,33 @@ def test_patch_forecast_row_updates_adjustment_and_returns_row_fragment():
     assert 'value="reviewed"' in html
 
 
+def test_forecast_page_exposes_customer_filter_and_row_metadata():
+    client = _client()
+
+    response = client.get("/forecast")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert 'id="customer-filter"' in html
+    assert "filterRows(this.value)" in html
+    assert 'data-customer="' in html
+    assert 'data-risk="' in html
+
+
+def test_forecast_page_exposes_expand_all_for_collapsed_low_risk_rows():
+    client = _client()
+
+    response = client.get("/forecast")
+    html = response.get_data(as_text=True)
+    css = Path("static/css/mor.css").read_text(encoding="utf-8")
+
+    assert response.status_code == 200
+    assert 'id="expand-all-btn"' in html
+    assert "function expandAll()" in html
+    assert "forecast-table__row--collapsed" in html
+    assert ".forecast-table__row--collapsed" in css
+
+
 def test_header_navigation_is_consistent_across_frontend_pages(monkeypatch):
     db_base_path = _isolated_db_base()
     config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
