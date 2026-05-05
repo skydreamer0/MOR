@@ -88,8 +88,8 @@ def test_homepage_data_health_alert_appears_before_progress_hero():
     html = response.get_data(as_text=True)
 
     assert response.status_code == 200
-    assert 'class="alert alert-info"' in html
-    assert html.index('class="alert alert-info"') < html.index('class="progress-hero"')
+    assert 'class="alert alert-info' in html
+    assert html.index('class="alert alert-info') < html.index('class="hero__container"')
 
 
 def test_forecast_page_renders_forecast_review_assets_and_tools():
@@ -130,7 +130,7 @@ def test_dashboard_metrics_partial_renders_fragment_only():
 
     assert response.status_code == 200
     assert "<html" not in html
-    assert 'class="progress-hero"' in html
+    assert 'class="hero__container"' in html
     assert "璆剔蜀蝮質汗" in html
 
 
@@ -426,6 +426,27 @@ def test_css_keeps_letter_spacing_neutral_for_dense_operational_ui():
     assert non_zero_letter_spacing == []
 
 
+def test_dashboard_css_uses_bem_class_names():
+    css = Path("static/css/mor.css").read_text(encoding="utf-8")
+    dashboard = Path("templates/_dashboard_metrics.html").read_text(encoding="utf-8")
+    for old_selector in (".progress-hero", ".sub-metrics", ".risk-summary", ".customer-rank", ".row-collapsed"):
+        assert old_selector not in css
+    for old_class in (
+        'class="progress-hero',
+        'class="sub-metrics',
+        'class="risk-summary',
+        'class="customer-rank',
+        'class="row-collapsed',
+    ):
+        assert old_class not in dashboard
+
+    assert "hero__container" in css + dashboard
+    assert "hero__sub-metrics" in css + dashboard
+    assert "risk-panel__summary" in css + dashboard
+    assert "risk-panel__customer-rank" in css + dashboard
+    assert "forecast-table__row--collapsed" in css
+
+
 def test_homepage_shows_friendly_error_for_missing_data_file():
     missing_base = Path.cwd() / "__missing_sales_data__"
     client = _client({"DATA_BASE_PATH": missing_base})
@@ -553,6 +574,37 @@ def test_settings_page_renders_item_config_and_data_checks(monkeypatch):
     assert "訂單資料檢查" in html
     assert "品項合併設定" in html
     assert "待建" in html
+
+
+def test_dashboard_and_settings_share_data_issue_messages(monkeypatch):
+    db_base_path = _isolated_db_base()
+    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
+    columns = config.required_columns
+    data = pd.DataFrame(
+        [
+            {
+                columns[0]: 2026,
+                columns[1]: 4,
+                columns[2]: 10,
+                columns[3]: "Hospital A",
+                columns[4]: "P1",
+                columns[5]: "Product One",
+                columns[6]: 3,
+                columns[7]: 0,
+            }
+        ]
+    )
+    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config: data)
+    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
+
+    dashboard = client.get("/").get_data(as_text=True)
+    settings = client.get("/settings").get_data(as_text=True)
+
+    assert "有 1 筆缺少預算目標" in dashboard
+    assert "有 1 筆缺少預算目標" in settings
+    assert "有 1 筆單價為 0" in dashboard
+    assert "有 1 筆單價為 0" in settings
 
 
 def test_items_route_redirects_to_settings():

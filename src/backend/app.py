@@ -9,6 +9,7 @@ from pathlib import Path
 from flask import Flask, Response, redirect, render_template, request, send_file, url_for
 from flask_caching import Cache
 
+from src.backend.data_validator import validate_health
 from src.backend.data_loader import default_target_from_data, load_sales_detail, normalize_product_code
 from src.backend.exporter import export_forecast
 from src.backend.forecast_config import ForecastConfig
@@ -107,6 +108,7 @@ def create_app(config: dict | None = None) -> Flask:
             "remaining_days": remaining_days,
             "status_dist": status_dist,
             "customer_ranking": customer_ranking,
+            "data_issues": validate_health(context.health),
         }
 
     def _save_row_override(row_id: str, manual_qty: str | None, reason: str | None, year: int, month: int) -> None:
@@ -161,6 +163,7 @@ def create_app(config: dict | None = None) -> Flask:
             "remaining_days": 0,
             "status_dist": {},
             "customer_ranking": [],
+            "data_issues": [],
         }
         return render_template(
             "index.html",
@@ -307,17 +310,20 @@ def create_app(config: dict | None = None) -> Flask:
             context = build_forecast_page_context(data_base_path, forecast_config, db, request.args)
             items = context.items
             health = context.health
+            data_issues = validate_health(health)
             error_message = None
         except (FileNotFoundError, ValueError, FormValidationError) as exc:
             context = None
             items = []
             health = None
+            data_issues = []
             error_message = f"載入系統設定失敗：{exc}"
 
         return render_template(
             "settings.html",
             items=items,
             health=health,
+            data_issues=data_issues,
             year=context.target.year if context else request.args.get("year", ""),
             month=context.target.month if context else request.args.get("month", ""),
             error_message=error_message,

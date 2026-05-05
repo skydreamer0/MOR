@@ -1150,7 +1150,7 @@ details[open] .snapshot-toggle {
 
 
 /* ── Progress Hero — Dashboard Zone 1 ──────────────────────── */
-.progress-hero {
+.hero__container {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
@@ -1159,7 +1159,7 @@ details[open] .snapshot-toggle {
   box-shadow: var(--shadow-sm);
 }
 
-.progress-hero-header {
+.hero__header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -1167,20 +1167,20 @@ details[open] .snapshot-toggle {
   margin-bottom: var(--sp-5);
 }
 
-.progress-hero-titles h2 {
+.hero__titles h2 {
   margin: 0;
   font-size: var(--text-lg);
   font-weight: 700;
   line-height: 1.2;
 }
 
-.progress-hero-titles p {
+.hero__titles p {
   margin: var(--sp-1) 0 0;
   color: var(--muted);
   font-size: var(--text-sm);
 }
 
-.progress-hero-actions {
+.hero__actions {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
@@ -1295,7 +1295,7 @@ details[open] .snapshot-toggle {
 .rate-danger  { color: var(--danger); }
 
 /* Sub-metrics */
-.sub-metrics {
+.hero__sub-metrics {
   display: grid;
   grid-template-columns: 1fr;
   gap: var(--sp-2);
@@ -1361,8 +1361,8 @@ details[open] .snapshot-toggle {
   margin-bottom: var(--sp-5);
 }
 
-.risk-summary h3,
-.customer-rank h3 {
+.risk-panel__summary h3,
+.risk-panel__customer-rank h3 {
   margin: 0 0 var(--sp-3) 0;
   font-size: var(--text-md);
   font-weight: 700;
@@ -1598,11 +1598,11 @@ details[open] .snapshot-toggle {
   }
   .forecast-tools input[type="search"] { width: 100%; }
   main { padding: var(--sp-4) var(--sp-4) 100px; }
-  .progress-hero { padding: var(--sp-4); }
-  .progress-hero-header { flex-direction: column; gap: var(--sp-3); }
-  .progress-hero-actions { justify-content: flex-start; }
+  .hero__container { padding: var(--sp-4); }
+  .hero__header { flex-direction: column; gap: var(--sp-3); }
+  .hero__actions { justify-content: flex-start; }
   .progress-body { grid-template-columns: 1fr; gap: var(--sp-4); }
-  .sub-metrics { grid-template-columns: 1fr 1fr; }
+  .hero__sub-metrics { grid-template-columns: 1fr 1fr; }
   .risk-dashboard { grid-template-columns: 1fr; }
   .rank-item { grid-template-columns: 120px 1fr 80px; }
 }

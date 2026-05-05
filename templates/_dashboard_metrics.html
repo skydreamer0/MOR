@@ -1,23 +1,21 @@
 {% if metrics %}
 {% set rate = metrics.amount_achievement_rate %}
 
-{% if health and (health.missing_budget_row_count > 0 or health.zero_price_row_count > 0) %}
-<section class="alert alert-info" role="alert">
-  ??      {% if health.missing_budget_row_count > 0 %}??{{ health.missing_budget_row_count }} ?撩???格?{% endif %}
-  {% if health.missing_budget_row_count > 0 and health.zero_price_row_count > 0 %}嚗{% endif %}
-  {% if health.zero_price_row_count > 0 %}??{{ health.zero_price_row_count }} ??寧 0{% endif %}
-  ??<a href="{{ url_for('settings', year=year, month=month) }}">??蝟餌絞閮剖??亦?</a>
+{% for issue in data_issues %}
+<section class="alert alert-info alert-banner alert-banner--{{ issue.level }}" role="alert">
+  {{ issue.message }}
+  <a href="{{ url_for('settings', year=year, month=month) }}">查看資料檢核</a>
 </section>
-{% endif %}
+{% endfor %}
 
-<section class="progress-hero" aria-label="?格??脣漲">
-  <div class="progress-hero-header">
-    <div class="progress-hero-titles">
+<section class="hero__container" aria-label="?格??脣漲">
+  <div class="hero__header">
+    <div class="hero__titles">
       <h2>業績總覽</h2>
       <span class="sr-only">璆剔蜀蝮質汗 預算目標 預估達成 預估業績金額 金額 GAP 高風險追蹤</span>
       <p>{{ year }}/{{ "%02d"|format(month|int) }} ??蝮質汗</p>
     </div>
-    <div class="progress-hero-actions">
+    <div class="hero__actions">
       <span class="remaining-tag">
         <span class="remaining-dot"></span>
         ?祆??拚? <strong>{{ remaining_days }}</strong> 憭?
@@ -51,7 +49,7 @@
       </div>
     </div>
 
-    <div class="sub-metrics">
+    <div class="hero__sub-metrics">
       <div class="sub-metric">
         <span class="sub-metric-label">?桀?撖衣蜀</span>
         <strong class="sub-metric-value">{{ "{:,.0f}".format(metrics.actual_amount) }}</strong>
@@ -80,7 +78,7 @@
 
 {% if status_dist %}
 <section class="risk-dashboard" aria-label="憸券?銵冽">
-  <div class="risk-summary panel">
+  <div class="risk-panel__summary panel">
     <h3>憸券??</h3>
     <div class="status-dist">
       <div class="dist-item">
@@ -110,7 +108,7 @@
     </div>
   </div>
 
-  <div class="customer-rank panel">
+  <div class="risk-panel__customer-rank panel">
     <h3>摰Ｘ憸券??</h3>
     {% if customer_ranking %}
     {% set max_gap = (customer_ranking[0].gap_amount | abs) if customer_ranking[0].gap_amount != 0 else 1 %}

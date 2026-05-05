@@ -23,6 +23,10 @@
       <section class="alert" role="alert">{{ error_message }}</section>
     {% endif %}
 
+    {% for issue in data_issues %}
+      <section class="alert alert-info alert-banner alert-banner--{{ issue.level }}" role="alert">{{ issue.message }}</section>
+    {% endfor %}
+
     <section class="dashboard-heading">
       <div>
         <h2>系統設定 / 資料檢核頁</h2>
