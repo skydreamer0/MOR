@@ -8,20 +8,20 @@
 </section>
 {% endfor %}
 
-<section class="hero__container" aria-label="?格??脣漲">
+<section class="hero__container" aria-label="業績總覽">
   <div class="hero__header">
     <div class="hero__titles">
       <h2>業績總覽</h2>
-      <span class="sr-only">璆剔蜀蝮質汗 預算目標 預估達成 預估業績金額 金額 GAP 高風險追蹤</span>
-      <p>{{ year }}/{{ "%02d"|format(month|int) }} ??蝮質汗</p>
+      <span class="sr-only">業績總覽 預算目標 預估達成 預估業績金額 金額 GAP 高風險追蹤</span>
+      <p>{{ year }}/{{ "%02d"|format(month|int) }} 業績預估</p>
     </div>
     <div class="hero__actions">
       <span class="remaining-tag">
         <span class="remaining-dot"></span>
-        ?祆??拚? <strong>{{ remaining_days }}</strong> 憭?
+        剩餘天數 <strong>{{ remaining_days }}</strong> 天
       </span>
       <span class="htmx-indicator">更新中…</span>
-      <a class="btn-link" href="{{ url_for('forecast', year=year, month=month) }}">?脣?摯隤踵</a>
+      <a class="btn-link" href="{{ url_for('forecast', year=year, month=month) }}">前往預估調整</a>
     </div>
   </div>
 
@@ -41,7 +41,7 @@
         </div>
       </div>
       <div class="progress-footer-row">
-        <span class="progress-label-muted">?摯??</span>
+        <span class="progress-label-muted">預估達成</span>
         <strong class="progress-forecast-value">{{ "{:,.0f}".format(metrics.forecast_amount) }}</strong>
         <span class="progress-rate {% if rate >= 100 %}rate-success{% elif rate >= 90 %}rate-warning{% else %}rate-danger{% endif %}">
           {{ "{:.1f}%".format(rate) }}
@@ -51,65 +51,65 @@
 
     <div class="hero__sub-metrics">
       <div class="sub-metric">
-        <span class="sub-metric-label">?桀?撖衣蜀</span>
+        <span class="sub-metric-label">實績金額</span>
         <strong class="sub-metric-value">{{ "{:,.0f}".format(metrics.actual_amount) }}</strong>
-        <small class="sub-metric-note">撌脣撣喲?憿?/small>
+        <small class="sub-metric-note">目前已入帳金額</small>
       </div>
       <div class="sub-metric">
-        <span class="sub-metric-label">?摯璆剔蜀??</span>
-        <strong class="sub-metric-value">NTD {{ "{:,.0f}".format(metrics.forecast_amount) }} ??/strong>
-        <small class="sub-metric-note">?芸??摯蝮賡?</small>
+        <span class="sub-metric-label">預估業績金額</span>
+        <strong class="sub-metric-value">NTD {{ "{:,.0f}".format(metrics.forecast_amount) }}</strong>
+        <small class="sub-metric-note">系統預估月底金額</small>
       </div>
       <div class="sub-metric">
-        <span class="sub-metric-label">?? GAP</span>
+        <span class="sub-metric-label">金額 GAP</span>
         <strong class="sub-metric-value {% if metrics.amount_gap < 0 %}danger-text{% else %}success-text{% endif %}">
           {{ "{:+,.0f}".format(metrics.amount_gap) }}
         </strong>
-        <small class="sub-metric-note">?摯 ????</small>
+        <small class="sub-metric-note">預估與預算差異</small>
       </div>
       <div class="sub-metric">
-        <span class="sub-metric-label">憸券餈質馱</span>
-        <strong class="sub-metric-value">{{ metrics.high_risk_product_count }} <small class="sub-metric-unit">??</small> / {{ metrics.high_risk_customer_count }} <small class="sub-metric-unit">摰Ｘ</small></strong>
-        <small class="sub-metric-note">擃◢?芣??/small>
+        <span class="sub-metric-label">高風險追蹤</span>
+        <strong class="sub-metric-value">{{ metrics.high_risk_product_count }} <small class="sub-metric-unit">品項</small> / {{ metrics.high_risk_customer_count }} <small class="sub-metric-unit">客戶</small></strong>
+        <small class="sub-metric-note">低於去年同期的重點追蹤</small>
       </div>
     </div>
   </div>
 </section>
 
 {% if status_dist %}
-<section class="risk-dashboard" aria-label="憸券?銵冽">
+<section class="risk-dashboard" aria-label="跳單狀態分布">
   <div class="risk-panel__summary panel">
-    <h3>憸券??</h3>
+    <h3>跳單狀態</h3>
     <div class="status-dist">
       <div class="dist-item">
         <span class="dist-dot dist-dot-high"></span>
-        <span class="dist-label">擃◢??/span>
+        <span class="dist-label">高風險</span>
         <strong class="dist-count danger-text">{{ status_dist.high }}</strong>
       </div>
       <div class="dist-item">
         <span class="dist-dot dist-dot-slight"></span>
-        <span class="dist-label">頛凝銝?</span>
+        <span class="dist-label">輕微下滑</span>
         <strong class="dist-count" style="color:var(--accent-2)">{{ status_dist.slight }}</strong>
       </div>
       <div class="dist-item">
         <span class="dist-dot dist-dot-ok"></span>
-        <span class="dist-label">甇?虜 / ?</span>
+        <span class="dist-label">正常 / 成長</span>
         <strong class="dist-count success-text">{{ status_dist.ok }}</strong>
       </div>
       <div class="dist-item">
         <span class="dist-dot dist-dot-none"></span>
-        <span class="dist-label">?∪撟游???/span>
+        <span class="dist-label">無去年同期</span>
         <strong class="dist-count">{{ status_dist.no_history }}</strong>
       </div>
     </div>
     <div class="dist-total">
-      <span>??蝮賣</span>
+      <span>品項總數</span>
       <strong>{{ status_dist.high + status_dist.slight + status_dist.ok + status_dist.no_history }}</strong>
     </div>
   </div>
 
   <div class="risk-panel__customer-rank panel">
-    <h3>摰Ｘ憸券??</h3>
+    <h3>客戶風險排行</h3>
     {% if customer_ranking %}
     {% set max_gap = (customer_ranking[0].gap_amount | abs) if customer_ranking[0].gap_amount != 0 else 1 %}
     <div class="rank-list">
@@ -117,7 +117,7 @@
       <div class="rank-item">
         <div class="rank-info">
           <span class="rank-customer">{{ item.customer }}</span>
-          <span class="rank-count">{{ item.item_count }} ??</span>
+          <span class="rank-count">{{ item.item_count }} 品項</span>
         </div>
         <div class="rank-bar-wrap">
           <div class="rank-bar" style="width: {{ (item.gap_amount | abs / max_gap * 100) | round(1) }}%"></div>
@@ -127,31 +127,31 @@
       {% endfor %}
     </div>
     {% else %}
-    <p class="muted" style="margin:var(--sp-4) 0 0;">?桀??⊿?憸券??敺桐?皛?摰Ｘ</p>
+    <p class="muted" style="margin:var(--sp-4) 0 0;">目前沒有需要追蹤的客戶風險。</p>
     {% endif %}
   </div>
 </section>
 {% endif %}
 
-<section class="panel" aria-label="擃◢?芾蕭頩?>
+<section class="panel" aria-label="高風險產品追蹤">
   <div class="section-header">
-    <h3>擃◢?芾蕭頩?/h3>
+    <h3>高風險產品追蹤</h3>
     <div style="display:flex;gap:8px;align-items:center;">
-      <a class="link-btn" href="{{ url_for('product_monitor', year=year, month=month) }}">?亦??券</a>
-      <a class="link-btn" href="{{ url_for('forecast', year=year, month=month) }}">?脣隤踵</a>
+      <a class="link-btn" href="{{ url_for('product_monitor', year=year, month=month) }}">查看監控</a>
+      <a class="link-btn" href="{{ url_for('forecast', year=year, month=month) }}">預估調整</a>
     </div>
   </div>
   <div class="table-wrap compact-table">
     <table>
       <thead>
         <tr>
-          <th>摰Ｘ</th>
-          <th>??</th>
-          <th class="num">?餃僑??</th>
-          <th class="num">?摯??</th>
-          <th class="num">撌桃</th>
-          <th class="num">??敶梢</th>
-          <th>???/th>
+          <th>客戶</th>
+          <th>品項</th>
+          <th class="num">去年同期</th>
+          <th class="num">預估月底</th>
+          <th class="num">差異</th>
+          <th class="num">金額影響</th>
+          <th>狀態</th>
           <th></th>
         </tr>
       </thead>
@@ -165,7 +165,7 @@
           <td class="num"><span class="gap-value {% if row.diff_quantity < 0 %}negative{% elif row.diff_quantity > 0 %}positive{% endif %}">{{ "{:+,.0f}".format(row.diff_quantity) }}</span></td>
           <td class="num"><span class="gap-value {% if row.amount_impact < 0 %}negative{% elif row.amount_impact > 0 %}positive{% endif %}">{{ "{:+,.0f}".format(row.amount_impact) }}</span></td>
           <td><span class="badge status-{{ row.status_key }}">{{ row.status }}</span></td>
-          <td><a class="jump-link" href="{{ url_for('forecast', year=year, month=month) }}#row-{{ row.customer }}__{{ row.product_code }}" title="??隤踵">??/a></td>
+          <td><a class="jump-link" href="{{ url_for('forecast', year=year, month=month) }}#row-{{ row.customer }}__{{ row.product_code }}" title="前往調整">調整</a></td>
         </tr>
         {% endfor %}
       </tbody>

@@ -40,5 +40,5 @@ def _format_export_row(row: ForecastRow) -> dict:
         "最終預估": row.final_forecast,
         "調整原因": row.adjustment_reason,
         "預估金額": row.estimated_amount,
-        "是否納入計算": "否" if row.excluded else "是",
+        "是否排除": "是" if row.excluded else "否",
     }

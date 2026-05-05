@@ -131,7 +131,54 @@ def test_dashboard_metrics_partial_renders_fragment_only():
     assert response.status_code == 200
     assert "<html" not in html
     assert 'class="hero__container"' in html
-    assert "璆剔蜀蝮質汗" in html
+    assert "業績總覽" in html
+
+
+def test_dashboard_copy_does_not_render_mojibake():
+    client = _client()
+
+    html = client.get("/").get_data(as_text=True)
+    metrics = client.get("/dashboard/metrics").get_data(as_text=True)
+    rendered = html + metrics
+
+    assert "業績總覽" in rendered
+    assert "預估調整" in rendered
+    assert "產品跳單監控" in rendered
+    assert "系統設定" in rendered
+    assert "年度" in rendered
+    assert "月份" in rendered
+    assert "套用" in rendered
+    assert "預估達成" in rendered
+    assert "實績金額" in rendered
+    assert "高風險產品" in rendered
+    assert "跳單狀態" in rendered
+    for broken in ("璆剔蜀蝮質汗", "摰Ｘ", "憸券", "擃", "??/", "?", "?"):
+        assert broken not in rendered
+
+
+def test_rendered_pages_do_not_show_mojibake():
+    client = _client()
+
+    forecast = client.get("/forecast").get_data(as_text=True)
+    product_monitor = client.get("/monitor/products").get_data(as_text=True)
+    settings = client.get("/settings").get_data(as_text=True)
+    page = client.get("/forecast").get_data(as_text=True)
+    row_id = re.search(r'data-row-id="([^"]+)"', page).group(1)
+    row_fragment = client.patch(
+        f"/forecast/row/{row_id}",
+        data={"qty": "", "note": "", "year": "2026", "month": "5"},
+    ).get_data(as_text=True)
+    rendered = forecast + product_monitor + settings + row_fragment
+
+    assert "自動預估" in rendered
+    assert "未到期" in rendered
+    assert "還原系統預估" in rendered
+    assert "原因..." in rendered
+    assert "排除" in rendered
+    assert "缺預算" in rendered
+    assert "納入" in rendered
+    for broken in ("??/", "?祆", "?芸", "?", "?", "頝喳", "蝯梢", ""):
+        assert broken not in rendered
 
 
 def test_dashboard_period_inputs_target_metrics_zone():
@@ -320,6 +367,62 @@ def test_item_management_exclusion_is_reflected_on_workbench(monkeypatch):
     assert re.search(r'data-search="[^"]*Product Two"[^>]*data-excluded="true"', workbench)
 
 
+def test_item_settings_save_price_quantity_and_forecast_uses_it(monkeypatch):
+    db_base_path = _isolated_db_base()
+    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
+    columns = config.required_columns
+    data = pd.DataFrame(
+        [
+            {
+                columns[0]: 2026,
+                columns[1]: month,
+                columns[2]: 10,
+                columns[3]: "Hospital A",
+                columns[4]: "P1",
+                columns[5]: "Product One",
+                columns[6]: 300,
+                columns[7]: 3200,
+            }
+            for month in (1, 2, 3)
+        ]
+    )
+    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config: data)
+    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
+    with sqlite3.connect(db_base_path / "mor_workbench.db") as conn:
+        conn.execute(
+            """
+            INSERT INTO budget_targets
+            (year, month, customer_name, product_code, target_quantity, target_amount, base_target_quantity)
+            VALUES (2026, 4, 'Hospital A', 'P1', 300, 3000, 1)
+            """
+        )
+        conn.commit()
+
+    settings = client.get("/settings?year=2026&month=4").get_data(as_text=True)
+    assert 'name="price_quantity_P1"' in settings
+
+    response = client.post(
+        "/items/save",
+        data={
+            "product_codes": ["P1"],
+            "is_budgeted_P1": "1",
+            "is_visible_P1": "1",
+            "price_quantity_P1": "100",
+        },
+    )
+    forecast = client.get("/forecast?year=2026&month=4").get_data(as_text=True)
+
+    assert response.status_code == 200
+    with sqlite3.connect(db_base_path / "mor_workbench.db") as conn:
+        columns = [row[1] for row in conn.execute("PRAGMA table_info(item_configs)")]
+        saved = conn.execute("SELECT price_quantity FROM item_configs WHERE product_code = 'P1'").fetchone()
+    assert "price_quantity" in columns
+    assert saved == (100,)
+    assert 'data-price-quantity="100' in forecast
+    assert ">9,600</td>" in forecast
+
+
 def test_adjustment_save_migrates_old_database_without_updated_by():
     db_base_path = _isolated_db_base()
     db_path = db_base_path / "mor_workbench.db"
@@ -409,9 +512,13 @@ def test_forecast_table_compares_live_gap_to_budget():
 
 def test_forecast_table_totals_only_include_budgeted_rows():
     js = Path("static/js/forecast-table.js").read_text(encoding="utf-8")
+    row_template = Path("templates/_forecast_row.html").read_text(encoding="utf-8")
 
     assert "budgetQuantity: Number(row.dataset.budget || 0)" in js
+    assert "priceQuantity: Number(row.dataset.priceQuantity || 1)" in js
+    assert "(finalForecastQuantity(state) / priceQuantity) * state.price" in js
     assert "state.budgetQuantity <= 0" in js
+    assert "data-price-quantity=" in row_template
 
 
 def test_css_keeps_letter_spacing_neutral_for_dense_operational_ui():
@@ -658,6 +765,23 @@ def test_export_rejects_unknown_review_row_id_without_workbook():
 
     assert response.status_code == 400
     assert "Unknown forecast row" in response.get_data(as_text=True)
+
+
+def test_export_accepts_current_forecast_signature():
+    client = _client()
+    review_response = client.get("/forecast?year=2026&month=5")
+    signature = re.search(
+        r'name="forecast_signature" value="([^"]+)"',
+        review_response.get_data(as_text=True),
+    ).group(1)
+
+    export_response = client.post(
+        "/export",
+        data={"year": "2026", "month": "5", "forecast_signature": signature},
+    )
+
+    assert export_response.status_code == 200
+    assert export_response.mimetype == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
 def test_export_rejects_stale_forecast_signature(monkeypatch):

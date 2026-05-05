@@ -130,7 +130,7 @@ def build_forecast_page_context(
     )
     summary = replace(summary, rows=enrich_rows_with_history(summary.rows, db, target.year, target.month))
     summary = apply_user_adjustments(summary, manual_adjustments=manual_adjustments, excluded_ids=set())
-    summary = _apply_reasons_and_budgets(summary, adjustment_reasons, budget_targets)
+    summary = _apply_reasons_and_budgets(summary, adjustment_reasons, budget_targets, item_configs)
     summary = replace(summary, total=forecast_amount_total(summary.rows))
 
     budget_months = list_budget_months(db)
@@ -178,6 +178,13 @@ def forecast_amount_total(rows: Iterable[ForecastRow]) -> float:
     return sum(_dashboard_amount(row.final_forecast, row) for row in rows if _is_amount_included(row))
 
 
+def recalculate_forecast_amounts(rows: Iterable[ForecastRow]) -> list[ForecastRow]:
+    return [
+        replace(row, estimated_amount=0.0 if row.excluded else _dashboard_amount(row.final_forecast, row))
+        for row in rows
+    ]
+
+
 def _is_amount_included(row: ForecastRow) -> bool:
     return not row.excluded and row.budget_quantity > 0
 
@@ -197,14 +204,29 @@ def _target_totals(
     return (
         sum(row.budget_quantity for row in rows),
         sum(
-            row.budget_amount if row.budget_amount > 0 else row.budget_quantity * row.latest_price
+            row.budget_amount if row.budget_amount > 0 else _dashboard_amount(row.budget_quantity, row)
             for row in rows
         ),
     )
 
 
 def _dashboard_amount(quantity: float, row: ForecastRow) -> float:
-    return quantity * row.latest_price
+    return _amount_from_latest_order_price(quantity, row)
+
+
+def _amount_from_latest_order_price(quantity: float, row: ForecastRow) -> float:
+    price_quantity = _latest_price_quantity(row)
+    if price_quantity <= 0:
+        return quantity * row.latest_price
+    return quantity / price_quantity * row.latest_price
+
+
+def _latest_price_quantity(row: ForecastRow) -> float:
+    if row.price_quantity > 0:
+        return row.price_quantity
+    if row.budget_quantity > 0 and row.base_budget_quantity > 0:
+        return row.budget_quantity / row.base_budget_quantity
+    return 1.0
 
 
 def build_product_monitor_rows(rows: Iterable[ForecastRow]) -> list[ProductMonitorRow]:
@@ -252,6 +274,7 @@ def build_items_from_sales_data(data: pd.DataFrame, db) -> list[dict]:
                 "is_excluded": False,
                 "is_budgeted": True,
                 "is_visible": True,
+                "price_quantity": 0.0,
                 "status_label": "",
             },
         )
@@ -273,6 +296,7 @@ def load_item_configs(db) -> dict[str, dict]:
             "is_excluded": bool(row["is_excluded"]),
             "is_budgeted": bool(row["is_budgeted"]),
             "is_visible": bool(row["is_visible"]),
+            "price_quantity": float(row["price_quantity"] or 0),
             "status_label": row["status_label"],
         }
         for row in rows
@@ -353,9 +377,11 @@ def _apply_reasons_and_budgets(
     summary: ForecastSummary,
     adjustment_reasons: dict[str, str],
     budget_targets: dict[str, BudgetTarget],
+    item_configs: dict[str, dict] | None = None,
 ) -> ForecastSummary:
+    item_configs = item_configs or {}
     rows = [
-        _apply_reason_and_budget(row, adjustment_reasons, budget_targets)
+        _apply_reason_and_budget(row, adjustment_reasons, budget_targets, item_configs)
         for row in summary.rows
     ]
     return replace(summary, rows=rows)
@@ -365,15 +391,19 @@ def _apply_reason_and_budget(
     row: ForecastRow,
     adjustment_reasons: dict[str, str],
     budget_targets: dict[str, BudgetTarget],
+    item_configs: dict[str, dict],
 ) -> ForecastRow:
     budget = budget_targets.get(row.row_id, BudgetTarget(0.0, 0.0))
-    return replace(
+    item_config = item_configs.get(row.product_code, {})
+    row = replace(
         row,
         adjustment_reason=adjustment_reasons.get(row.row_id, row.adjustment_reason),
         budget_quantity=budget.target_quantity,
         budget_amount=budget.target_amount,
         base_budget_quantity=budget.base_target_quantity,
+        price_quantity=float(item_config.get("price_quantity") or 0),
     )
+    return replace(row, estimated_amount=0.0 if row.excluded else _dashboard_amount(row.final_forecast, row))
 
 
 def _to_monitor_row(row: ForecastRow) -> ProductMonitorRow:
@@ -394,7 +424,7 @@ def _to_monitor_row(row: ForecastRow) -> ProductMonitorRow:
             status = "正常/成長"
             status_key = "ok"
 
-    amount_impact = diff_quantity * row.latest_price
+    amount_impact = _dashboard_amount(diff_quantity, row)
     return ProductMonitorRow(
         customer=row.customer,
         product_code=row.product_code,

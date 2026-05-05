@@ -36,6 +36,7 @@ class MORDatabase:
                     is_excluded INTEGER DEFAULT 0,
                     is_budgeted INTEGER DEFAULT 1,
                     is_visible INTEGER DEFAULT 1,
+                    price_quantity REAL DEFAULT 0,
                     status_label TEXT, -- e.g., 'Discontinued', 'Special'
                     custom_category TEXT
                 )
@@ -49,6 +50,8 @@ class MORDatabase:
                 conn.execute("ALTER TABLE item_configs ADD COLUMN is_budgeted INTEGER DEFAULT 1")
             if 'is_visible' not in cols:
                 conn.execute("ALTER TABLE item_configs ADD COLUMN is_visible INTEGER DEFAULT 1")
+            if 'price_quantity' not in cols:
+                conn.execute("ALTER TABLE item_configs ADD COLUMN price_quantity REAL DEFAULT 0")
             if 'status_label' not in cols:
                 conn.execute("ALTER TABLE item_configs ADD COLUMN status_label TEXT")
             if 'custom_category' not in cols:

@@ -103,6 +103,7 @@ function readRowState(row) {
     status: row.dataset.status,
     searchText: (row.dataset.search || "").toLowerCase(),
     price: Number(row.dataset.price || 0),
+    priceQuantity: Number(row.dataset.priceQuantity || 1),
     systemForecast: Number(row.dataset.systemQty || 0),
     actualQuantity: Number(row.dataset.actualQty || 0),
     budgetQuantity: Number(row.dataset.budget || 0),
@@ -136,7 +137,8 @@ function finalForecastQuantity(state) {
 }
 
 function calculateAmount(state) {
-  return state.excluded || state.budgetQuantity <= 0 ? 0 : finalForecastQuantity(state) * state.price;
+  const priceQuantity = state.priceQuantity > 0 ? state.priceQuantity : 1;
+  return state.excluded || state.budgetQuantity <= 0 ? 0 : (finalForecastQuantity(state) / priceQuantity) * state.price;
 }
 
 function isEdited(state) {

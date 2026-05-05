@@ -50,6 +50,7 @@ class ForecastRow:
     budget_quantity: float = 0.0
     budget_amount: float = 0.0
     base_budget_quantity: float = 0.0
+    price_quantity: float = 0.0
     last_month_actual: float = 0.0
     last_month_budget: float = 0.0
     trend_6m: Optional[list[float]] = None
@@ -87,6 +88,7 @@ class ForecastRow:
             "budget_quantity": self.budget_quantity,
             "budget_amount": self.budget_amount,
             "base_budget_quantity": self.base_budget_quantity,
+            "price_quantity": self.price_quantity,
             "last_month_actual": self.last_month_actual,
             "last_month_budget": self.last_month_budget,
             "trend_6m": self.trend_6m,

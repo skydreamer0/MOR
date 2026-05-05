@@ -3,6 +3,7 @@ from __future__ import annotations
 import calendar
 import hashlib
 import os
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 
@@ -13,14 +14,14 @@ from src.backend.data_validator import validate_health
 from src.backend.data_loader import default_target_from_data, load_sales_detail, normalize_product_code
 from src.backend.exporter import export_forecast
 from src.backend.forecast_config import ForecastConfig
-from src.backend.forecast_engine import ForecastOptions, apply_user_adjustments, build_forecast
+from src.backend.forecast_engine import apply_user_adjustments
 from src.backend.forecast_models import ForecastSummary
 from src.backend.operational_views import (
     build_customer_risk_ranking,
     build_forecast_page_context,
     forecast_amount_total,
+    recalculate_forecast_amounts,
     build_status_distribution,
-    load_exclusions,
 )
 from src.backend.web.form_parser import FormValidationError, parse_manual_quantities, parse_target_period
 from src.backend.database import get_db
@@ -177,7 +178,7 @@ def create_app(config: dict | None = None) -> Flask:
             context = _load_context_from_request()
             template_context = _dashboard_template_context(context)
         except (FileNotFoundError, ValueError, FormValidationError) as exc:
-            return Response(f"?⊥??Ｙ??摯嚗{exc}", status=400, mimetype="text/plain; charset=utf-8")
+            return Response(f"無法更新預估：{exc}", status=400, mimetype="text/plain; charset=utf-8")
         return render_template("_dashboard_metrics.html", **template_context)
 
     @app.get("/forecast")
@@ -257,41 +258,33 @@ def create_app(config: dict | None = None) -> Flask:
             data = load_sales_detail(data_base_path, forecast_config)
             default_target = default_target_from_data(data, forecast_config)
             target = parse_target_period(request.form, default_target)
-            
-            excluded_item_ids = load_exclusions(db)
-            
-            summary = build_forecast(
-                data,
-                target,
-                ForecastOptions(
-                    include_all=True, 
-                    max_cycle_interval_days=forecast_config.max_cycle_interval_days,
-                    excluded_item_ids=excluded_item_ids
-                ),
+
+            context = build_forecast_page_context(
+                data_base_path,
                 forecast_config,
+                db,
+                {"year": str(target.year), "month": str(target.month)},
             )
+            summary = context.summary
             manual_adjustments = parse_manual_quantities(request.form, key_prefix="manual_adjustment__")
             legacy_manual_adjustments = parse_manual_quantities(request.form)
             manual_adjustments = {**legacy_manual_adjustments, **manual_adjustments}
             adjustment_reasons = parse_manual_quantities(request.form, key_prefix="adjustment_reason__", type_cast=str)
-            
-            # Global exclusions are already applied in build_forecast as 'excluded=True'
+
             _validate_submitted_row_ids(summary, set(manual_adjustments))
             _validate_forecast_signature(summary, request.form.get("forecast_signature", ""))
-            
-            # Need to update apply_user_adjustments signature to accept reasons too
+
             summary = apply_user_adjustments(
                 summary,
                 manual_adjustments=manual_adjustments,
-                excluded_ids=set(), # Row-level exclusion removed
+                excluded_ids=set(),
             )
-            # Add reasons to rows (could be integrated into apply_user_adjustments)
-            for row in summary.rows:
-                if row.row_id in adjustment_reasons:
-                    # Using replace to update reason
-                    from dataclasses import replace
-                    idx = summary.rows.index(row)
-                    summary.rows[idx] = replace(row, adjustment_reason=adjustment_reasons[row.row_id])
+            rows = [
+                replace(row, adjustment_reason=adjustment_reasons.get(row.row_id, row.adjustment_reason))
+                for row in summary.rows
+            ]
+            rows = recalculate_forecast_amounts(rows)
+            summary = replace(summary, rows=rows, total=forecast_amount_total(rows))
         except (FileNotFoundError, ValueError, FormValidationError) as exc:
             return Response(f"無法匯出預估：{exc}", status=400, mimetype="text/plain; charset=utf-8")
 
@@ -342,18 +335,22 @@ def create_app(config: dict | None = None) -> Flask:
                 is_excluded = 1 if request.form.get(f"is_excluded_{pid}") == "1" else 0
                 is_budgeted = 1 if request.form.get(f"is_budgeted_{pid}") == "1" else 0
                 is_visible = 1 if request.form.get(f"is_visible_{pid}") == "1" else 0
+                try:
+                    price_quantity = float(request.form.get(f"price_quantity_{pid}") or 0)
+                except ValueError:
+                    price_quantity = 0.0
                 status_label = request.form.get(f"status_label_{pid}")
                 
                 conn.execute("""
                     INSERT OR IGNORE INTO item_configs
-                    (product_code, is_excluded, is_budgeted, is_visible, status_label, custom_category)
-                    VALUES (?, 0, 1, 1, NULL, NULL)
+                    (product_code, is_excluded, is_budgeted, is_visible, price_quantity, status_label, custom_category)
+                    VALUES (?, 0, 1, 1, 0, NULL, NULL)
                 """, (pid,))
                 conn.execute("""
                     UPDATE item_configs
-                    SET is_excluded = ?, is_budgeted = ?, is_visible = ?, status_label = ?
+                    SET is_excluded = ?, is_budgeted = ?, is_visible = ?, price_quantity = ?, status_label = ?
                     WHERE product_code = ?
-                """, (is_excluded, is_budgeted, is_visible, status_label, pid))
+                """, (is_excluded, is_budgeted, is_visible, price_quantity, status_label, pid))
             conn.commit()
         return settings()
 
@@ -460,6 +457,7 @@ def _load_items_from_sales(data_base_path: Path, forecast_config: ForecastConfig
             "is_excluded": False,
             "is_budgeted": True,
             "is_visible": True,
+            "price_quantity": 0.0,
             "status_label": "",
         })
         items.append({
@@ -478,6 +476,7 @@ def _load_item_configs(db) -> dict[str, dict]:
                 "is_excluded": bool(row["is_excluded"]),
                 "is_budgeted": bool(row["is_budgeted"]),
                 "is_visible": bool(row["is_visible"]),
+                "price_quantity": float(row["price_quantity"] or 0),
                 "status_label": row["status_label"]
             }
             for row in rows

@@ -6,6 +6,7 @@ import pandas as pd
 from src.backend.forecast_models import ForecastRow, ForecastSummary
 from src.backend.operational_views import (
     BudgetTarget,
+    _apply_reasons_and_budgets,
     build_customer_risk_ranking,
     build_dashboard_metrics,
     build_data_health_summary,
@@ -168,6 +169,40 @@ def test_dashboard_metrics_use_company_budget_totals_above_workbench_rules():
     assert metrics.forecast_quantity == 80
     assert metrics.forecast_amount == 800
     assert metrics.amount_gap == -1550
+
+
+def test_budget_context_uses_latest_order_price_with_budget_quantity_unit():
+    row = _row(
+        row_id="A__P1",
+        customer="A",
+        product_code="P1",
+        product_name="Latest Price",
+        last_year=0,
+        last_month=0,
+        current=20,
+        final=250,
+        budget=0,
+        price=3200,
+    )
+
+    summary = _apply_reasons_and_budgets(
+        ForecastSummary(year=2026, month=5, rows=[row], total=row.estimated_amount),
+        adjustment_reasons={},
+        budget_targets={
+            row.row_id: BudgetTarget(
+                target_quantity=280,
+                target_amount=2800,
+                base_target_quantity=1,
+            )
+        },
+    )
+    updated = summary.rows[0]
+    metrics = build_dashboard_metrics(summary.rows)
+
+    assert updated.latest_price == 3200
+    assert updated.estimated_amount == 250 / 280 * 3200
+    assert metrics.target_amount == 2800
+    assert metrics.forecast_amount == 250 / 280 * 3200
 
 
 def test_product_monitor_rows_classify_yoy_drop_statuses_and_notes():

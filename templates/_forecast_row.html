@@ -7,6 +7,7 @@
   data-status="{{ 'auto' if row.auto_in_month else 'not_due' }}"
   data-search="{{ row.customer }} {{ row.product_name }}"
   data-price="{{ row.latest_price }}"
+  data-price-quantity="{% if row.price_quantity > 0 %}{{ row.price_quantity }}{% elif row.budget_quantity > 0 and row.base_budget_quantity > 0 %}{{ row.budget_quantity / row.base_budget_quantity }}{% else %}1{% endif %}"
   data-system-qty="{{ row.system_forecast }}"
   data-actual-qty="{{ row.this_year_same_month_qty }}"
   data-budget="{{ row.budget_quantity }}"
@@ -17,9 +18,9 @@
 >
   <td>
     {% if row.auto_in_month %}
-      <span class="badge">?祆??航頝喳</span>
+      <span class="badge">自動預估</span>
     {% else %}
-      <span class="badge off">?芸?望?</span>
+      <span class="badge off">未到期</span>
     {% endif %}
   </td>
   <td>{{ row.customer }}</td>
@@ -42,7 +43,7 @@
              hx-trigger="change">
       <input type="hidden" name="year" value="{{ year }}">
       <input type="hidden" name="month" value="{{ month }}">
-      <button type="button" class="icon-btn" title="???喟頂蝯梢?隡? data-restore {% if row.manual_adjustment is none %}hidden{% endif %}>??/button>
+      <button type="button" class="icon-btn" title="還原系統預估" data-restore {% if row.manual_adjustment is none %}hidden{% endif %}>還原</button>
     </div>
   </td>
   <td class="num" data-final-forecast>{{ "{:,.2f}".format(row.final_forecast) }}</td>
@@ -50,7 +51,7 @@
   <td class="num" data-rate-display><span class="rate"></span></td>
   <td class="num" data-diff-display><span class="gap-value"></span></td>
   <td>
-    <input class="reason" name="adjustment_reason__{{ row.row_id }}" type="text" placeholder="??..." data-reason value="{{ row.adjustment_reason or '' }}"
+    <input class="reason" name="adjustment_reason__{{ row.row_id }}" type="text" placeholder="原因..." data-reason value="{{ row.adjustment_reason or '' }}"
            hx-patch="{{ url_for('patch_forecast_row', row_id=row.row_id) }}"
            hx-target="#row-{{ row.row_id }}"
            hx-swap="outerHTML"
@@ -59,11 +60,11 @@
   </td>
   <td class="num">
     {% if row.excluded %}
-      <span class="badge off">??/span>
+      <span class="badge off">排除</span>
     {% elif row.budget_quantity <= 0 %}
-      <span class="badge off">??/span>
+      <span class="badge off">缺預算</span>
     {% else %}
-      <span class="badge">??/span>
+      <span class="badge">納入</span>
     {% endif %}
   </td>
   <td class="num" data-amount>{{ "{:,.0f}".format(row.estimated_amount if row.budget_quantity > 0 and not row.excluded else 0) }}</td>
