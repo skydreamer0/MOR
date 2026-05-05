@@ -26,8 +26,9 @@ def test_build_forecast_returns_summary_with_typed_rows():
 
     assert summary.year == 2026
     assert summary.month == 4
-    # (8 + 16 + (16+14+10)/3) / 3 = 12.4444...
-    expected_qty = (8 + 16 + 40 / 3) / 3
+    # Last-year same-month quantity is for risk comparison only.
+    # Forecast uses recent history sources: last month and recent 3-month average.
+    expected_qty = (16 + 40 / 3) / 2
     assert summary.total == expected_qty * 120
     assert len(summary.rows) == 1
 

@@ -176,11 +176,13 @@
               <td class="num">
                 {% if row.excluded %}
                   <span class="badge off">否</span>
+                {% elif row.budget_quantity <= 0 %}
+                  <span class="badge off">否</span>
                 {% else %}
                   <span class="badge">是</span>
                 {% endif %}
               </td>
-              <td class="num" data-amount>{{ "{:,.0f}".format(row.estimated_amount) }}</td>
+              <td class="num" data-amount>{{ "{:,.0f}".format(row.estimated_amount if row.budget_quantity > 0 and not row.excluded else 0) }}</td>
             </tr>
             {% endfor %}
           </tbody>

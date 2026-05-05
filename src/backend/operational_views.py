@@ -131,6 +131,7 @@ def build_forecast_page_context(
     summary = replace(summary, rows=enrich_rows_with_history(summary.rows, db, target.year, target.month))
     summary = apply_user_adjustments(summary, manual_adjustments=manual_adjustments, excluded_ids=set())
     summary = _apply_reasons_and_budgets(summary, adjustment_reasons, budget_targets)
+    summary = replace(summary, total=forecast_amount_total(summary.rows))
 
     budget_months = list_budget_months(db)
     return ForecastPageContext(
@@ -173,6 +174,14 @@ def build_dashboard_metrics(
     )
 
 
+def forecast_amount_total(rows: Iterable[ForecastRow]) -> float:
+    return sum(_dashboard_amount(row.final_forecast, row) for row in rows if _is_amount_included(row))
+
+
+def _is_amount_included(row: ForecastRow) -> bool:
+    return not row.excluded and row.budget_quantity > 0
+
+
 def _target_totals(
     budgeted_rows: Iterable[ForecastRow],
     company_budgets: Iterable[BudgetTarget] | None,
@@ -195,8 +204,6 @@ def _target_totals(
 
 
 def _dashboard_amount(quantity: float, row: ForecastRow) -> float:
-    if row.budget_amount > 0 and row.budget_quantity > 0:
-        return quantity * row.budget_amount / row.budget_quantity
     return quantity * row.latest_price
 
 

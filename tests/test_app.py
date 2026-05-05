@@ -36,6 +36,7 @@ def test_homepage_loads_dashboard():
     assert "業績總覽" in html
     assert "預算目標" in html
     assert "預估達成" in html
+    assert "預估業績金額" in html
     assert "金額 GAP" in html
     assert "高風險追蹤" in html
     assert "metrics.target_quantity" not in html
@@ -289,6 +290,13 @@ def test_forecast_table_compares_live_gap_to_budget():
     assert "finalQty - state.actualQuantity" not in js
 
 
+def test_forecast_table_totals_only_include_budgeted_rows():
+    js = Path("static/js/forecast-table.js").read_text(encoding="utf-8")
+
+    assert "budgetQuantity: Number(row.dataset.budget || 0)" in js
+    assert "state.budgetQuantity <= 0" in js
+
+
 def test_css_keeps_letter_spacing_neutral_for_dense_operational_ui():
     css = Path("static/css/mor.css").read_text(encoding="utf-8")
 
@@ -315,6 +323,7 @@ def test_homepage_shows_friendly_error_for_missing_data_file():
 
 def test_homepage_exposes_unrendered_total_when_rows_are_limited(monkeypatch):
     config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales", visible_row_limit=1)
+    db_base_path = _isolated_db_base()
     columns = config.required_columns
     rows = []
     for customer, product_code in (("A", "P1"), ("B", "P2")):
@@ -333,7 +342,16 @@ def test_homepage_exposes_unrendered_total_when_rows_are_limited(monkeypatch):
             )
     monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: pd.DataFrame(rows))
     monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config: pd.DataFrame(rows))
-    client = _client({"FORECAST_CONFIG": config})
+    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
+    with sqlite3.connect(db_base_path / "mor_workbench.db") as conn:
+        conn.execute(
+            """
+            INSERT INTO budget_targets
+            (year, month, customer_name, product_code, target_quantity, target_amount, base_target_quantity)
+            VALUES (2026, 4, 'B', 'P2', 10, 1000, 10)
+            """
+        )
+        conn.commit()
 
     response = client.get("/forecast")
     html = response.get_data(as_text=True)

@@ -115,11 +115,11 @@ def test_dashboard_metrics_summarize_quantity_amount_and_high_risk_counts():
     assert metrics.target_quantity == 170
     assert metrics.target_amount == 2700
     assert metrics.actual_quantity == 55
-    assert metrics.actual_amount == 1075
+    assert metrics.actual_amount == 950
     assert metrics.forecast_quantity == 145
-    assert metrics.forecast_amount == 2500
+    assert metrics.forecast_amount == 2150
     assert metrics.quantity_gap == -25
-    assert metrics.amount_gap == -200
+    assert metrics.amount_gap == -550
     assert metrics.achievement_rate == 145 / 170 * 100
     assert metrics.high_risk_product_count == 1
     assert metrics.high_risk_customer_count == 1
@@ -166,8 +166,8 @@ def test_dashboard_metrics_use_company_budget_totals_above_workbench_rules():
     assert metrics.target_quantity == 157
     assert metrics.target_amount == 2350
     assert metrics.forecast_quantity == 80
-    assert metrics.forecast_amount == 1000
-    assert metrics.amount_gap == -1350
+    assert metrics.forecast_amount == 800
+    assert metrics.amount_gap == -1550
 
 
 def test_product_monitor_rows_classify_yoy_drop_statuses_and_notes():

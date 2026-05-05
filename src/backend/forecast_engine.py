@@ -56,8 +56,8 @@ def build_forecast(
         avg_3m_qty = _recent_months_average(group, target.year, target.month, 3)
         current_progress = _month_quantity(group, target.year, target.month)
 
-        # Baseline: Average of LySM, LM, and Avg3M if they exist
-        references = [v for v in [lysm_qty, lm_qty, avg_3m_qty] if v > 0]
+        # Baseline: recent history only. LySM is retained for risk comparison.
+        references = [v for v in [lm_qty, avg_3m_qty] if v > 0]
         baseline_forecast = sum(references) / len(references) if references else 0.0
         
         # If the item is expected due to cycle but baseline is 0, use last 3 orders avg as fallback

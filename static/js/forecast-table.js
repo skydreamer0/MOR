@@ -105,6 +105,7 @@ function readRowState(row) {
     price: Number(row.dataset.price || 0),
     systemForecast: Number(row.dataset.systemQty || 0),
     actualQuantity: Number(row.dataset.actualQty || 0),
+    budgetQuantity: Number(row.dataset.budget || 0),
     lmActual: Number(row.dataset.lmActual || 0),
     lmBudget: Number(row.dataset.lmBudget || 0),
     manualValue: manualInput.value,
@@ -135,7 +136,7 @@ function finalForecastQuantity(state) {
 }
 
 function calculateAmount(state) {
-  return state.excluded ? 0 : finalForecastQuantity(state) * state.price;
+  return state.excluded || state.budgetQuantity <= 0 ? 0 : finalForecastQuantity(state) * state.price;
 }
 
 function isEdited(state) {

@@ -15,6 +15,7 @@ from src.backend.forecast_models import ForecastSummary
 from src.backend.operational_views import (
     build_customer_risk_ranking,
     build_forecast_page_context,
+    forecast_amount_total,
     build_status_distribution,
     load_exclusions,
 )
@@ -102,7 +103,7 @@ def create_app(config: dict | None = None) -> Flask:
 
         rows = summary.rows if summary else []
         visible_rows = rows[: forecast_config.visible_row_limit]
-        visible_total = sum(row.estimated_amount for row in visible_rows if not row.excluded)
+        visible_total = forecast_amount_total(visible_rows)
         unrendered_total = (summary.total if summary else 0) - visible_total
         return render_template(
             "forecast.html",
