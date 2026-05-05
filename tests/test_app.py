@@ -401,10 +401,10 @@ def test_forecast_page_layers_discontinued_items_below_active_rows(monkeypatch):
             "product_codes": ["P1", "P2"],
             "is_budgeted_P1": "1",
             "is_visible_P1": "1",
-            "status_label_P1": "",
+            "item_status_P1": "active",
             "is_budgeted_P2": "1",
             "is_visible_P2": "1",
-            "status_label_P2": "停用",
+            "item_status_P2": "discontinued",
         },
     )
     forecast = client.get("/forecast?year=2026&month=5").get_data(as_text=True)
@@ -417,6 +417,38 @@ def test_forecast_page_layers_discontinued_items_below_active_rows(monkeypatch):
     assert 'data-item-status="active"' in forecast
     assert 'data-item-status="discontinued"' in forecast
     assert forecast.index("Product Active") < forecast.index("已停用品項") < forecast.index("Product Old")
+
+
+def test_settings_page_uses_item_status_without_auxiliary_labels(monkeypatch):
+    db_base_path = _isolated_db_base()
+    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
+    columns = config.required_columns
+    data = pd.DataFrame(
+        [
+            {
+                columns[0]: 2026,
+                columns[1]: 4,
+                columns[2]: 10,
+                columns[3]: "Hospital A",
+                columns[4]: "P1",
+                columns[5]: "Product One",
+                columns[6]: 3,
+                columns[7]: 100,
+            }
+        ]
+    )
+    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config: data)
+    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
+
+    settings = client.get("/settings").get_data(as_text=True)
+
+    assert 'name="item_status_P1"' in settings
+    assert "使用中" in settings
+    assert "停用" in settings
+    assert "特殊品項" not in settings
+    assert "新上市" not in settings
+    assert "status_label_P1" not in settings
 
 
 def test_item_settings_save_price_quantity_and_forecast_uses_it(monkeypatch):

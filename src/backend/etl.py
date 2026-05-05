@@ -54,8 +54,8 @@ def sync_excel_to_db(db: MORDatabase, project_root: Path, config_file: str = "ex
                 conn.execute(
                     """
                     INSERT OR IGNORE INTO item_configs
-                    (product_code, is_excluded, is_budgeted, is_visible, price_quantity, status_label, custom_category)
-                    VALUES (?, 0, 1, 1, 0, NULL, NULL)
+                    (product_code, is_excluded, is_budgeted, is_visible, price_quantity, item_status, status_label, custom_category)
+                    VALUES (?, 0, 1, 1, 0, 'active', NULL, NULL)
                     """,
                     (product_code,),
                 )

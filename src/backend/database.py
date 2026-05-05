@@ -37,6 +37,7 @@ class MORDatabase:
                     is_budgeted INTEGER DEFAULT 1,
                     is_visible INTEGER DEFAULT 1,
                     price_quantity REAL DEFAULT 0,
+                    item_status TEXT DEFAULT 'active',
                     status_label TEXT, -- e.g., 'Discontinued', 'Special'
                     custom_category TEXT
                 )
@@ -52,10 +53,18 @@ class MORDatabase:
                 conn.execute("ALTER TABLE item_configs ADD COLUMN is_visible INTEGER DEFAULT 1")
             if 'price_quantity' not in cols:
                 conn.execute("ALTER TABLE item_configs ADD COLUMN price_quantity REAL DEFAULT 0")
+            if 'item_status' not in cols:
+                conn.execute("ALTER TABLE item_configs ADD COLUMN item_status TEXT DEFAULT 'active'")
             if 'status_label' not in cols:
                 conn.execute("ALTER TABLE item_configs ADD COLUMN status_label TEXT")
             if 'custom_category' not in cols:
                 conn.execute("ALTER TABLE item_configs ADD COLUMN custom_category TEXT")
+            conn.execute("""
+                UPDATE item_configs
+                SET item_status = 'discontinued'
+                WHERE status_label = '停用'
+                  AND (item_status IS NULL OR item_status = '' OR item_status = 'active')
+            """)
 
             # Forecast Adjustments (User overrides)
             conn.execute("""

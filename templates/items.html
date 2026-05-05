@@ -36,7 +36,7 @@
               <th>排除預估</th>
               <th>納入預算</th>
               <th>顯示於主表</th>
-              <th>狀態標籤</th>
+              <th>品項狀態</th>
             </tr>
           </thead>
           <tbody>
@@ -60,11 +60,9 @@
                   {% if item.is_visible %}checked{% endif %}> 顯示
               </td>
               <td>
-                <select name="status_label_{{ item.product_code }}" class="status-select">
-                  <option value="" {% if not item.status_label %}selected{% endif %}>正常</option>
-                  <option value="停用" {% if item.status_label == '停用' %}selected{% endif %}>停用</option>
-                  <option value="特殊品項" {% if item.status_label == '特殊品項' %}selected{% endif %}>特殊品項</option>
-                  <option value="新上市" {% if item.status_label == '新上市' %}selected{% endif %}>新上市</option>
+                <select name="item_status_{{ item.product_code }}" class="status-select">
+                  <option value="active" {% if item.item_status != 'discontinued' %}selected{% endif %}>使用中</option>
+                  <option value="discontinued" {% if item.item_status == 'discontinued' %}selected{% endif %}>停用</option>
                 </select>
               </td>
             </tr>

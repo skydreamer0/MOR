@@ -194,8 +194,8 @@ def create_app(config: dict | None = None) -> Flask:
 
         rows = summary.rows if summary else []
         sorted_rows = sorted(rows, key=lambda row: (0 if _forecast_row_risk(row) == "high" else 1, row.customer, row.product_code))
-        active_rows = [row for row in sorted_rows if row.status_label != "停用"]
-        discontinued_rows = [row for row in sorted_rows if row.status_label == "停用"]
+        active_rows = [row for row in sorted_rows if row.item_status != "discontinued"]
+        discontinued_rows = [row for row in sorted_rows if row.item_status == "discontinued"]
         visible_rows = active_rows[: forecast_config.visible_row_limit]
         rendered_rows = visible_rows + discontinued_rows
         visible_total = forecast_amount_total(visible_rows)
@@ -345,18 +345,20 @@ def create_app(config: dict | None = None) -> Flask:
                     price_quantity = float(request.form.get(f"price_quantity_{pid}") or 0)
                 except ValueError:
                     price_quantity = 0.0
-                status_label = request.form.get(f"status_label_{pid}")
+                item_status = request.form.get(f"item_status_{pid}")
+                if item_status not in {"active", "discontinued"}:
+                    item_status = "active"
                 
                 conn.execute("""
                     INSERT OR IGNORE INTO item_configs
-                    (product_code, is_excluded, is_budgeted, is_visible, price_quantity, status_label, custom_category)
-                    VALUES (?, 0, 1, 1, 0, NULL, NULL)
+                    (product_code, is_excluded, is_budgeted, is_visible, price_quantity, item_status, status_label, custom_category)
+                    VALUES (?, 0, 1, 1, 0, 'active', NULL, NULL)
                 """, (pid,))
                 conn.execute("""
                     UPDATE item_configs
-                    SET is_excluded = ?, is_budgeted = ?, is_visible = ?, price_quantity = ?, status_label = ?
+                    SET is_excluded = ?, is_budgeted = ?, is_visible = ?, price_quantity = ?, item_status = ?
                     WHERE product_code = ?
-                """, (is_excluded, is_budgeted, is_visible, price_quantity, status_label, pid))
+                """, (is_excluded, is_budgeted, is_visible, price_quantity, item_status, pid))
             conn.commit()
         return settings()
 
@@ -464,7 +466,7 @@ def _load_items_from_sales(data_base_path: Path, forecast_config: ForecastConfig
             "is_budgeted": True,
             "is_visible": True,
             "price_quantity": 0.0,
-            "status_label": "",
+            "item_status": "active",
         })
         items.append({
             "product_code": pid,
@@ -483,7 +485,7 @@ def _load_item_configs(db) -> dict[str, dict]:
                 "is_budgeted": bool(row["is_budgeted"]),
                 "is_visible": bool(row["is_visible"]),
                 "price_quantity": float(row["price_quantity"] or 0),
-                "status_label": row["status_label"]
+                "item_status": "discontinued" if row["item_status"] == "discontinued" or row["status_label"] == "停用" else "active",
             }
             for row in rows
         }

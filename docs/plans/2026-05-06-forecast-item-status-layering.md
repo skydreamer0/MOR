@@ -4,7 +4,7 @@
 
 **Goal:** Split discontinued forecast items into a collapsed section while keeping active items in the main forecast adjustment table.
 
-**Architecture:** Treat `item_configs.status_label == "停用"` as the discontinued item marker. Propagate the label onto `ForecastRow`, partition rows in the forecast route, and render discontinued rows in a lower `<details>` block inside the existing export form.
+**Architecture:** Treat `item_configs.item_status == "discontinued"` as the discontinued item marker. Propagate the status onto `ForecastRow`, partition rows in the forecast route, and render discontinued rows in a lower `<details>` block inside the existing export form.
 
 **Tech Stack:** Flask, Jinja templates, SQLite item config, pytest.
 
@@ -16,7 +16,7 @@
 - Modify: `tests/test_app.py`
 
 **Steps:**
-1. Add a route test that marks one product `status_label = "停用"`.
+1. Add a route test that marks one product `item_status = "discontinued"`.
 2. Request `/forecast`.
 3. Assert the page renders active item rows in the main table and discontinued item rows in a collapsed discontinued section with count and last-year total.
 4. Run the focused test and confirm it fails before implementation.
@@ -29,7 +29,7 @@
 - Modify: `src/backend/app.py`
 
 **Steps:**
-1. Add `status_label` to `ForecastRow`.
+1. Add `item_status` to `ForecastRow`.
 2. Populate it from `item_configs` when applying item config.
 3. Partition rendered rows into active and discontinued rows in the forecast route.
 

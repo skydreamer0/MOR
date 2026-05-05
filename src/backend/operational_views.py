@@ -279,7 +279,7 @@ def build_items_from_sales_data(data: pd.DataFrame, db) -> list[dict]:
                 "is_budgeted": True,
                 "is_visible": True,
                 "price_quantity": 0.0,
-                "status_label": "",
+                "item_status": "active",
             },
         )
         items.append(
@@ -301,7 +301,7 @@ def load_item_configs(db) -> dict[str, dict]:
             "is_budgeted": bool(row["is_budgeted"]),
             "is_visible": bool(row["is_visible"]),
             "price_quantity": float(row["price_quantity"] or 0),
-            "status_label": row["status_label"],
+            "item_status": _normalize_item_status(row["item_status"], row["status_label"]),
         }
         for row in rows
     }
@@ -406,9 +406,17 @@ def _apply_reason_and_budget(
         budget_amount=budget.target_amount,
         base_budget_quantity=budget.base_target_quantity,
         price_quantity=float(item_config.get("price_quantity") or 0),
-        status_label=str(item_config.get("status_label") or ""),
+        item_status=str(item_config.get("item_status") or "active"),
     )
     return replace(row, estimated_amount=0.0 if row.excluded else _dashboard_amount(row.final_forecast, row))
+
+
+def _normalize_item_status(item_status: object, legacy_status_label: object = "") -> str:
+    if str(item_status or "").strip() == "discontinued":
+        return "discontinued"
+    if str(legacy_status_label or "").strip() == "停用":
+        return "discontinued"
+    return "active"
 
 
 def _to_monitor_row(row: ForecastRow) -> ProductMonitorRow:
