@@ -23,6 +23,17 @@
     {% if metrics %}
     {% set rate = metrics.amount_achievement_rate %}
 
+    {# ── Data health alert (only shown when issues exist) ─── #}
+    {% if health and (health.missing_budget_row_count > 0 or health.zero_price_row_count > 0) %}
+    <section class="alert alert-info" role="alert">
+      ⚠
+      {% if health.missing_budget_row_count > 0 %}有 {{ health.missing_budget_row_count }} 列缺預算目標{% endif %}
+      {% if health.missing_budget_row_count > 0 and health.zero_price_row_count > 0 %}，{% endif %}
+      {% if health.zero_price_row_count > 0 %}有 {{ health.zero_price_row_count }} 列單價為 0{% endif %}
+      — <a href="{{ url_for('settings', year=year, month=month) }}">前往系統設定查看</a>
+    </section>
+    {% endif %}
+
     {# ── Zone 1: 目標進度 Hero ────────────────────────────── #}
     <section class="progress-hero" aria-label="目標進度">
       <div class="progress-hero-header">
@@ -188,17 +199,6 @@
         </table>
       </div>
     </section>
-
-    {# ── Data health alert (only shown when issues exist) ─── #}
-    {% if health and (health.missing_budget_row_count > 0 or health.zero_price_row_count > 0) %}
-    <section class="alert alert-info" role="alert">
-      ⚠
-      {% if health.missing_budget_row_count > 0 %}有 {{ health.missing_budget_row_count }} 列缺預算目標{% endif %}
-      {% if health.missing_budget_row_count > 0 and health.zero_price_row_count > 0 %}，{% endif %}
-      {% if health.zero_price_row_count > 0 %}有 {{ health.zero_price_row_count }} 列單價為 0{% endif %}
-      — <a href="{{ url_for('settings', year=year, month=month) }}">前往系統設定查看</a>
-    </section>
-    {% endif %}
 
     {% endif %}
   </main>

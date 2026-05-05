@@ -59,6 +59,16 @@
     </section>
 
     <form action="/items/save" method="post">
+      <div class="forecast-tools" aria-label="品項設定搜尋">
+        <label>
+          搜尋品項
+          <input type="search" data-item-search placeholder="輸入品項名稱或 ID">
+        </label>
+        <div class="filter-group">
+          <span>顯示: </span>
+          <strong data-item-visible>{{ items|length }}</strong> / {{ items|length }}
+        </div>
+      </div>
       <div class="table-wrap settings-table-wrap">
         <table class="management-table">
           <thead>
@@ -72,7 +82,7 @@
           </thead>
           <tbody>
             {% for item in items %}
-            <tr>
+            <tr data-item-row data-search="{{ item.product_name }} {{ item.product_code }}">
               <td>
                 <strong>{{ item.product_name }}</strong><br>
                 <small class="muted">ID: {{ item.product_code }}</small>
@@ -127,5 +137,7 @@
       </div>
     </form>
   </main>
+
+  <script src="{{ url_for('static', filename='js/item-settings.js') }}"></script>
 </body>
 </html>

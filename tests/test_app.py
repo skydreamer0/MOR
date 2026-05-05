@@ -42,6 +42,17 @@ def test_homepage_loads_dashboard():
     assert 'href="/forecast"' in html
 
 
+def test_homepage_data_health_alert_appears_before_progress_hero():
+    client = _client()
+
+    response = client.get("/")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert 'class="alert alert-info"' in html
+    assert html.index('class="alert alert-info"') < html.index('class="progress-hero"')
+
+
 def test_forecast_page_renders_forecast_review_assets_and_tools():
     client = _client()
 
@@ -250,6 +261,17 @@ def test_forecast_page_renders_review_validation_and_accessibility_hooks():
     assert "人工數量必須是 0 以上的數字" in html
 
 
+def test_forecast_rows_expose_dashboard_jump_anchor():
+    client = _client()
+
+    response = client.get("/forecast")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    row_id = re.search(r'data-row-id="([^"]+)"', html).group(1)
+    assert f'id="row-{row_id}"' in html
+
+
 def test_static_assets_define_invalid_row_validation_behavior():
     css = Path("static/css/mor.css").read_text(encoding="utf-8")
     js = Path("static/js/forecast-table.js").read_text(encoding="utf-8")
@@ -405,6 +427,38 @@ def test_items_route_redirects_to_settings():
 
     assert response.status_code == 302
     assert response.headers["Location"].endswith("/settings")
+
+
+def test_settings_page_exposes_item_search_tools(monkeypatch):
+    db_base_path = _isolated_db_base()
+    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
+    columns = config.required_columns
+    data = pd.DataFrame(
+        [
+            {
+                columns[0]: 2026,
+                columns[1]: 4,
+                columns[2]: 10,
+                columns[3]: "Hospital A",
+                columns[4]: "P1",
+                columns[5]: "Product One",
+                columns[6]: 3,
+                columns[7]: 100,
+            }
+        ]
+    )
+    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config: data)
+    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
+
+    response = client.get("/settings")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert 'src="/static/js/item-settings.js"' in html
+    assert "data-item-search" in html
+    assert "data-item-visible" in html
+    assert re.search(r'data-item-row[^>]+data-search="[^"]*Product One[^"]*P1', html)
 
 
 def test_export_rejects_unknown_review_row_id_without_workbook():

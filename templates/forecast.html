@@ -129,6 +129,7 @@
           <tbody>
             {% for row in rows %}
             <tr
+              id="row-{{ row.row_id }}"
               data-row
               data-row-id="{{ row.row_id }}"
               data-status="{{ 'auto' if row.auto_in_month else 'not_due' }}"

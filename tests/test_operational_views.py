@@ -6,9 +6,11 @@ import pandas as pd
 from src.backend.forecast_models import ForecastRow, ForecastSummary
 from src.backend.operational_views import (
     BudgetTarget,
+    build_customer_risk_ranking,
     build_dashboard_metrics,
     build_data_health_summary,
     build_product_monitor_rows,
+    build_status_distribution,
 )
 
 
@@ -230,6 +232,128 @@ def test_product_monitor_rows_classify_yoy_drop_statuses_and_notes():
     assert by_product["P2"].status == "輕微下滑"
     assert by_product["P3"].status == "正常/成長"
     assert by_product["P4"].status == "無去年同期"
+
+
+def test_status_distribution_counts_monitor_rows_by_status():
+    monitor_rows = build_product_monitor_rows(
+        [
+            _row(
+                row_id="A__P1",
+                customer="A",
+                product_code="P1",
+                product_name="High Risk",
+                last_year=100,
+                last_month=80,
+                current=20,
+                final=80,
+                budget=100,
+                price=10,
+            ),
+            _row(
+                row_id="B__P2",
+                customer="B",
+                product_code="P2",
+                product_name="Slight",
+                last_year=100,
+                last_month=95,
+                current=70,
+                final=95,
+                budget=100,
+                price=10,
+            ),
+            _row(
+                row_id="C__P3",
+                customer="C",
+                product_code="P3",
+                product_name="Growth",
+                last_year=100,
+                last_month=100,
+                current=100,
+                final=110,
+                budget=100,
+                price=10,
+            ),
+            _row(
+                row_id="D__P4",
+                customer="D",
+                product_code="P4",
+                product_name="No History",
+                last_year=0,
+                last_month=0,
+                current=2,
+                final=4,
+                budget=5,
+                price=10,
+            ),
+        ]
+    )
+
+    dist = build_status_distribution(monitor_rows)
+
+    assert dist == {"high": 1, "slight": 1, "ok": 1, "no_history": 1}
+    assert sum(dist.values()) == len(monitor_rows)
+
+
+def test_customer_risk_ranking_aggregates_high_and_slight_rows_by_amount_gap():
+    monitor_rows = build_product_monitor_rows(
+        [
+            _row(
+                row_id="A__P1",
+                customer="Customer A",
+                product_code="P1",
+                product_name="High Risk",
+                last_year=100,
+                last_month=80,
+                current=20,
+                final=80,
+                budget=100,
+                price=10,
+            ),
+            _row(
+                row_id="A__P2",
+                customer="Customer A",
+                product_code="P2",
+                product_name="Slight",
+                last_year=100,
+                last_month=95,
+                current=60,
+                final=95,
+                budget=100,
+                price=20,
+            ),
+            _row(
+                row_id="B__P3",
+                customer="Customer B",
+                product_code="P3",
+                product_name="High Risk",
+                last_year=200,
+                last_month=150,
+                current=60,
+                final=150,
+                budget=200,
+                price=30,
+            ),
+            _row(
+                row_id="C__P4",
+                customer="Customer C",
+                product_code="P4",
+                product_name="Growth",
+                last_year=100,
+                last_month=100,
+                current=100,
+                final=120,
+                budget=100,
+                price=100,
+            ),
+        ]
+    )
+
+    ranking = build_customer_risk_ranking(monitor_rows, top_n=2)
+
+    assert [item.customer for item in ranking] == ["Customer B", "Customer A"]
+    assert [item.gap_amount for item in ranking] == [-1500, -300]
+    assert [item.gap_quantity for item in ranking] == [-50, -25]
+    assert [item.item_count for item in ranking] == [1, 2]
 
 
 def test_data_health_summary_reports_source_coverage_and_row_anomalies():
