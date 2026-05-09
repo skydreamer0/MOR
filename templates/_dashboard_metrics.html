@@ -88,9 +88,9 @@
         <strong class="dist-count danger-text">{{ status_dist.high }}</strong>
       </div>
       <div class="dist-item">
-        <span class="dist-dot dist-dot-slight"></span>
-        <span class="dist-label">輕微下滑</span>
-        <strong class="dist-count dist-count--slight">{{ status_dist.slight }}</strong>
+        <span class="dist-dot dist-dot-caution"></span>
+        <span class="dist-label">注意</span>
+        <strong class="dist-count dist-count--caution">{{ status_dist.caution }}</strong>
       </div>
       <div class="dist-item">
         <span class="dist-dot dist-dot-ok"></span>
@@ -105,7 +105,7 @@
     </div>
     <div class="dist-total">
       <span>品項總數</span>
-      <strong>{{ status_dist.high + status_dist.slight + status_dist.ok + status_dist.no_history }}</strong>
+      <strong>{{ status_dist.high + status_dist.caution + status_dist.ok + status_dist.no_history }}</strong>
     </div>
   </div>
 

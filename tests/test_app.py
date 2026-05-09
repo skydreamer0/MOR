@@ -401,11 +401,11 @@ def test_templates_use_shared_head_assets_and_no_static_inline_layout():
     assert 'style="display:flex;gap:8px;align-items:center;"' not in dashboard_partial
     assert 'style="color: var(--muted);"' not in items_template
 
-    assert "dist-count--slight" in dashboard_partial
+    assert "dist-count--caution" in dashboard_partial
     assert "empty-note" in dashboard_partial
     assert "section-actions" in dashboard_partial
     assert "item-code" in items_template
-    assert ".dist-count--slight" in css
+    assert ".dist-count--caution" in css
     assert ".empty-note" in css
     assert ".section-actions" in css
     assert ".item-code" in css
@@ -1001,10 +1001,10 @@ def test_product_monitor_page_renders_drop_table(monkeypatch):
 
     assert response.status_code == 200
     assert "產品跳單監控" in html
-    assert "去年同期" in html
     assert "狀態" in html
-    assert "跌幅" in html
-    assert "金額影響" in html
+    assert "去年成長率" in html
+    assert "預算達成率" in html
+    assert "週期狀態" in html
     assert "高風險" in html
     assert html.index("monitor-sticky--status") < html.index("monitor-sticky--customer")
     assert html.index("monitor-sticky--customer") < html.index("monitor-sticky--product")

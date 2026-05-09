@@ -225,7 +225,7 @@ def test_product_monitor_rows_classify_yoy_drop_statuses_and_notes():
             row_id="B__P2",
             customer="B",
             product_code="P2",
-            product_name="Slight",
+            product_name="Caution",        # formerly "Slight", now "注意"
             last_year=100,
             last_month=95,
             current=60,
@@ -254,7 +254,7 @@ def test_product_monitor_rows_classify_yoy_drop_statuses_and_notes():
             last_month=0,
             current=3,
             final=6,
-            budget=5,
+            budget=0,   # no budget → truly no comparison data → no_history
             price=10,
         ),
     ]
@@ -263,11 +263,14 @@ def test_product_monitor_rows_classify_yoy_drop_statuses_and_notes():
     by_product = {row.product_code: row for row in monitor_rows}
 
     assert by_product["P1"].status == "高風險"
+    assert by_product["P1"].status_key == "high"
     assert by_product["P1"].diff_quantity == -11
     assert by_product["P1"].note == "Call buyer"
-    assert by_product["P2"].status == "輕微下滑"
+    assert by_product["P2"].status == "注意"
+    assert by_product["P2"].status_key == "caution"
     assert by_product["P3"].status == "正常/成長"
     assert by_product["P4"].status == "無去年同期"
+    assert by_product["P4"].status_key == "no_history"
 
 
 def test_status_distribution_counts_monitor_rows_by_status():
@@ -289,7 +292,7 @@ def test_status_distribution_counts_monitor_rows_by_status():
                 row_id="B__P2",
                 customer="B",
                 product_code="P2",
-                product_name="Slight",
+                product_name="Caution",
                 last_year=100,
                 last_month=95,
                 current=70,
@@ -318,7 +321,7 @@ def test_status_distribution_counts_monitor_rows_by_status():
                 last_month=0,
                 current=2,
                 final=4,
-                budget=5,
+                budget=0,   # no budget → no_history
                 price=10,
             ),
         ]
@@ -326,7 +329,7 @@ def test_status_distribution_counts_monitor_rows_by_status():
 
     dist = build_status_distribution(monitor_rows)
 
-    assert dist == {"high": 1, "slight": 1, "ok": 1, "no_history": 1}
+    assert dist == {"high": 1, "caution": 1, "ok": 1, "no_history": 1}
     assert sum(dist.values()) == len(monitor_rows)
 
 
@@ -467,3 +470,143 @@ def test_product_monitor_current_quantity_prefers_daily_actual_lookup():
     monitor_rows = build_product_monitor_rows([row], daily_actuals=actuals)
 
     assert monitor_rows[0].current_quantity == 12
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: 3-axis status logic
+# ---------------------------------------------------------------------------
+
+from src.backend.operational_views import _three_axis_status, _cycle_status_info
+
+
+def test_three_axis_status_high_risk_from_yoy():
+    status, key = _three_axis_status(
+        yoy_rate=0.85, bud_rate=1.1, cycle_high=False, cycle_caution=False,
+        last_year_qty=100, budget_qty=100,
+    )
+    assert key == "high"
+    assert status == "高風險"
+
+
+def test_three_axis_status_high_risk_from_budget():
+    status, key = _three_axis_status(
+        yoy_rate=1.05, bud_rate=0.80, cycle_high=False, cycle_caution=False,
+        last_year_qty=100, budget_qty=100,
+    )
+    assert key == "high"
+
+
+def test_three_axis_status_high_risk_from_cycle():
+    status, key = _three_axis_status(
+        yoy_rate=1.05, bud_rate=1.05, cycle_high=True, cycle_caution=False,
+        last_year_qty=100, budget_qty=100,
+    )
+    assert key == "high"
+
+
+def test_three_axis_status_caution_from_yoy():
+    status, key = _three_axis_status(
+        yoy_rate=0.95, bud_rate=1.05, cycle_high=False, cycle_caution=False,
+        last_year_qty=100, budget_qty=100,
+    )
+    assert key == "caution"
+    assert status == "注意"
+
+
+def test_three_axis_status_caution_from_cycle():
+    status, key = _three_axis_status(
+        yoy_rate=1.1, bud_rate=1.1, cycle_high=False, cycle_caution=True,
+        last_year_qty=100, budget_qty=100,
+    )
+    assert key == "caution"
+
+
+def test_three_axis_status_ok():
+    status, key = _three_axis_status(
+        yoy_rate=1.05, bud_rate=1.10, cycle_high=False, cycle_caution=False,
+        last_year_qty=100, budget_qty=100,
+    )
+    assert key == "ok"
+    assert status == "正常/成長"
+
+
+def test_three_axis_status_no_history_when_no_comparison_data():
+    status, key = _three_axis_status(
+        yoy_rate=None, bud_rate=None, cycle_high=False, cycle_caution=False,
+        last_year_qty=0, budget_qty=0,
+    )
+    assert key == "no_history"
+
+
+def test_three_axis_status_with_budget_only_is_not_no_history():
+    # Has budget data → should evaluate on budget axis, not fall into no_history
+    status, key = _three_axis_status(
+        yoy_rate=None, bud_rate=1.2, cycle_high=False, cycle_caution=False,
+        last_year_qty=0, budget_qty=100,
+    )
+    assert key == "ok"
+
+
+def test_cycle_status_delayed():
+    cs, high, caution = _cycle_status_info(days_since=50, cycle_days=40)
+    assert cs == "delayed"
+    assert high is True
+    assert caution is False
+
+
+def test_cycle_status_approaching():
+    cs, high, caution = _cycle_status_info(days_since=33, cycle_days=40)
+    assert cs == "approaching"
+    assert high is False
+    assert caution is True
+
+
+def test_cycle_status_ok():
+    cs, high, caution = _cycle_status_info(days_since=20, cycle_days=40)
+    assert cs == "ok"
+    assert high is False
+    assert caution is False
+
+
+def test_cycle_status_no_cycle_when_none():
+    cs, high, caution = _cycle_status_info(days_since=None, cycle_days=None)
+    assert cs == "no_cycle"
+    assert high is False
+
+
+def test_monitor_row_cycle_delay_forces_high_risk():
+    """A row with good YoY and budget but overdue cycle → 高風險."""
+    row = _row(
+        row_id="A__P1",
+        customer="A",
+        product_code="P1",
+        product_name="Overdue",
+        last_year=100,
+        last_month=90,
+        current=50,
+        final=105,  # yoy 105% and budget 105% — both fine
+        budget=100,
+        price=10,
+    )
+    # Simulate 60 workdays since last order with avg cycle of 40 days → 60 > 40*1.2=48 → delayed
+    from src.backend.forecast_models import replace as dreplace
+    row = dreplace(row, cycle_days=40)
+
+    # Build a workday_set that puts 60 days between order_date (2026-04-20) and today
+    from datetime import date, timedelta
+    today = date(2026, 6, 30)
+    order_date = date(2026, 4, 20)
+    # Mon–Fri workdays between 2026-04-21 and 2026-06-30
+    workday_set = frozenset(
+        order_date + timedelta(days=i)
+        for i in range(1, (today - order_date).days + 1)
+        if (order_date + timedelta(days=i)).weekday() < 5
+    )
+
+    from src.backend.operational_views import _to_monitor_row
+    monitor_row = _to_monitor_row(row, workday_set=workday_set, today=today)
+
+    assert monitor_row.cycle_status == "delayed"
+    assert monitor_row.status_key == "high"
+    assert monitor_row.days_since_last_shipment_workdays is not None
+    assert monitor_row.days_since_last_shipment_workdays > 48

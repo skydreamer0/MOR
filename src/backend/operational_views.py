@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Iterable, Mapping
 
@@ -15,9 +15,14 @@ from src.backend.forecast_engine import ForecastOptions, apply_user_adjustments,
 from src.backend.forecast_models import ForecastRow, ForecastSummary, ForecastTarget
 from src.backend.history_service import enrich_rows_with_history
 from src.backend.web.form_parser import parse_target_period
+from src.backend.workday_calendar import ensure_calendar_year
 
 
 DROP_RISK_THRESHOLD = 0.9
+
+# Phase 3 thresholds for cycle-delay risk
+_CYCLE_HIGH_MULTIPLIER = 1.2
+_CYCLE_CAUTION_MULTIPLIER = 0.8
 
 
 @dataclass(frozen=True)
@@ -59,6 +64,15 @@ class ProductMonitorRow:
     note: str
     latest_price: float = 0.0
     amount_impact: float = 0.0
+    # Phase 3: new monitoring axes
+    latest_order_date: date | None = None
+    days_since_last_shipment_workdays: int | None = None
+    estimated_eom_qty: float = 0.0         # system forecast (Phase 4 refines this)
+    yoy_growth_rate: float | None = None   # final_forecast / last_year (ratio)
+    budget_achievement_rate: float | None = None  # final_forecast / budget (ratio)
+    cycle_status: str = "no_cycle"         # "delayed" | "approaching" | "ok" | "no_cycle"
+    cycle_days: int | None = None
+    budget_quantity: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -142,12 +156,14 @@ def build_forecast_page_context(
 
     budget_months = list_budget_months(db)
     daily_actuals = fetch_daily_actuals_by_row_id(db, target.year, target.month)
+    today = date.today()
+    ensure_calendar_year(db, today.year)
     return ForecastPageContext(
         target=target,
         sales_data=data,
         summary=summary,
         dashboard=build_dashboard_metrics(summary.rows, budget_targets.values()),
-        monitor_rows=build_product_monitor_rows(summary.rows, daily_actuals=daily_actuals),
+        monitor_rows=build_product_monitor_rows(summary.rows, daily_actuals=daily_actuals, db=db, today=today),
         health=build_data_health_summary(data, summary, budget_months),
         items=build_items_from_sales_data(data, db),
     )
@@ -244,13 +260,25 @@ def _latest_price_quantity(row: ForecastRow) -> float:
 def build_product_monitor_rows(
     rows: Iterable[ForecastRow],
     daily_actuals: Mapping[str, DailyActualAggregate] | None = None,
+    db=None,
+    today: date | None = None,
 ) -> list[ProductMonitorRow]:
+    today = today or date.today()
     actuals = daily_actuals or {}
-    monitor_rows = [_to_monitor_row(row, actuals.get(row.row_id)) for row in rows if not row.excluded]
-    status_order = {"high": 0, "slight": 1, "ok": 2, "no_history": 3}
+    workday_set = _fetch_workday_set(db, today - timedelta(days=400), today) if db is not None else None
+    monitor_rows = [
+        _to_monitor_row(row, actuals.get(row.row_id), workday_set, today)
+        for row in rows if not row.excluded
+    ]
+    status_order = {"high": 0, "caution": 1, "ok": 2, "no_history": 3}
     return sorted(
         monitor_rows,
-        key=lambda row: (status_order[row.status_key], row.diff_quantity, row.customer, row.product_code),
+        key=lambda r: (
+            status_order.get(r.status_key, 3),
+            r.budget_achievement_rate if r.budget_achievement_rate is not None else float("inf"),
+            r.yoy_growth_rate if r.yoy_growth_rate is not None else float("inf"),
+            -(r.days_since_last_shipment_workdays or 0),
+        ),
     )
 
 
@@ -493,27 +521,100 @@ def _normalize_item_status(item_status: object, legacy_status_label: object = ""
     return "active"
 
 
-def _to_monitor_row(row: ForecastRow, actual: DailyActualAggregate | None = None) -> ProductMonitorRow:
-    diff_quantity = row.final_forecast - row.last_year_same_month_qty
-    if row.last_year_same_month_qty <= 0:
-        status = "無去年同期"
-        status_key = "no_history"
-        drop_rate = None
-    else:
-        drop_rate = diff_quantity / row.last_year_same_month_qty * 100
-        if row.final_forecast < row.last_year_same_month_qty * DROP_RISK_THRESHOLD:
-            status = "高風險"
-            status_key = "high"
-        elif row.final_forecast < row.last_year_same_month_qty:
-            status = "輕微下滑"
-            status_key = "slight"
-        else:
-            status = "正常/成長"
-            status_key = "ok"
+def _fetch_workday_set(db, start: date, end: date) -> frozenset[date]:
+    """One DB query → frozenset of workday dates; falls back to Mon–Fri when coverage is incomplete."""
+    iso_start, iso_end = start.isoformat(), end.isoformat()
+    with db.get_connection() as conn:
+        rows = conn.execute(
+            "SELECT date, is_workday FROM workday_calendar WHERE date >= ? AND date <= ?",
+            (iso_start, iso_end),
+        ).fetchall()
+    total_days = (end - start).days + 1
+    if len(rows) >= total_days:
+        return frozenset(date.fromisoformat(row["date"]) for row in rows if row["is_workday"])
+    # Fallback: Mon–Fri
+    return frozenset(
+        start + timedelta(days=i)
+        for i in range(total_days)
+        if (start + timedelta(days=i)).weekday() < 5
+    )
 
-    amount_impact = _dashboard_amount(diff_quantity, row)
-    # Prefer imported daily actuals over the sales-history this_year figure when available
+
+def _days_since_order(workday_set: frozenset[date], order_date: date, today: date) -> int:
+    """Count workdays strictly after order_date up to and including today."""
+    return sum(1 for d in workday_set if order_date < d <= today)
+
+
+def _cycle_status_info(days_since: int | None, cycle_days: int | None) -> tuple[str, bool, bool]:
+    """Return (cycle_status_key, is_high_risk, is_caution)."""
+    if days_since is None or cycle_days is None or cycle_days <= 0:
+        return "no_cycle", False, False
+    if days_since > cycle_days * _CYCLE_HIGH_MULTIPLIER:
+        return "delayed", True, False
+    if days_since >= cycle_days * _CYCLE_CAUTION_MULTIPLIER:
+        return "approaching", False, True
+    return "ok", False, False
+
+
+def _three_axis_status(
+    yoy_rate: float | None,
+    bud_rate: float | None,
+    cycle_high: bool,
+    cycle_caution: bool,
+    last_year_qty: float,
+    budget_qty: float,
+) -> tuple[str, str]:
+    """Derive (status_display, status_key) from the three monitoring axes."""
+    has_comparison = last_year_qty > 0 or budget_qty > 0
+    if not has_comparison and not cycle_high and not cycle_caution:
+        return "無去年同期", "no_history"
+
+    if (
+        (yoy_rate is not None and yoy_rate < DROP_RISK_THRESHOLD)
+        or (bud_rate is not None and bud_rate < DROP_RISK_THRESHOLD)
+        or cycle_high
+    ):
+        return "高風險", "high"
+
+    if (
+        (yoy_rate is not None and yoy_rate < 1.0)
+        or (bud_rate is not None and bud_rate < 1.0)
+        or cycle_caution
+    ):
+        return "注意", "caution"
+
+    return "正常/成長", "ok"
+
+
+def _to_monitor_row(
+    row: ForecastRow,
+    actual: DailyActualAggregate | None = None,
+    workday_set: frozenset[date] | None = None,
+    today: date | None = None,
+) -> ProductMonitorRow:
+    today = today or date.today()
+    # Prefer daily actuals (Phase 1) over historical this_year figure
     current_quantity = actual.actual_quantity if actual is not None else row.this_year_same_month_qty
+
+    # Workday distance since last shipment
+    days_since: int | None = None
+    if workday_set is not None and row.latest_order_date:
+        days_since = _days_since_order(workday_set, row.latest_order_date, today)
+
+    # Rate computations (using final_forecast as the expected EOMonth quantity)
+    yoy_rate = (row.final_forecast / row.last_year_same_month_qty) if row.last_year_same_month_qty > 0 else None
+    bud_rate = (row.final_forecast / row.budget_quantity) if row.budget_quantity > 0 else None
+
+    cycle_status_key, cycle_high, cycle_caution = _cycle_status_info(days_since, row.cycle_days)
+    status, status_key = _three_axis_status(
+        yoy_rate, bud_rate, cycle_high, cycle_caution,
+        row.last_year_same_month_qty, row.budget_quantity,
+    )
+
+    diff_quantity = row.final_forecast - row.last_year_same_month_qty
+    drop_rate = (diff_quantity / row.last_year_same_month_qty * 100) if row.last_year_same_month_qty > 0 else None
+    amount_impact = _dashboard_amount(diff_quantity, row)
+
     return ProductMonitorRow(
         customer=row.customer,
         product_code=row.product_code,
@@ -529,11 +630,19 @@ def _to_monitor_row(row: ForecastRow, actual: DailyActualAggregate | None = None
         note=row.adjustment_reason or "",
         latest_price=row.latest_price,
         amount_impact=amount_impact,
+        latest_order_date=row.latest_order_date,
+        days_since_last_shipment_workdays=days_since,
+        estimated_eom_qty=row.system_forecast,
+        yoy_growth_rate=yoy_rate,
+        budget_achievement_rate=bud_rate,
+        cycle_status=cycle_status_key,
+        cycle_days=row.cycle_days,
+        budget_quantity=row.budget_quantity,
     )
 
 
 def build_status_distribution(monitor_rows: list[ProductMonitorRow]) -> dict[str, int]:
-    dist = {"high": 0, "slight": 0, "ok": 0, "no_history": 0}
+    dist = {"high": 0, "caution": 0, "ok": 0, "no_history": 0}
     for row in monitor_rows:
         if row.status_key in dist:
             dist[row.status_key] += 1
@@ -546,7 +655,7 @@ def build_customer_risk_ranking(
 ) -> list[CustomerRiskItem]:
     customer_gaps: dict[str, dict] = {}
     for row in monitor_rows:
-        if row.status_key not in ("high", "slight"):
+        if row.status_key not in ("high", "caution"):
             continue
         if row.customer not in customer_gaps:
             customer_gaps[row.customer] = {"gap_amount": 0.0, "gap_quantity": 0.0, "item_count": 0}
