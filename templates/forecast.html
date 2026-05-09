@@ -18,7 +18,7 @@
   {% set show_period_toolbar = true %}
   {% include "_header.html" %}
 
-  <main>
+  <main class="forecast-main">
     {% if error_message %}
       <section class="alert" role="alert">{{ error_message }}</section>
     {% endif %}
@@ -212,17 +212,33 @@
       });
     }
 
-    // 捲動時收合 summary
+    // 填滿視窗高度（扣掉 sticky header）
     (function () {
-      const summary = document.querySelector('.summary');
-      if (!summary) return;
-      const sentinel = document.createElement('div');
-      sentinel.style.cssText = 'height:1px;margin-top:-1px;';
-      summary.after(sentinel);
-      const obs = new IntersectionObserver((entries) => {
-        summary.classList.toggle('summary--collapsed', !entries[0].isIntersecting);
-      }, { rootMargin: '-52px 0px 0px 0px' }); // 52px = 大約 header 高度
-      obs.observe(sentinel);
+      const header = document.querySelector('header');
+      const main   = document.querySelector('.forecast-main');
+      if (!header || !main) return;
+      function resize() {
+        main.style.height = (window.innerHeight - header.offsetHeight) + 'px';
+      }
+      resize();
+      window.addEventListener('resize', resize);
+    })();
+
+    // 捲動 table-wrap 時收合 summary（單向鎖定，無中間態）
+    (function () {
+      const summary   = document.querySelector('.summary');
+      const tableWrap = document.querySelector('.table-wrap');
+      if (!summary || !tableWrap) return;
+      let isCollapsed = false;
+      tableWrap.addEventListener('scroll', () => {
+        if (!isCollapsed && tableWrap.scrollTop > 10) {
+          isCollapsed = true;
+          summary.classList.add('summary--collapsed');
+        } else if (isCollapsed && tableWrap.scrollTop === 0) {
+          isCollapsed = false;
+          summary.classList.remove('summary--collapsed');
+        }
+      }, { passive: true });
     })();
   </script>
 </body>

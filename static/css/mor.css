@@ -267,6 +267,27 @@ main {
   max-width: 100%;
 }
 
+/* ── Forecast page fills the full viewport height ───────────── */
+.forecast-main {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: var(--sp-3);
+  /* height set via JS to exactly fill below the sticky header */
+}
+
+.forecast-main > form#forecast-form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.forecast-main .table-wrap {
+  flex: 1;
+  min-height: 240px;
+  max-height: none;
+}
+
 .alert, .empty-state {
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
@@ -857,6 +878,12 @@ input.qty:focus {
 }
 
 
+/* ── Product abbreviation cell ──────────────────────────────── */
+.cell-product {
+  white-space: nowrap;
+  cursor: default;
+}
+
 /* ── Sparkline cell ─────────────────────────────────────────── */
 .sparkline-cell {
   padding: 4px var(--sp-2);
@@ -902,6 +929,12 @@ th.col-group-end + th {
 tbody td:nth-child(9),
 tbody td:nth-child(13) {
   border-left: 2px solid var(--line);
+}
+
+/* 品項欄固定窄寬，只顯示三字縮寫 */
+.forecast-table th:nth-child(3),
+.forecast-table td:nth-child(3) {
+  width: 44px;
 }
 
 thead th:nth-child(9),
