@@ -360,6 +360,7 @@ def create_app(config: dict | None = None) -> Flask:
                     WHERE product_code = ?
                 """, (is_excluded, is_budgeted, is_visible, price_quantity, item_status, pid))
             conn.commit()
+        cache.clear()
         return settings()
 
     @app.get("/exclusions")

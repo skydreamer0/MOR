@@ -399,6 +399,8 @@ def _apply_reason_and_budget(
 ) -> ForecastRow:
     budget = budget_targets.get(row.row_id, BudgetTarget(0.0, 0.0))
     item_config = item_configs.get(row.product_code, {})
+    if not item_config.get("is_budgeted", True):
+        budget = BudgetTarget(0.0, 0.0)
     row = replace(
         row,
         adjustment_reason=adjustment_reasons.get(row.row_id, row.adjustment_reason),

@@ -512,6 +512,89 @@ def test_item_settings_save_price_quantity_and_forecast_uses_it(monkeypatch):
     assert 'data-price=' in forecast
 
 
+def test_item_settings_save_clears_forecast_context_cache(monkeypatch):
+    db_base_path = _isolated_db_base()
+    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
+    columns = config.required_columns
+    data = pd.DataFrame(
+        [
+            {
+                columns[0]: 2026,
+                columns[1]: month,
+                columns[2]: 10,
+                columns[3]: "Hospital A",
+                columns[4]: "P1",
+                columns[5]: "Product One",
+                columns[6]: 100,
+                columns[7]: 1000,
+            }
+            for month in (1, 2, 3)
+        ]
+    )
+    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config: data)
+    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
+
+    first_forecast = client.get("/forecast?year=2026&month=4").get_data(as_text=True)
+    response = client.post(
+        "/items/save",
+        data={
+            "product_codes": ["P1"],
+            "is_budgeted_P1": "1",
+        },
+    )
+    second_forecast = client.get("/forecast?year=2026&month=4").get_data(as_text=True)
+
+    assert "Product One" in first_forecast
+    assert response.status_code == 200
+    assert "Product One" not in second_forecast
+
+
+def test_unbudgeted_item_has_no_budget_target_on_forecast_page(monkeypatch):
+    db_base_path = _isolated_db_base()
+    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
+    columns = config.required_columns
+    data = pd.DataFrame(
+        [
+            {
+                columns[0]: 2026,
+                columns[1]: month,
+                columns[2]: 10,
+                columns[3]: "Hospital A",
+                columns[4]: "P1",
+                columns[5]: "Product One",
+                columns[6]: 100,
+                columns[7]: 1000,
+            }
+            for month in (1, 2, 3)
+        ]
+    )
+    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config: data)
+    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
+    with sqlite3.connect(db_base_path / "mor_workbench.db") as conn:
+        conn.execute(
+            """
+            INSERT INTO budget_targets
+            (year, month, customer_name, product_code, target_quantity, target_amount, base_target_quantity)
+            VALUES (2026, 4, 'Hospital A', 'P1', 300, 3000, 1)
+            """
+        )
+        conn.commit()
+
+    response = client.post(
+        "/items/save",
+        data={
+            "product_codes": ["P1"],
+            "is_visible_P1": "1",
+        },
+    )
+    forecast = client.get("/forecast?year=2026&month=4").get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert 'data-budget="0.0"' in forecast
+
+
 def test_adjustment_save_migrates_old_database_without_updated_by():
     db_base_path = _isolated_db_base()
     db_path = db_base_path / "mor_workbench.db"
