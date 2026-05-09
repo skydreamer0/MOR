@@ -18,80 +18,104 @@
   {% set show_period_toolbar = true %}
   {% include "_header.html" %}
 
-  <main>
+  <main class="monitor-main">
     {% if error_message %}
       <section class="alert" role="alert">{{ error_message }}</section>
     {% endif %}
 
-    <section class="dashboard-heading">
-      <div>
-        <h2>產品跳單監控頁</h2>
-        <p>以去年同期為主基準，預估月底低於去年同期 10% 以上列為高風險。</p>
+    <section class="monitor-workspace" aria-labelledby="monitor-title">
+      <div class="monitor-toolbar" aria-label="跳單監控工具">
+        <div class="monitor-toolbar__title">
+          <h2 id="monitor-title">跳單明細</h2>
+          <span><strong data-monitor-visible>{{ rows|length }}</strong> / {{ rows|length }} 筆</span>
+        </div>
+        <label>
+          搜尋
+          <input type="search" data-monitor-search placeholder="客戶、品項、ID">
+        </label>
+        <label>
+          狀態
+          <select data-monitor-status>
+            <option value="all">全部</option>
+            <option value="high">高風險</option>
+            <option value="slight">輕微下滑</option>
+            <option value="ok">正常/成長</option>
+            <option value="no_history">無去年同期</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="table-wrap monitor-table-wrap">
+        <table class="monitor-table">
+          <thead>
+            <tr>
+              <th class="monitor-sticky monitor-sticky--customer">客戶</th>
+              <th class="monitor-sticky monitor-sticky--product">品項</th>
+              <th>狀態</th>
+              <th class="num">去年同期</th>
+              <th class="num">上月</th>
+              <th class="num">本月目前</th>
+              <th class="num">預估月底</th>
+              <th class="num">差異數量</th>
+              <th class="num">跌幅</th>
+              <th class="num">金額影響</th>
+              <th>追蹤備註</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+            <tr data-monitor-row data-status="{{ row.status_key }}" data-search="{{ row.customer }} {{ row.product_name }} {{ row.product_code }}">
+              <td class="monitor-sticky monitor-sticky--customer">{{ row.customer }}</td>
+              <td class="monitor-sticky monitor-sticky--product">
+                <strong>{{ row.product_name }}</strong>
+                <small class="muted">ID: {{ row.product_code }}</small>
+              </td>
+              <td><span class="badge status-{{ row.status_key }}">{{ row.status }}</span></td>
+              <td class="num">{{ "{:,.0f}".format(row.last_year_quantity) }}</td>
+              <td class="num">{{ "{:,.0f}".format(row.last_month_quantity) }}</td>
+              <td class="num">{{ "{:,.0f}".format(row.current_quantity) }}</td>
+              <td class="num">{{ "{:,.0f}".format(row.forecast_quantity) }}</td>
+              <td class="num">
+                <span class="gap-value {% if row.diff_quantity < 0 %}negative{% elif row.diff_quantity > 0 %}positive{% endif %}">
+                  {{ "{:+,.0f}".format(row.diff_quantity) }}
+                </span>
+              </td>
+              <td class="num">
+                {% if row.drop_rate is none %}
+                  <span class="muted">-</span>
+                {% else %}
+                  <span class="gap-value {% if row.drop_rate < 0 %}negative{% elif row.drop_rate > 0 %}positive{% endif %}">
+                    {{ "{:+.1f}%".format(row.drop_rate) }}
+                  </span>
+                {% endif %}
+              </td>
+              <td class="num">
+                <span class="gap-value {% if row.amount_impact < 0 %}negative{% elif row.amount_impact > 0 %}positive{% endif %}">
+                  {{ "{:+,.0f}".format(row.amount_impact) }}
+                </span>
+              </td>
+              <td class="monitor-note">{{ row.note or "" }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
       </div>
     </section>
-
-    <div class="forecast-tools" aria-label="跳單監控工具">
-      <label>
-        搜尋客戶或品項
-        <input type="search" data-monitor-search placeholder="輸入客戶或品項名稱">
-      </label>
-      <label>
-        跳單狀態
-        <select data-monitor-status>
-          <option value="all">全部</option>
-          <option value="high">高風險</option>
-          <option value="slight">輕微下滑</option>
-          <option value="ok">正常/成長</option>
-          <option value="no_history">無去年同期</option>
-        </select>
-      </label>
-      <div class="filter-group">
-        <span>顯示: </span>
-        <strong data-monitor-visible>{{ rows|length }}</strong> / {{ rows|length }}
-      </div>
-    </div>
-
-    <div class="table-wrap monitor-table-wrap">
-      <table class="monitor-table">
-        <thead>
-          <tr>
-            <th>客戶</th>
-            <th>品項</th>
-            <th class="num">去年同期數量</th>
-            <th class="num">上月數量</th>
-            <th class="num">本月目前數量</th>
-            <th class="num">預估月底數量</th>
-            <th class="num">差異數量</th>
-            <th>跳單狀態</th>
-            <th>追蹤備註</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for row in rows %}
-          <tr data-monitor-row data-status="{{ row.status_key }}" data-search="{{ row.customer }} {{ row.product_name }} {{ row.product_code }}">
-            <td>{{ row.customer }}</td>
-            <td>
-              <strong>{{ row.product_name }}</strong><br>
-              <small class="muted">ID: {{ row.product_code }}</small>
-            </td>
-            <td class="num">{{ "{:,.0f}".format(row.last_year_quantity) }}</td>
-            <td class="num">{{ "{:,.0f}".format(row.last_month_quantity) }}</td>
-            <td class="num">{{ "{:,.0f}".format(row.current_quantity) }}</td>
-            <td class="num">{{ "{:,.0f}".format(row.forecast_quantity) }}</td>
-            <td class="num">
-              <span class="gap-value {% if row.diff_quantity < 0 %}negative{% elif row.diff_quantity > 0 %}positive{% endif %}">
-                {{ "{:+,.0f}".format(row.diff_quantity) }}
-              </span>
-            </td>
-            <td><span class="badge status-{{ row.status_key }}">{{ row.status }}</span></td>
-            <td>{{ row.note or "" }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
   </main>
 
   <script src="{{ url_for('static', filename='js/monitor-table.js') }}"></script>
+  <script>
+    // 填滿視窗高度（扣掉 sticky header），與預估調整表格一致。
+    (function () {
+      const header = document.querySelector('header');
+      const main = document.querySelector('.monitor-main');
+      if (!header || !main) return;
+      function resize() {
+        main.style.height = (window.innerHeight - header.offsetHeight) + 'px';
+      }
+      resize();
+      window.addEventListener('resize', resize);
+    })();
+  </script>
 </body>
 </html>

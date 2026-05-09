@@ -18,64 +18,51 @@
   {% set show_period_toolbar = true %}
   {% include "_header.html" %}
 
-  <main>
+  <main class="settings-main">
     {% if error_message %}
       <section class="alert" role="alert">{{ error_message }}</section>
     {% endif %}
 
-    {% for issue in data_issues %}
-      <section class="alert alert-info alert-banner alert-banner--{{ issue.level }}" role="alert">{{ issue.message }}</section>
-    {% endfor %}
-
-    <section class="dashboard-heading">
-      <div>
-        <h2>系統設定 / 資料檢核頁</h2>
-        <p>整理主畫面以外的資料規則，並集中檢查預算與訂單資料。</p>
-      </div>
-    </section>
-
-    {% if health %}
-    <section class="dashboard-grid settings-health" aria-label="資料檢核摘要">
-      <div class="metric">
-        <span>訂單資料檢查</span>
-        <strong>{{ "{:,.0f}".format(health.order_count) }}</strong>
-        <small>{% if health.order_start %}{{ health.order_start }} - {{ health.order_end }}{% else %}--{% endif %}</small>
-      </div>
-      <div class="metric">
-        <span>預算資料檢查</span>
-        <strong>{{ "{:,.0f}".format(health.budget_month_count) }}</strong>
-        <small>已匯入月份</small>
-      </div>
-      <div class="metric">
-        <span>缺預算列數</span>
-        <strong>{{ "{:,.0f}".format(health.missing_budget_row_count) }}</strong>
-      </div>
-      <div class="metric">
-        <span>異常資料提醒</span>
-        <strong>{{ "{:,.0f}".format(health.zero_price_row_count + health.no_last_year_row_count) }}</strong>
-        <small>零單價 / 無去年同期</small>
-      </div>
-    </section>
-    {% endif %}
-
-    <section class="management-panel">
-      <div class="section-header">
-        <h3>品項設定</h3>
-        <p>排除後仍可顯示於預估調整頁，但不納入金額計算。</p>
-      </div>
-    </section>
-
-    <form action="/items/save" method="post">
-      <div class="forecast-tools" aria-label="品項設定搜尋">
-        <label>
-          搜尋品項
-          <input type="search" data-item-search placeholder="輸入品項名稱或 ID">
-        </label>
-        <div class="filter-group">
-          <span>顯示: </span>
-          <strong data-item-visible>{{ items|length }}</strong> / {{ items|length }}
+    <form action="/items/save" method="post" class="settings-workspace">
+      <div class="settings-toolbar" aria-label="品項設定搜尋">
+        <div class="settings-toolbar__title">
+          <h2>系統設定 / 資料檢核</h2>
+          <span><strong data-item-visible>{{ items|length }}</strong> / {{ items|length }} 項</span>
         </div>
+        <label>
+          搜尋
+          <input type="search" data-item-search placeholder="品項名稱或 ID">
+        </label>
+        <button type="submit" class="btn-toolbar">儲存設定</button>
       </div>
+
+      {% if health %}
+      <details class="settings-health-panel">
+        <summary>資料檢核摘要</summary>
+        <section class="settings-health" aria-label="資料檢核摘要">
+          <div class="settings-health__item">
+            <span>訂單資料檢查</span>
+            <strong>{{ "{:,.0f}".format(health.order_count) }}</strong>
+            <small>{% if health.order_start %}{{ health.order_start }} - {{ health.order_end }}{% else %}--{% endif %}</small>
+          </div>
+          <div class="settings-health__item">
+            <span>預算資料檢查</span>
+            <strong>{{ "{:,.0f}".format(health.budget_month_count) }}</strong>
+            <small>已匯入月份</small>
+          </div>
+          <div class="settings-health__item">
+            <span>缺預算列數</span>
+            <strong>{{ "{:,.0f}".format(health.missing_budget_row_count) }}</strong>
+          </div>
+          <div class="settings-health__item">
+            <span>異常資料提醒</span>
+            <strong>{{ "{:,.0f}".format(health.zero_price_row_count + health.no_last_year_row_count) }}</strong>
+            <small>零單價 / 無去年同期</small>
+          </div>
+        </section>
+      </details>
+      {% endif %}
+
       <div class="table-wrap settings-table-wrap">
         <table class="management-table">
           <thead>
@@ -126,27 +113,22 @@
         </table>
       </div>
 
-      <section class="settings-roadmap">
-        <div class="panel">
-          <h3>品項合併設定 <span class="badge off">待建</span></h3>
-          <p>後續用來處理同品項多商品號或包裝規格合併。</p>
-        </div>
-        <div class="panel">
-          <h3>商品號對應 <span class="badge off">待建</span></h3>
-          <p>後續用來維護商品號改版、停用與替代品項。</p>
-        </div>
-        <div class="panel">
-          <h3>客戶名稱對應 <span class="badge off">待建</span></h3>
-          <p>後續用來整理客戶別名與命名不一致問題。</p>
-        </div>
-      </section>
-
-      <div class="bottom-bar">
-        <button type="submit" class="primary-btn">儲存所有設定</button>
-      </div>
     </form>
   </main>
 
   <script src="{{ url_for('static', filename='js/item-settings.js') }}"></script>
+  <script>
+    // 填滿視窗高度（扣掉 sticky header），維持表格工作區一致。
+    (function () {
+      const header = document.querySelector('header');
+      const main = document.querySelector('.settings-main');
+      if (!header || !main) return;
+      function resize() {
+        main.style.height = (window.innerHeight - header.offsetHeight) + 'px';
+      }
+      resize();
+      window.addEventListener('resize', resize);
+    })();
+  </script>
 </body>
 </html>

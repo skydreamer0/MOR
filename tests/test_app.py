@@ -817,8 +817,10 @@ def test_product_monitor_page_renders_drop_table(monkeypatch):
 
     assert response.status_code == 200
     assert "產品跳單監控" in html
-    assert "去年同期數量" in html
-    assert "跳單狀態" in html
+    assert "去年同期" in html
+    assert "狀態" in html
+    assert "跌幅" in html
+    assert "金額影響" in html
     assert "高風險" in html
     assert "data-monitor-search" in html
 
@@ -853,11 +855,13 @@ def test_settings_page_renders_item_config_and_data_checks(monkeypatch):
     assert "排除預估" in html
     assert "預算資料檢查" in html
     assert "訂單資料檢查" in html
-    assert "品項合併設定" in html
-    assert "待建" in html
+    assert "品項設定" in html
+    assert "settings-workspace" in html
+    assert "settings-health-panel" in html
+    assert "儲存設定" in html
 
 
-def test_dashboard_and_settings_share_data_issue_messages(monkeypatch):
+def test_data_issue_messages_render_on_dashboard_only(monkeypatch):
     db_base_path = _isolated_db_base()
     config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
     columns = config.required_columns
@@ -883,9 +887,9 @@ def test_dashboard_and_settings_share_data_issue_messages(monkeypatch):
     settings = client.get("/settings").get_data(as_text=True)
 
     assert "有 1 筆缺少預算目標" in dashboard
-    assert "有 1 筆缺少預算目標" in settings
     assert "有 1 筆單價為 0" in dashboard
-    assert "有 1 筆單價為 0" in settings
+    assert "有 1 筆缺少預算目標" not in settings
+    assert "有 1 筆單價為 0" not in settings
 
 
 def test_items_route_redirects_to_settings():
