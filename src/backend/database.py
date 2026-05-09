@@ -23,11 +23,16 @@ class MORDatabase:
                     product_code TEXT NOT NULL,
                     product_name TEXT,
                     quantity REAL DEFAULT 0,
-                    unit_price REAL DEFAULT 0
+                    unit_price REAL DEFAULT 0,
+                    amount REAL DEFAULT 0
                 )
             """)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_sales_date ON sales_records(order_date)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_sales_product ON sales_records(product_code)")
+            # Migration: add amount column if upgrading from older DB
+            sales_cols = [col[1] for col in conn.execute("PRAGMA table_info(sales_records)").fetchall()]
+            if "amount" not in sales_cols:
+                conn.execute("ALTER TABLE sales_records ADD COLUMN amount REAL DEFAULT 0")
 
             # Item Configs (Global management)
             conn.execute("""

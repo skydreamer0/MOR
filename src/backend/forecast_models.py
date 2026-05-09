@@ -57,9 +57,12 @@ class ForecastRow:
     avg_3m: float = 0.0
     excluded: bool = False
     item_status: str = "active"
-    ly_monthly: list[float]     = field(default_factory=lambda: [0.0] * 12)
-    ty_monthly: list[float]     = field(default_factory=lambda: [0.0] * 12)
-    budget_monthly: list[float] = field(default_factory=lambda: [0.0] * 12)
+    ly_monthly: list[float]        = field(default_factory=lambda: [0.0] * 12)
+    ty_monthly: list[float]        = field(default_factory=lambda: [0.0] * 12)
+    ly_monthly_amount: list[float]     = field(default_factory=lambda: [0.0] * 12)
+    ty_monthly_amount: list[float]     = field(default_factory=lambda: [0.0] * 12)
+    budget_monthly: list[float]        = field(default_factory=lambda: [0.0] * 12)
+    budget_monthly_amount: list[float] = field(default_factory=lambda: [0.0] * 12)
     ly_price: float = 0.0
 
     def with_adjustment(self, manual_adjustment: float | None, excluded: bool) -> "ForecastRow":
@@ -104,7 +107,10 @@ class ForecastRow:
             "item_status": self.item_status,
             "ly_monthly": self.ly_monthly,
             "ty_monthly": self.ty_monthly,
+            "ly_monthly_amount": self.ly_monthly_amount,
+            "ty_monthly_amount": self.ty_monthly_amount,
             "budget_monthly": self.budget_monthly,
+            "budget_monthly_amount": self.budget_monthly_amount,
             "ly_price": self.ly_price,
         }
 

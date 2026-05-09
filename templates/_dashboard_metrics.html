@@ -156,16 +156,16 @@
 <section class="panel workbench-panel" aria-label="客戶業績分析">
   <div class="section-header">
     <h3>客戶業績分析</h3>
-    <span class="section-sub">YTD 1–{{ month }}月，數量</span>
+    <span class="section-sub" id="dash-customer-period">YTD 1–{{ month }}月 實績，數量</span>
   </div>
   <div class="table-wrap compact-table workbench-table-shell">
     <table class="dash-analytics-table" id="dash-customer-table">
       <thead>
         <tr>
           <th>客戶</th>
-          <th class="num">去年累計</th>
-          <th class="num">預算累計</th>
-          <th class="num">今年累計</th>
+          <th class="num">去年累計金額</th>
+          <th class="num">預算累計金額</th>
+          <th class="num">今年累計金額</th>
           <th class="num">預算達成</th>
           <th class="num">YoY</th>
           <th class="num">趨勢</th>
@@ -183,18 +183,18 @@
 <section class="panel workbench-panel" aria-label="品項業績分析">
   <div class="section-header">
     <h3>品項業績分析</h3>
-    <span class="section-sub">YTD 1–{{ month }}月，數量</span>
+    <span class="section-sub" id="dash-product-period">YTD 1–{{ month }}月 實績，金額</span>
   </div>
   <div class="table-wrap compact-table workbench-table-shell">
     <table class="dash-analytics-table" id="dash-product-table">
       <thead>
         <tr>
           <th>品項</th>
-          <th class="num">去年累計</th>
-          <th class="num">預算累計</th>
-          <th class="num">今年累計</th>
+          <th class="num">去年累計金額</th>
+          <th class="num">今年累計金額</th>
           <th class="num">預算達成</th>
-          <th class="num">YoY</th>
+          <th class="num">YoY金額</th>
+          <th class="num">量YoY</th>
           <th class="num">趨勢</th>
           <th></th>
         </tr>
@@ -219,66 +219,127 @@
   if (total) {
     const canvas = document.getElementById("dash-total-chart");
     AnalyticsRenderer.renderTrendChart(canvas, {
-      lyMonthly:     total.ly_monthly,
-      tyMonthly:     total.ty_monthly,
-      budgetMonthly: total.budget_monthly,
-      targetMonth:   TARGET_MONTH,
+      lyMonthly:       total.ly_monthly,
+      tyMonthly:       total.ty_monthly,
+      budgetMonthly:   total.budget_monthly,
+      targetMonth:     TARGET_MONTH,
+      forecastMonthly: total.forecast_monthly,
+      lastActualMonth: total.last_actual_month,
     });
+    // YTD block uses amounts (NTD) — chart stays in quantities for volume trend
     const metrics = AnalyticsRenderer.computeMetrics(
-      total.ly_monthly, total.ty_monthly, total.budget_monthly, TARGET_MONTH
+      total.ly_monthly_amount, total.ty_monthly_amount, total.budget_monthly_amount,
+      TARGET_MONTH, total.last_actual_month
     );
     AnalyticsRenderer.renderYtd(
-      document.getElementById("dash-total-ytd"), metrics, TARGET_MONTH
+      document.getElementById("dash-total-ytd"), metrics, TARGET_MONTH, total.last_actual_month
     );
   }
 
-  // ── 表格渲染（客戶 & 品項共用） ────────────────────────
-  function buildRows(data, tbody, forecastUrl) {
+  // ── 表格渲染 ──────────────────────────────────────────
+  const fmt0 = new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 0 });
+  const ARROW = { up: "↑", flat: "→", down: "↓" };
+  const ACLS  = { up: "positive", flat: "", down: "negative" };
+
+  function _yoyTxt(ytdCurr, ytdPrev) {
+    if (ytdPrev <= 0) return ["—", ""];
+    const pct = (ytdCurr - ytdPrev) / ytdPrev * 100;
+    return [(pct > 0 ? "+" : "") + pct.toFixed(1) + "%", pct > 0 ? "positive" : pct < 0 ? "negative" : ""];
+  }
+
+  function _budRateTxt(ytdTy, ytdBud) {
+    if (ytdBud <= 0) return ["—", ""];
+    const r = ytdTy / ytdBud * 100;
+    return [r.toFixed(1) + "%", r >= 100 ? "positive" : r < 80 ? "negative" : ""];
+  }
+
+  // 客戶表：純金額
+  function buildCustomerRows(data, tbody) {
     if (!tbody) return;
-    const fmt0 = new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 0 });
-    const ARROW = { up: "↑", flat: "→", down: "↓" };
-    const ACLS  = { up: "positive", flat: "", down: "negative" };
-
     data.forEach(d => {
-      const metrics = AnalyticsRenderer.computeMetrics(
-        d.ly_monthly, d.ty_monthly, d.budget_monthly, TARGET_MONTH
+      const amtM = AnalyticsRenderer.computeMetrics(
+        d.ly_monthly_amount, d.ty_monthly_amount, d.budget_monthly_amount,
+        TARGET_MONTH, d.last_actual_month
       );
-      const { ytdLy, ytdTy, ytdBudget, ytdRateVsLy, ytdBudgetRate, trendDir } = metrics;
+      const { ytdLy: lyAmt, ytdTy: tyAmt, ytdBudget: budAmt, trendDir } = amtM;
 
-      const yoyPct = ytdLy > 0 ? (ytdTy - ytdLy) / ytdLy * 100 : null;
-      const yoyTxt = yoyPct !== null ? (yoyPct > 0 ? "+" : "") + yoyPct.toFixed(1) + "%" : "—";
-      const yoyCls = yoyPct === null ? "" : yoyPct > 0 ? "positive" : yoyPct < 0 ? "negative" : "";
-
-      const budRateTxt = ytdBudget > 0 ? ytdBudgetRate.toFixed(1) + "%" : "—";
-      const budRateCls = ytdBudget > 0
-        ? (ytdBudgetRate >= 100 ? "positive" : ytdBudgetRate < 80 ? "negative" : "")
-        : "";
+      const [yoyTxt, yoyCls]   = _yoyTxt(tyAmt, lyAmt);
+      const [budTxt, budCls]   = _budRateTxt(tyAmt, budAmt);
 
       const tr = document.createElement("tr");
       const canvasId = `spark-${d.entity_type}-${d.entity_id}`.replace(/[^a-z0-9-]/gi, "_");
-
       tr.innerHTML = `
         <td class="dash-entity-label">${d.entity_label}</td>
-        <td class="num">${ytdLy > 0 ? fmt0.format(ytdLy) : "—"}</td>
-        <td class="num">${ytdBudget > 0 ? fmt0.format(ytdBudget) : "—"}</td>
-        <td class="num">${ytdTy > 0 ? fmt0.format(ytdTy) : "—"}</td>
-        <td class="num ${budRateCls}">${budRateTxt}</td>
+        <td class="num">${lyAmt > 0 ? fmt0.format(lyAmt) : "—"}</td>
+        <td class="num">${budAmt > 0 ? fmt0.format(budAmt) : "—"}</td>
+        <td class="num">${tyAmt > 0 ? fmt0.format(tyAmt) : "—"}</td>
+        <td class="num ${budCls}">${budTxt}</td>
         <td class="num ${yoyCls}">${yoyTxt}</td>
         <td class="num ${ACLS[trendDir] || ""}">${ARROW[trendDir] || "→"}</td>
         <td><canvas id="${canvasId}" class="dash-spark-canvas"></canvas></td>
       `;
       tbody.appendChild(tr);
-
-      // Draw sparkline after element is in DOM
       requestAnimationFrame(() => {
         const c = document.getElementById(canvasId);
-        AnalyticsRenderer.renderSparklineInCanvas(c, d.ly_monthly, d.ty_monthly, TARGET_MONTH);
+        AnalyticsRenderer.renderSparklineInCanvas(
+          c, d.ly_monthly, d.ty_monthly, TARGET_MONTH, d.last_actual_month
+        );
       });
     });
   }
 
-  buildRows(CUSTOMERS, document.getElementById("dash-customer-tbody"));
-  buildRows(PRODUCTS,  document.getElementById("dash-product-tbody"));
+  // 品項表：金額為主 + 量YoY 洞察欄
+  function buildProductRows(data, tbody) {
+    if (!tbody) return;
+    data.forEach(d => {
+      const amtM = AnalyticsRenderer.computeMetrics(
+        d.ly_monthly_amount, d.ty_monthly_amount, d.budget_monthly_amount,
+        TARGET_MONTH, d.last_actual_month
+      );
+      const qtyM = AnalyticsRenderer.computeMetrics(
+        d.ly_monthly, d.ty_monthly, d.budget_monthly,
+        TARGET_MONTH, d.last_actual_month
+      );
+      const { ytdLy: lyAmt, ytdTy: tyAmt, ytdBudget: budAmt, trendDir } = amtM;
+      const { ytdLy: lyQty, ytdTy: tyQty } = qtyM;
+
+      const [yoyAmtTxt, yoyAmtCls] = _yoyTxt(tyAmt, lyAmt);
+      const [yoyQtyTxt, yoyQtyCls] = _yoyTxt(tyQty, lyQty);
+      const [budTxt, budCls]       = _budRateTxt(tyAmt, budAmt);
+
+      const tr = document.createElement("tr");
+      const canvasId = `spark-${d.entity_type}-${d.entity_id}`.replace(/[^a-z0-9-]/gi, "_");
+      tr.innerHTML = `
+        <td class="dash-entity-label">${d.entity_label}</td>
+        <td class="num">${lyAmt > 0 ? fmt0.format(lyAmt) : "—"}</td>
+        <td class="num">${tyAmt > 0 ? fmt0.format(tyAmt) : "—"}</td>
+        <td class="num ${budCls}">${budTxt}</td>
+        <td class="num ${yoyAmtCls}">${yoyAmtTxt}</td>
+        <td class="num ${yoyQtyCls}">${yoyQtyTxt}</td>
+        <td class="num ${ACLS[trendDir] || ""}">${ARROW[trendDir] || "→"}</td>
+        <td><canvas id="${canvasId}" class="dash-spark-canvas"></canvas></td>
+      `;
+      tbody.appendChild(tr);
+      requestAnimationFrame(() => {
+        const c = document.getElementById(canvasId);
+        AnalyticsRenderer.renderSparklineInCanvas(
+          c, d.ly_monthly, d.ty_monthly, TARGET_MONTH, d.last_actual_month
+        );
+      });
+    });
+  }
+
+  // Update section-sub labels to reflect confirmed actual month
+  if (total && total.last_actual_month > 0) {
+    const lbl = total.last_actual_month;
+    const custPeriod = document.getElementById("dash-customer-period");
+    const prodPeriod = document.getElementById("dash-product-period");
+    if (custPeriod) custPeriod.textContent = `YTD 1–${lbl}月 實績，金額`;
+    if (prodPeriod) prodPeriod.textContent = `YTD 1–${lbl}月 實績，金額`;
+  }
+
+  buildCustomerRows(CUSTOMERS, document.getElementById("dash-customer-tbody"));
+  buildProductRows(PRODUCTS,   document.getElementById("dash-product-tbody"));
 })();
 </script>
 {% endif %}

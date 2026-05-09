@@ -13,7 +13,8 @@ This is a staged UI cleanup plan. Do not implement all phases in one batch.
 - Phase 2 buttons and form controls: completed for base controls, compact toolbar buttons, short inline action buttons, icon-only overrides, and Google Inter removal.
 - Phase 3 page toolbars: completed for forecast, monitor, and settings shared toolbar structure.
 - Phase 4 panels and table containers: completed for shared workbench panel/table shell classes across dashboard, forecast, monitor, and settings.
-- Phase 5 and later phases remain pending.
+- Phase 5 template cleanup: completed for shared head assets and static inline layout cleanup.
+- Later phases remain pending.
 
 ## Scope
 
@@ -168,6 +169,8 @@ Verification:
 - Check desktop width around 1280px and narrow width around 390-430px.
 
 ### Phase 5 — Template Cleanup
+
+Status: completed.
 
 Remove repeated or stale UI scaffolding after the CSS system is stable.
 

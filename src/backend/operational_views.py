@@ -107,8 +107,9 @@ def build_forecast_page_context(
     item_configs = load_item_configs(db)
     excluded_item_ids = {pid for pid, cfg in item_configs.items() if cfg["is_excluded"]}
     manual_adjustments, adjustment_reasons = load_adjustments(db, target.year, target.month)
-    budget_targets  = load_budgets(db, target.year, target.month)
-    budget_year_map = load_budget_year(db, target.year)
+    budget_targets         = load_budgets(db, target.year, target.month)
+    budget_year_map        = load_budget_year(db, target.year)
+    budget_year_amount_map = load_budget_year_amounts(db, target.year)
 
     summary = build_forecast(
         data,
@@ -132,7 +133,10 @@ def build_forecast_page_context(
     )
     summary = replace(summary, rows=enrich_rows_with_history(summary.rows, db, target.year, target.month))
     summary = apply_user_adjustments(summary, manual_adjustments=manual_adjustments, excluded_ids=set())
-    summary = _apply_reasons_and_budgets(summary, adjustment_reasons, budget_targets, item_configs, budget_year_map)
+    summary = _apply_reasons_and_budgets(
+        summary, adjustment_reasons, budget_targets,
+        item_configs, budget_year_map, budget_year_amount_map,
+    )
     summary = replace(summary, total=forecast_amount_total(summary.rows))
 
     budget_months = list_budget_months(db)
@@ -388,6 +392,30 @@ def load_budget_year(db, year: int) -> dict[str, list[float]]:
     return result
 
 
+def load_budget_year_amounts(db, year: int) -> dict[str, list[float]]:
+    """Return a 12-element monthly amount array per row_id for the given year.
+    Uses target_amount as originally set in the budget — not quantity × current price.
+    """
+    with db.get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT customer_name, product_code, month, target_amount
+            FROM budget_targets
+            WHERE year = ?
+            """,
+            (year,),
+        ).fetchall()
+    result: dict[str, list[float]] = {}
+    for row in rows:
+        row_id = f"{row['customer_name']}__{row['product_code']}"
+        if row_id not in result:
+            result[row_id] = [0.0] * 12
+        m = int(row["month"]) - 1
+        if 0 <= m < 12:
+            result[row_id][m] = float(row["target_amount"] or 0)
+    return result
+
+
 def list_budget_months(db) -> list[tuple[int, int]]:
     with db.get_connection() as conn:
         rows = conn.execute(
@@ -407,11 +435,16 @@ def _apply_reasons_and_budgets(
     budget_targets: dict[str, BudgetTarget],
     item_configs: dict[str, dict] | None = None,
     budget_year_map: dict[str, list[float]] | None = None,
+    budget_year_amount_map: dict[str, list[float]] | None = None,
 ) -> ForecastSummary:
-    item_configs    = item_configs or {}
-    budget_year_map = budget_year_map or {}
+    item_configs           = item_configs or {}
+    budget_year_map        = budget_year_map or {}
+    budget_year_amount_map = budget_year_amount_map or {}
     rows = [
-        _apply_reason_and_budget(row, adjustment_reasons, budget_targets, item_configs, budget_year_map)
+        _apply_reason_and_budget(
+            row, adjustment_reasons, budget_targets,
+            item_configs, budget_year_map, budget_year_amount_map,
+        )
         for row in summary.rows
     ]
     return replace(summary, rows=rows)
@@ -423,13 +456,15 @@ def _apply_reason_and_budget(
     budget_targets: dict[str, BudgetTarget],
     item_configs: dict[str, dict],
     budget_year_map: dict[str, list[float]],
+    budget_year_amount_map: dict[str, list[float]],
 ) -> ForecastRow:
     budget = budget_targets.get(row.row_id, BudgetTarget(0.0, 0.0))
     item_config = item_configs.get(row.product_code, {})
     is_budgeted = item_config.get("is_budgeted", True)
     if not is_budgeted:
         budget = BudgetTarget(0.0, 0.0)
-    budget_monthly = budget_year_map.get(row.row_id, [0.0] * 12) if is_budgeted else [0.0] * 12
+    budget_monthly        = budget_year_map.get(row.row_id, [0.0] * 12)        if is_budgeted else [0.0] * 12
+    budget_monthly_amount = budget_year_amount_map.get(row.row_id, [0.0] * 12) if is_budgeted else [0.0] * 12
     row = replace(
         row,
         adjustment_reason=adjustment_reasons.get(row.row_id, row.adjustment_reason),
@@ -439,6 +474,7 @@ def _apply_reason_and_budget(
         price_quantity=float(item_config.get("price_quantity") or 0),
         item_status=str(item_config.get("item_status") or "active"),
         budget_monthly=budget_monthly,
+        budget_monthly_amount=budget_monthly_amount,
     )
     return replace(row, estimated_amount=0.0 if row.excluded else _dashboard_amount(row.final_forecast, row))
 
@@ -552,6 +588,17 @@ def aggregate_to_analytics(
         ty  = [sum(r.ty_monthly[i]     for r in entity_rows) for i in range(12)]
         bud = [sum(r.budget_monthly[i] for r in entity_rows) for i in range(12)]
 
+        # Amount arrays (qty × price per transaction, pre-computed in ForecastRow)
+        ly_amt  = [sum(r.ly_monthly_amount[i]     for r in entity_rows) for i in range(12)]
+        ty_amt  = [sum(r.ty_monthly_amount[i]     for r in entity_rows) for i in range(12)]
+        # Budget amounts use the original target_amount from budget_targets — not qty × current price
+        bud_amt = [sum(r.budget_monthly_amount[i] for r in entity_rows) for i in range(12)]
+
+        # Forecast: only target_month carries a value
+        fcst = [0.0] * 12
+        fcst[target.month - 1] = sum(r.final_forecast for r in entity_rows)
+        fcst_amt = sum(r.estimated_amount for r in entity_rows)
+
         slc = AnalyticsSlice(
             entity_id=entity_id,
             entity_label=labels[entity_id],
@@ -561,6 +608,11 @@ def aggregate_to_analytics(
             ly_monthly=ly,
             ty_monthly=ty,
             budget_monthly=bud,
+            forecast_monthly=fcst,
+            ly_monthly_amount=ly_amt,
+            ty_monthly_amount=ty_amt,
+            budget_monthly_amount=bud_amt,
+            forecast_amount=fcst_amt,
         )
         result.append(slc.to_dict())
 

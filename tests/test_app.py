@@ -98,6 +98,7 @@ def test_homepage_data_health_alert_appears_before_progress_hero(monkeypatch):
                 columns[5]: "Product One",
                 columns[6]: 3,
                 columns[7]: 0,
+                columns[8]: 0,
             }
         ]
     )
@@ -294,6 +295,7 @@ def test_header_navigation_is_consistent_across_frontend_pages(monkeypatch):
                 columns[5]: "Product One",
                 columns[6]: 3,
                 columns[7]: 100,
+                columns[8]: 0,
             }
         ]
     )
@@ -423,6 +425,7 @@ def test_old_exclusions_page_redirects_to_item_management(monkeypatch):
                 columns[5]: "Product One",
                 columns[6]: 3,
                 columns[7]: 100,
+                columns[8]: 0,
             },
             {
                 columns[0]: 2026,
@@ -433,6 +436,7 @@ def test_old_exclusions_page_redirects_to_item_management(monkeypatch):
                 columns[5]: "Product Two",
                 columns[6]: 5,
                 columns[7]: 200,
+                columns[8]: 0,
             },
         ]
     )
@@ -461,6 +465,7 @@ def test_item_management_exclusion_is_reflected_on_workbench(monkeypatch):
                 columns[5]: "Product One",
                 columns[6]: 3,
                 columns[7]: 100,
+                columns[8]: 0,
             },
             {
                 columns[0]: 2026,
@@ -471,6 +476,7 @@ def test_item_management_exclusion_is_reflected_on_workbench(monkeypatch):
                 columns[5]: "Product Two",
                 columns[6]: 5,
                 columns[7]: 200,
+                columns[8]: 0,
             },
         ]
     )
@@ -510,6 +516,7 @@ def test_forecast_page_layers_discontinued_items_below_active_rows(monkeypatch):
                 columns[5]: product_name,
                 columns[6]: quantity,
                 columns[7]: price,
+                columns[8]: 0,
             }
             for year, month, customer, product_code, product_name, quantity, price in (
                 (2026, 2, "Hospital A", "P1", "Product Active", 10, 100),
@@ -562,6 +569,7 @@ def test_settings_page_uses_item_status_without_auxiliary_labels(monkeypatch):
                 columns[5]: "Product One",
                 columns[6]: 3,
                 columns[7]: 100,
+                columns[8]: 0,
             }
         ]
     )
@@ -594,6 +602,7 @@ def test_item_settings_save_price_quantity_and_forecast_uses_it(monkeypatch):
                 columns[5]: "Product One",
                 columns[6]: 300,
                 columns[7]: 3200,
+                columns[8]: 0,
             }
             for month in (1, 2, 3)
         ]
@@ -654,6 +663,7 @@ def test_item_settings_save_clears_forecast_context_cache(monkeypatch):
                 columns[5]: "Product One",
                 columns[6]: 100,
                 columns[7]: 1000,
+                columns[8]: 0,
             }
             for month in (1, 2, 3)
         ]
@@ -692,6 +702,7 @@ def test_unbudgeted_item_has_no_budget_target_on_forecast_page(monkeypatch):
                 columns[5]: "Product One",
                 columns[6]: 100,
                 columns[7]: 1000,
+                columns[8]: 0,
             }
             for month in (1, 2, 3)
         ]
@@ -926,6 +937,7 @@ def test_homepage_exposes_unrendered_total_when_rows_are_limited(monkeypatch):
                     columns[5]: f"Product {product_code}",
                     columns[6]: 10,
                     columns[7]: 100,
+                columns[8]: 0,
                 }
             )
     monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: pd.DataFrame(rows))
@@ -964,6 +976,7 @@ def test_product_monitor_page_renders_drop_table(monkeypatch):
                 columns[5]: "ELI 22.5癌立佳",
                 columns[6]: 100,
                 columns[7]: 100,
+                columns[8]: 0,
             },
             {
                 columns[0]: 2026,
@@ -974,6 +987,7 @@ def test_product_monitor_page_renders_drop_table(monkeypatch):
                 columns[5]: "ELI 22.5癌立佳",
                 columns[6]: 40,
                 columns[7]: 100,
+                columns[8]: 0,
             },
         ]
     )
@@ -991,6 +1005,8 @@ def test_product_monitor_page_renders_drop_table(monkeypatch):
     assert "跌幅" in html
     assert "金額影響" in html
     assert "高風險" in html
+    assert html.index("monitor-sticky--status") < html.index("monitor-sticky--customer")
+    assert html.index("monitor-sticky--customer") < html.index("monitor-sticky--product")
     assert 'title="ELI 22.5癌立佳">ELI 22.5</td>' in html
     assert "ID: P1" not in html
     assert "data-monitor-search" in html
@@ -1011,6 +1027,7 @@ def test_settings_page_renders_item_config_and_data_checks(monkeypatch):
                 columns[5]: "Product One",
                 columns[6]: 3,
                 columns[7]: 0,
+                columns[8]: 0,
             }
         ]
     )
@@ -1047,6 +1064,7 @@ def test_dashboard_omits_zero_budget_notice_but_keeps_price_warning(monkeypatch)
                 columns[5]: "Product One",
                 columns[6]: 3,
                 columns[7]: 0,
+                columns[8]: 0,
             }
         ]
     )
@@ -1087,6 +1105,7 @@ def test_settings_page_exposes_item_search_tools(monkeypatch):
                 columns[5]: "Product One",
                 columns[6]: 3,
                 columns[7]: 100,
+                columns[8]: 0,
             }
         ]
     )
@@ -1151,6 +1170,7 @@ def test_export_rejects_stale_forecast_signature(monkeypatch):
                         columns[5]: f"Product {product_code}",
                         columns[6]: quantity,
                         columns[7]: 100,
+                columns[8]: 0,
                     }
                 )
         return pd.DataFrame(rows)

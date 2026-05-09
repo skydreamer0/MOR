@@ -35,25 +35,54 @@ class AnalyticsSlice:
     entity_label: str
     entity_type: EntityType
     target_year: int
-    target_month: int                    # 1-based
+    target_month: int                    # 1-based forecast month
 
-    ly_monthly: list[float]              # [12] Jan=index 0, last year
-    ty_monthly: list[float]              # [12] this year (partial — future months = 0)
-    budget_monthly: list[float]          # [12] budget targets per month
+    ly_monthly: list[float]              # [12] Jan=index 0, last year quantity
+    ty_monthly: list[float]              # [12] confirmed actual quantity; future months = 0
+    budget_monthly: list[float]          # [12] budget target quantities per month
+    # forecast quantity for target_month only; zeros elsewhere
+    forecast_monthly: list[float] = field(default_factory=lambda: [0.0] * 12)
+    # amount (qty × price) tracks — parallel to quantity tracks above
+    ly_monthly_amount: list[float] = field(default_factory=lambda: [0.0] * 12)
+    ty_monthly_amount: list[float] = field(default_factory=lambda: [0.0] * 12)
+    budget_monthly_amount: list[float] = field(default_factory=lambda: [0.0] * 12)
+    forecast_amount: float = 0.0
 
-    # ── YTD cumulative (1月 → target_month, inclusive) ────────────────────────
+    # ── Last month with confirmed actual data ─────────────────────────────────
+
+    @property
+    def last_actual_month(self) -> int:
+        """1-based index of the latest month that has non-zero actual data (0 if none)."""
+        for i in range(11, -1, -1):
+            if self.ty_monthly[i] > 0:
+                return i + 1
+        return 0
+
+    # ── YTD cumulative (1月 → last_actual_month, confirmed actuals only) ──────
 
     @property
     def ytd_ly(self) -> float:
-        return _sum(self.ly_monthly[: self.target_month])
+        return _sum(self.ly_monthly[: self.last_actual_month])
 
     @property
     def ytd_ty(self) -> float:
-        return _sum(self.ty_monthly[: self.target_month])
+        return _sum(self.ty_monthly[: self.last_actual_month])
 
     @property
     def ytd_budget(self) -> float:
-        return _sum(self.budget_monthly[: self.target_month])
+        return _sum(self.budget_monthly[: self.last_actual_month])
+
+    @property
+    def ytd_ly_amount(self) -> float:
+        return _sum(self.ly_monthly_amount[: self.last_actual_month])
+
+    @property
+    def ytd_ty_amount(self) -> float:
+        return _sum(self.ty_monthly_amount[: self.last_actual_month])
+
+    @property
+    def ytd_budget_amount(self) -> float:
+        return _sum(self.budget_monthly_amount[: self.last_actual_month])
 
     @property
     def ytd_gap_vs_ly(self) -> float:
@@ -101,15 +130,21 @@ class AnalyticsSlice:
 
     def to_dict(self) -> dict:
         return {
-            "entity_id":       self.entity_id,
-            "entity_label":    self.entity_label,
-            "entity_type":     self.entity_type,
-            "target_year":     self.target_year,
-            "target_month":    self.target_month,
-            "ly_monthly":      self.ly_monthly,
-            "ty_monthly":      self.ty_monthly,
-            "budget_monthly":  self.budget_monthly,
-            # derived — pre-computed so API callers don't have to
+            "entity_id":            self.entity_id,
+            "entity_label":         self.entity_label,
+            "entity_type":          self.entity_type,
+            "target_year":          self.target_year,
+            "target_month":         self.target_month,
+            "last_actual_month":    self.last_actual_month,
+            "ly_monthly":           self.ly_monthly,
+            "ty_monthly":           self.ty_monthly,
+            "budget_monthly":       self.budget_monthly,
+            "forecast_monthly":     self.forecast_monthly,
+            "ly_monthly_amount":    self.ly_monthly_amount,
+            "ty_monthly_amount":    self.ty_monthly_amount,
+            "budget_monthly_amount": self.budget_monthly_amount,
+            "forecast_amount":      round(self.forecast_amount, 2),
+            # derived quantity-based (for trend chart + sparklines)
             "ytd_ly":          round(self.ytd_ly, 2),
             "ytd_ty":          round(self.ytd_ty, 2),
             "ytd_budget":      round(self.ytd_budget, 2),
@@ -119,6 +154,10 @@ class AnalyticsSlice:
             "ma3":             round(self.ma3, 2),
             "ma6":             round(self.ma6, 2),
             "trend_direction": self.trend_direction,
+            # derived amount-based (for customer/product analytics tables)
+            "ytd_ly_amount":     round(self.ytd_ly_amount, 2),
+            "ytd_ty_amount":     round(self.ytd_ty_amount, 2),
+            "ytd_budget_amount": round(self.ytd_budget_amount, 2),
         }
 
 

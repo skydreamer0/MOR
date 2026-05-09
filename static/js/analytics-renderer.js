@@ -34,23 +34,29 @@ const AnalyticsRenderer = (() => {
 
   // ── computeMetrics ─────────────────────────────────────────────────────────
   /**
-   * @param {number[]} lyMonthly     [12] last year monthly quantities
-   * @param {number[]} tyMonthly     [12] this year monthly quantities
-   * @param {number[]} budgetMonthly [12] budget targets
-   * @param {number}   targetMonth   1-based current forecast month
+   * @param {number[]} lyMonthly      [12] last year monthly quantities
+   * @param {number[]} tyMonthly      [12] this year confirmed actual quantities
+   * @param {number[]} budgetMonthly  [12] budget targets
+   * @param {number}   targetMonth    1-based forecast month (used for MA windows)
+   * @param {number}   [lastActualMonth]  1-based last month with confirmed data;
+   *                                      defaults to targetMonth when omitted
    * @returns {object} pre-computed metrics object
    */
-  function computeMetrics(lyMonthly, tyMonthly, budgetMonthly, targetMonth) {
-    const ytdLy     = _sum(lyMonthly.slice(0, targetMonth));
-    const ytdTy     = _sum(tyMonthly.slice(0, targetMonth));
-    const ytdBudget = _sum(budgetMonthly.slice(0, targetMonth));
+  function computeMetrics(lyMonthly, tyMonthly, budgetMonthly, targetMonth, lastActualMonth) {
+    // YTD is always based on confirmed actuals only
+    const ytdCutoff = (lastActualMonth != null && lastActualMonth > 0)
+      ? lastActualMonth : targetMonth;
+
+    const ytdLy     = _sum(lyMonthly.slice(0, ytdCutoff));
+    const ytdTy     = _sum(tyMonthly.slice(0, ytdCutoff));
+    const ytdBudget = _sum(budgetMonthly.slice(0, ytdCutoff));
 
     const ytdGapVsLy    = ytdTy - ytdLy;
     const ytdRateVsLy   = ytdLy   > 0 ? ytdTy / ytdLy   * 100 : 0;
     const ytdBudgetRate = ytdBudget > 0 ? ytdTy / ytdBudget * 100 : 0;
 
     // MA windows: months BEFORE targetMonth (already elapsed)
-    const elapsed = targetMonth - 1;   // number of full months passed
+    const elapsed = targetMonth - 1;
     const recent3 = tyMonthly.slice(Math.max(0, elapsed - 3), elapsed);
     const prev3   = tyMonthly.slice(Math.max(0, elapsed - 6), Math.max(0, elapsed - 3));
     const recent6 = tyMonthly.slice(Math.max(0, elapsed - 6), elapsed);
@@ -71,6 +77,7 @@ const AnalyticsRenderer = (() => {
       ytdLy, ytdTy, ytdBudget,
       ytdGapVsLy, ytdRateVsLy, ytdBudgetRate,
       ma3, ma6, trendDir,
+      ytdCutoff,
     };
   }
 
@@ -79,9 +86,13 @@ const AnalyticsRenderer = (() => {
   /**
    * Draw a 3-line trend chart on a <canvas> element.
    * @param {HTMLCanvasElement} canvas
-   * @param {object} data  { lyMonthly, tyMonthly, budgetMonthly, targetMonth }
+   * @param {object} data  { lyMonthly, tyMonthly, budgetMonthly, targetMonth,
+   *                         forecastMonthly?, lastActualMonth? }
+   *   forecastMonthly: [12] with a non-zero value only at targetMonth-1
+   *   lastActualMonth: 1-based last month with confirmed actual data
    */
-  function renderTrendChart(canvas, { lyMonthly, tyMonthly, budgetMonthly, targetMonth }) {
+  function renderTrendChart(canvas, { lyMonthly, tyMonthly, budgetMonthly, targetMonth,
+                                      forecastMonthly, lastActualMonth }) {
     if (!canvas) return;
 
     const dpr  = window.devicePixelRatio || 1;
@@ -97,8 +108,11 @@ const AnalyticsRenderer = (() => {
     const plotW = w - padL - padR;
     const plotH = h - padT - padB;
 
-    // Y scale across all three series
-    const allVals = [...lyMonthly, ...tyMonthly, ...budgetMonthly].filter(v => v > 0);
+    const fcstVal = (forecastMonthly && forecastMonthly[targetMonth - 1]) || 0;
+
+    // Y scale across all series including forecast value
+    const allVals = [...lyMonthly, ...tyMonthly, ...budgetMonthly,
+                     fcstVal > 0 ? fcstVal : 0].filter(v => v > 0);
     if (allVals.length === 0) return;
     const maxVal = Math.max(...allVals);
     const minVal = 0;
@@ -141,9 +155,35 @@ const AnalyticsRenderer = (() => {
       _drawLineMasked(ctx, ma3arr, xOf, yOf, COLOR_MA3, 1.2, [3, 3]);
     }
 
-    // This year line (teal solid, on top)
-    const tyMasked = tyMonthly.map((v, i) => (i < targetMonth ? v : null));
+    // This year actual line (teal solid, ends at lastActualMonth)
+    const actualCutoff = (lastActualMonth != null && lastActualMonth > 0)
+      ? lastActualMonth : targetMonth;
+    const tyMasked = tyMonthly.map((v, i) => (i < actualCutoff ? v : null));
     _drawLineMasked(ctx, tyMasked, xOf, yOf, COLOR_TY, 2);
+
+    // Forecast projection: dashed segment from last actual point → forecast point
+    if (fcstVal > 0 && actualCutoff < targetMonth) {
+      const lastActVal = tyMonthly[actualCutoff - 1] || 0;
+      ctx.save();
+      ctx.setLineDash([4, 3]);
+      ctx.strokeStyle = COLOR_TY;
+      ctx.globalAlpha = 0.55;
+      ctx.lineWidth = 1.5;
+      ctx.lineJoin = "round";
+      ctx.beginPath();
+      ctx.moveTo(xOf(actualCutoff - 1), yOf(lastActVal));
+      ctx.lineTo(xOf(targetMonth - 1), yOf(fcstVal));
+      ctx.stroke();
+      // Open circle at forecast point
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 0.75;
+      ctx.beginPath();
+      ctx.arc(xOf(targetMonth - 1), yOf(fcstVal), 3.5, 0, Math.PI * 2);
+      ctx.strokeStyle = COLOR_TY;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.restore();
+    }
 
     // X-axis month labels (every other month)
     ctx.fillStyle = "rgba(100,116,139,0.75)";
@@ -267,28 +307,32 @@ const AnalyticsRenderer = (() => {
   /**
    * Render the YTD cumulative comparison block.
    * @param {HTMLElement} container
-   * @param {object} metrics  result of computeMetrics()
-   * @param {number} targetMonth  1-based
+   * @param {object} metrics       result of computeMetrics()
+   * @param {number} targetMonth   1-based forecast month
+   * @param {number} [lastActualMonth]  1-based last confirmed month (uses metrics.ytdCutoff as fallback)
    */
-  function renderYtd(container, metrics, targetMonth) {
+  function renderYtd(container, metrics, targetMonth, lastActualMonth) {
     if (!container) return;
-    const { ytdLy, ytdTy, ytdBudget, ytdGapVsLy, ytdRateVsLy, ytdBudgetRate } = metrics;
+    const { ytdLy, ytdTy, ytdBudget, ytdGapVsLy, ytdRateVsLy, ytdBudgetRate, ytdCutoff } = metrics;
     const gapCls    = ytdGapVsLy >= 0 ? "positive" : "negative";
     const rateVsLyCls = ytdRateVsLy >= 100 ? "positive" : "negative";
     const budRateCls  = ytdBudgetRate >= 100 ? "positive" : ytdBudgetRate > 0 && ytdBudgetRate < 80 ? "negative" : "";
 
+    // Use the confirmed cutoff month for labels so user knows it's actual data
+    const lbl = lastActualMonth || ytdCutoff || targetMonth;
+
     container.innerHTML = `
       <div class="ytd-grid">
         <div class="ytd-cell">
-          <span class="ytd-label">去年 1–${targetMonth}月</span>
+          <span class="ytd-label">去年 1–${lbl}月 實績</span>
           <span class="ytd-val">${ytdLy > 0 ? fmt0.format(ytdLy) : "—"}</span>
         </div>
         <div class="ytd-cell">
-          <span class="ytd-label">預算 1–${targetMonth}月</span>
+          <span class="ytd-label">預算 1–${lbl}月</span>
           <span class="ytd-val">${ytdBudget > 0 ? fmt0.format(ytdBudget) : "—"}</span>
         </div>
         <div class="ytd-cell">
-          <span class="ytd-label">今年 1–${targetMonth}月</span>
+          <span class="ytd-label">今年 1–${lbl}月 實績</span>
           <span class="ytd-val">${ytdTy > 0 ? fmt0.format(ytdTy) : "—"}</span>
         </div>
         <div class="ytd-cell">
@@ -393,11 +437,12 @@ const AnalyticsRenderer = (() => {
   /**
    * Draw a compact sparkline for table rows (this year only, vs last year).
    * @param {HTMLCanvasElement} canvas
-   * @param {number[]} lyMonthly  [12]
-   * @param {number[]} tyMonthly  [12]
-   * @param {number}   targetMonth  1-based
+   * @param {number[]} lyMonthly      [12]
+   * @param {number[]} tyMonthly      [12] confirmed actual only
+   * @param {number}   targetMonth    1-based forecast month
+   * @param {number}   [lastActualMonth]  1-based last confirmed month; defaults to targetMonth
    */
-  function renderSparklineInCanvas(canvas, lyMonthly, tyMonthly, targetMonth) {
+  function renderSparklineInCanvas(canvas, lyMonthly, tyMonthly, targetMonth, lastActualMonth) {
     if (!canvas) return;
     const dpr = window.devicePixelRatio || 1;
     const w   = canvas.clientWidth  || 80;
@@ -415,10 +460,13 @@ const AnalyticsRenderer = (() => {
     const xOf = (i) => pad + (i / 11) * (w - pad * 2);
     const yOf = (v) => pad + (h - pad * 2) * (1 - v / maxVal);
 
+    const actualCutoff = (lastActualMonth != null && lastActualMonth > 0)
+      ? lastActualMonth : targetMonth;
+
     // Last year (gray, thin)
     _drawLine(ctx, lyMonthly, 12, xOf, yOf, COLOR_LY, 1);
-    // This year (teal, up to targetMonth)
-    const tyMasked = tyMonthly.map((v, i) => (i < targetMonth ? v : null));
+    // This year (teal, up to lastActualMonth only — no 0-value gap for unconfirmed month)
+    const tyMasked = tyMonthly.map((v, i) => (i < actualCutoff ? v : null));
     _drawLineMasked(ctx, tyMasked, xOf, yOf, COLOR_TY, 1.5);
   }
 

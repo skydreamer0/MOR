@@ -56,9 +56,11 @@ def build_forecast(
         avg_3m_qty = _recent_months_average(group, target.year, target.month, 3)
         current_progress = _month_quantity(group, target.year, target.month)
 
-        # Full-year monthly breakdown for sidebar detail table
+        # Full-year monthly breakdown for sidebar detail table and analytics
         ly_monthly = [_month_quantity(group, target.year - 1, m) for m in range(1, 13)]
         ty_monthly = [_month_quantity(group, target.year, m) for m in range(1, 13)]
+        ly_monthly_amount = [_month_amount(group, target.year - 1, m) for m in range(1, 13)]
+        ty_monthly_amount = [_month_amount(group, target.year, m) for m in range(1, 13)]
         ly_price = _month_price(group, target.year - 1, target.month)
 
         # Baseline: recent history only. LySM is retained for risk comparison.
@@ -88,6 +90,8 @@ def build_forecast(
                 this_year_same_month_qty=current_progress,
                 ly_monthly=ly_monthly,
                 ty_monthly=ty_monthly,
+                ly_monthly_amount=ly_monthly_amount,
+                ty_monthly_amount=ty_monthly_amount,
                 ly_price=ly_price,
                 latest_price=latest_price,
                 system_forecast=forecast_quantity,
@@ -148,6 +152,11 @@ def _average_cycle_days(order_dates: list[pd.Timestamp], max_cycle_interval_days
 def _month_quantity(group: pd.DataFrame, year: int, month: int) -> float:
     matched = group[(group["年"] == year) & (group["月"] == month)]
     return float(matched["銷+贈S量"].sum())
+
+
+def _month_amount(group: pd.DataFrame, year: int, month: int) -> float:
+    matched = group[(group["年"] == year) & (group["月"] == month)]
+    return float(matched["含稅總額(淨)"].sum())
 
 
 def _month_price(group: pd.DataFrame, year: int, month: int) -> float:

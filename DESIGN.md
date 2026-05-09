@@ -114,6 +114,10 @@ Forecast, monitor, and settings workbars should use the shared `workbench-toolba
 
 Dashboard panels, forecast table shells, monitor workspace, and settings workspace should use shared `workbench-panel` or `workbench-table-shell` classes for border, radius, surface, and elevation. Page-specific classes may still own height, padding, sticky columns, and overflow details.
 
+### Template Structure
+
+Page templates should include shared CSS and HTMX assets through `_head_assets.html`. Static layout or color styles belong in `static/css/mor.css`; inline styles are reserved for dynamic values such as server-calculated progress widths.
+
 ### Dashboard Layout
 
 The dashboard follows a three-zone information hierarchy: **Status → Risk → Action**.

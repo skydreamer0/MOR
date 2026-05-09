@@ -25,8 +25,9 @@ def prepare_sales_data(data: pd.DataFrame, config: ForecastConfig | None = None)
 
     prepared = data.copy()
     prepared["商品號"] = prepared["商品號"].map(normalize_product_code)
-    prepared["銷+贈S量"] = pd.to_numeric(prepared["銷+贈S量"], errors="coerce").fillna(0)
+    prepared["銷+贈S量"]   = pd.to_numeric(prepared["銷+贈S量"],   errors="coerce").fillna(0)
     prepared["單價NT(淨)"] = pd.to_numeric(prepared["單價NT(淨)"], errors="coerce").fillna(0)
+    prepared["含稅總額(淨)"] = pd.to_numeric(prepared["含稅總額(淨)"], errors="coerce").fillna(0)
     prepared["order_date"] = pd.to_datetime(
         {
             "year": pd.to_numeric(prepared["年"], errors="coerce"),

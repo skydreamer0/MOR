@@ -1568,7 +1568,7 @@ details[open] .discontinued-toggle {
 
 .compact-table table,
 .monitor-table {
-  min-width: 1180px;
+  min-width: 960px;
 }
 
 .monitor-workspace {
@@ -1639,17 +1639,24 @@ details[open] .discontinued-toggle {
 }
 
 .monitor-sticky--customer {
+  left: 108px;
+  width: 136px;
+  min-width: 136px;
+  max-width: 136px;
+}
+
+.monitor-sticky--status {
   left: 0;
-  width: 176px;
-  min-width: 176px;
-  max-width: 176px;
+  width: 108px;
+  min-width: 108px;
+  max-width: 108px;
 }
 
 .monitor-sticky--product {
-  left: 176px;
-  width: 250px;
-  min-width: 250px;
-  max-width: 250px;
+  left: 244px;
+  width: 96px;
+  min-width: 96px;
+  max-width: 96px;
   border-right: 1px solid var(--line);
 }
 
@@ -1659,12 +1666,8 @@ details[open] .discontinued-toggle {
 }
 
 .monitor-table td.monitor-sticky--product {
-  white-space: normal;
-}
-
-.monitor-table td.monitor-sticky--product strong,
-.monitor-table td.monitor-sticky--product small {
-  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .monitor-note {
@@ -2344,15 +2347,21 @@ details[open] .discontinued-toggle {
     border-right: none;
   }
   .monitor-sticky--customer {
-    width: 136px;
-    min-width: 136px;
-    max-width: 136px;
+    left: 96px;
+    width: 120px;
+    min-width: 120px;
+    max-width: 120px;
+  }
+  .monitor-sticky--status {
+    width: 96px;
+    min-width: 96px;
+    max-width: 96px;
   }
   .monitor-sticky--product {
-    left: 136px;
-    width: 210px;
-    min-width: 210px;
-    max-width: 210px;
+    left: 216px;
+    width: 96px;
+    min-width: 96px;
+    max-width: 96px;
   }
   main { padding: var(--sp-4) var(--sp-4) 100px; }
   .hero__container { padding: var(--sp-4); }

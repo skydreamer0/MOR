@@ -20,5 +20,6 @@ class ForecastConfig:
             "商品簡稱",
             "銷+贈S量",
             "單價NT(淨)",
+            "含稅總額(淨)",
         )
     )
