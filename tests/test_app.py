@@ -32,8 +32,10 @@ def test_homepage_loads_dashboard():
 
     assert response.status_code == 200
     assert "<title>MOR" in html
-    assert "<h1>MOR " in html
+    assert "<h1>MOR</h1>" in html
+    assert '<h1>MOR <span class="app-subtitle">' not in html
     assert "業績總覽" in html
+    assert '<a href="/" aria-current="page">業績總覽</a>' in html
     assert "預算目標" in html
     assert "預估達成" in html
     assert "預估業績金額" in html
