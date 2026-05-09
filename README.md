@@ -12,26 +12,77 @@ MOR 是一套本地端 Flask 應用程式，用於月度銷售業績預估。它
 
 ## 系統架構
 
-```
-                          ┌──────────────────┐
-                          │   Browser (UI)   │
-                          └────────┬─────────┘
-                                   │ GET / , POST /export
-                          ┌────────▼─────────┐
-                          │    Flask app.py   │
-                          │  (thin routes)    │
-                          └──┬──────┬──────┬──┘
-                             │      │      │
-                    ┌────────▼┐  ┌──▼───┐  ├──────────┐
-                    │  data   │  │engine│  │ exporter  │
-                    │ loader  │  │      │  │           │
-                    └────┬────┘  └──┬───┘  └─────┬────┘
-                         │         │             │
-                    ┌────▼────┐  ┌─▼──────┐  ┌───▼───────┐
-                    │ Excel   │  │ models │  │ Excel     │
-                    │ 業績明細│  │ config │  │ forecast  │
-                    └─────────┘  └────────┘  │ workbook  │
-                                             └───────────┘
+此架構圖將 MOR 分為 Web Layer、Data Layer、Core Forecast Logic、Operational Views、Output 與 Testing 六個區塊。資料由 Excel 來源匯入後，經由 loader 整理並提供給資料檢核與 forecast_engine 預估計算。Flask 作為主要後端入口，負責串接頁面呈現、表單解析、歷史快照、Dashboard 與 Excel 匯出功能。
+
+```mermaid
+flowchart TD
+    browser["Browser UI"]
+
+    subgraph web["Web Layer"]
+        entry["app.py<br/>啟動入口"]
+        flask["src/backend/app.py<br/>Flask routes"]
+        templates["templates/<br/>Jinja pages"]
+        static["static/<br/>CSS + vanilla JS"]
+        parser["web/form_parser.py<br/>表單解析"]
+        presenter["web/forecast_presenter.py<br/>預估表格呈現"]
+    end
+
+    subgraph data["Data Layer"]
+        source["Excel 業績明細 / 預算資料"]
+        loader["data_loader.py / etl.py<br/>Excel 載入與整理"]
+        validator["data_validator.py<br/>資料檢核"]
+        history["database.py / history_service.py / snapshot_service.py<br/>SQLite 歷史與快照"]
+    end
+
+    subgraph core["Core Forecast Logic"]
+        engine["forecast_engine.py<br/>預估計算"]
+        models["forecast_models.py<br/>資料模型"]
+        config["forecast_config.py<br/>檔名 / 欄位 / 參數"]
+    end
+
+    subgraph ops_layer["Operational Views"]
+        ops["operational_views.py<br/>Dashboard / Monitor / Settings"]
+    end
+
+    subgraph output["Output"]
+        exporter["exporter.py<br/>Excel 匯出"]
+        workbook["預估 Excel workbook"]
+    end
+
+    subgraph test_layer["Testing"]
+        tests["tests/<br/>單元與路由測試"]
+    end
+
+    browser --> flask
+    entry --> flask
+
+    flask --> templates
+    flask --> static
+    flask --> parser
+    flask --> presenter
+    flask --> engine
+    flask --> history
+    flask --> ops
+    flask --> exporter
+
+    source --> loader
+    loader --> validator
+    loader --> engine
+
+    engine --> models
+    engine --> config
+    engine --> history
+
+    ops --> loader
+    ops --> history
+
+    exporter --> workbook
+    exporter --> models
+
+    tests --> flask
+    tests --> engine
+    tests --> parser
+    tests --> presenter
 ```
 
 ## 環境需求
@@ -105,6 +156,52 @@ python app.py
 - 產品跳單高風險 = 預估月底數量低於去年同期數量 10% 以上。
 
 ## 專案結構
+
+```mermaid
+flowchart TD
+    root["MOR 專案根目錄"]
+    root --> app_py["app.py<br/>Flask 啟動包裝"]
+    root --> backend["src/backend<br/>核心後端邏輯"]
+    root --> web["src/backend/web<br/>表單與表格呈現"]
+    root --> templates_dir["templates<br/>多頁操作介面"]
+    root --> static_dir["static<br/>CSS 與小型 JS 模組"]
+    root --> tests_dir["tests<br/>回歸測試"]
+    root --> infra["infrastructure<br/>架構、ADR、規劃文件"]
+    root --> docs["docs<br/>設計、工作流程、驗證文件"]
+    root --> config_files["README.md / ROADMAP.md / DESIGN.md / AGENTS.md<br/>專案與開發指引"]
+    root --> req["requirements.txt<br/>Python 相依套件"]
+
+    backend --> backend_routes["app.py<br/>路由編排"]
+    backend --> backend_data["data_loader.py / etl.py / data_validator.py<br/>資料載入、轉換、檢核"]
+    backend --> backend_forecast["forecast_engine.py / forecast_models.py / forecast_config.py<br/>預估規則、模型、設定"]
+    backend --> backend_ops["operational_views.py<br/>Dashboard、監控、設定資料服務"]
+    backend --> backend_history["database.py / history_service.py / snapshot_service.py<br/>歷史紀錄與快照"]
+    backend --> backend_export["exporter.py<br/>匯出 workbook"]
+    backend --> backend_compat["sales_forecast.py<br/>相容 facade"]
+
+    web --> form_parser["form_parser.py"]
+    web --> forecast_presenter["forecast_presenter.py"]
+
+    templates_dir --> dashboard_tpl["index.html"]
+    templates_dir --> forecast_tpl["forecast.html"]
+    templates_dir --> monitor_tpl["product_monitor.html"]
+    templates_dir --> settings_tpl["settings.html"]
+    templates_dir --> items_tpl["items.html"]
+    templates_dir --> partials["_header.html / _dashboard_metrics.html / _forecast_row.html"]
+
+    static_dir --> css["css/mor.css"]
+    static_dir --> js["js/forecast-table.js / monitor-table.js / item-settings.js"]
+
+    docs --> workflow_docs["workflows<br/>Codex 與操作流程"]
+    docs --> design_docs["design<br/>資料模型、API、預估邏輯"]
+    docs --> arch_docs["architecture<br/>路徑與架構文件"]
+    docs --> verification_docs["verification<br/>瀏覽器驗證紀錄"]
+
+    infra --> adr["adr<br/>架構決策"]
+    infra --> plans["plans<br/>實作與路線規劃"]
+    infra --> api["api<br/>API 規格"]
+    infra --> standards["standards<br/>Git workflow"]
+```
 
 ```text
 app.py                         Flask 應用入口
