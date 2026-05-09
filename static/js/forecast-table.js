@@ -358,7 +358,7 @@ function refreshDetailBudget(state) {
   const diff     = finalQty - budget;
   const rate     = budget > 0 ? (finalQty / budget) * 100 : 0;
   const amount   = calculateAmount(state);
-  const included = state.excluded ? "排除" : (budget <= 0 ? "缺預算" : "納入");
+  const included = state.excluded ? "排除" : (budget <= 0 ? "預算為 0" : "納入");
 
   document.getElementById("rd-budget").textContent = fp(budget);
   document.getElementById("rd-final").textContent  = fp(finalQty);

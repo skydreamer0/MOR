@@ -29,10 +29,6 @@ def validate_health(health) -> list[DataIssue]:
     if health is None:
         return issues
 
-    if health.missing_budget_row_count > 0:
-        issues.append(
-            DataIssue("warning", f"有 {health.missing_budget_row_count} 筆缺少預算目標，達成率計算將略過")
-        )
     if health.zero_price_row_count > 0:
         issues.append(_zero_price_issue(health.zero_price_row_count))
     return issues

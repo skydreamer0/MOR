@@ -29,7 +29,7 @@ def test_clean_data_no_issues():
     assert issues == []
 
 
-def test_validate_health_uses_same_messages_for_dashboard_and_settings():
+def test_validate_health_does_not_warn_for_zero_budget_rows():
     health = DataHealthSummary(
         order_count=10,
         order_start=None,
@@ -44,6 +44,5 @@ def test_validate_health_uses_same_messages_for_dashboard_and_settings():
     issues = validate_health(health)
 
     assert issues == [
-        DataIssue("warning", "有 3 筆缺少預算目標，達成率計算將略過"),
         DataIssue("warning", "有 2 筆單價為 0，金額估算可能不準確"),
     ]
