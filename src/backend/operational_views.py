@@ -78,6 +78,12 @@ class ProductMonitorRow:
     remaining_shipments: int = 0
     typical_qty_per_shipment: float = 0.0
     projection_confidence: str = "low"
+    # Phase 5: three-axis amount comparison
+    current_taxed_amount: float = 0.0   # 本月目前含稅淨額（daily actuals）
+    estimated_eom_amount: float = 0.0   # 推估月底金額
+    final_forecast_amount: float = 0.0  # 最終預估金額（= ForecastRow.estimated_amount）
+    last_year_amount: float = 0.0       # 去年同期金額（0 = 無資料，顯示 -）
+    budget_amount: float = 0.0          # 本月預算金額
 
 
 @dataclass(frozen=True)
@@ -177,6 +183,7 @@ def build_forecast_page_context(
             db=db,
             today=today,
             projections=projections,
+            target_month=target.month,
         ),
         health=build_data_health_summary(data, summary, budget_months),
         items=build_items_from_sales_data(data, db),
@@ -277,13 +284,14 @@ def build_product_monitor_rows(
     db=None,
     today: date | None = None,
     projections: Mapping[str, ProjectionResult] | None = None,
+    target_month: int = 0,
 ) -> list[ProductMonitorRow]:
     today = today or date.today()
     actuals = daily_actuals or {}
     projs = projections or {}
     workday_set = fetch_workday_set(db, today - timedelta(days=400), today) if db is not None else None
     monitor_rows = [
-        _to_monitor_row(row, actuals.get(row.row_id), workday_set, today, projs.get(row.row_id))
+        _to_monitor_row(row, actuals.get(row.row_id), workday_set, today, projs.get(row.row_id), target_month)
         for row in rows if not row.excluded
     ]
     status_order = {"high": 0, "caution": 1, "ok": 2, "no_history": 3}
@@ -589,6 +597,7 @@ def _to_monitor_row(
     workday_set: frozenset[date] | None = None,
     today: date | None = None,
     projection: ProjectionResult | None = None,
+    target_month: int = 0,
 ) -> ProductMonitorRow:
     today = today or date.today()
     # Prefer daily actuals (Phase 1) over historical this_year figure
@@ -627,11 +636,28 @@ def _to_monitor_row(
         remaining_shipments = projection.remaining_shipments
         typical_qty = projection.typical_qty_per_shipment
         proj_confidence = projection.confidence
+        projected_remaining_qty = projection.projected_remaining_qty
     else:
         estimated_eom = row.system_forecast
         remaining_shipments = 0
         typical_qty = 0.0
         proj_confidence = "low"
+        projected_remaining_qty = 0.0
+
+    # Phase 5: amount fields
+    current_taxed_amount = float(actual.taxed_amount) if actual is not None else 0.0
+    # Unit price for remaining projected shipments — prefer implied price from actuals
+    if current_quantity > 0 and current_taxed_amount > 0:
+        implied_unit_price = current_taxed_amount / current_quantity
+    else:
+        implied_unit_price = row.latest_price
+    estimated_eom_amount = current_taxed_amount + projected_remaining_qty * implied_unit_price
+    final_forecast_amount = float(row.estimated_amount)
+    last_year_amount = (
+        float(row.ly_monthly_amount[target_month - 1])
+        if 1 <= target_month <= 12 else 0.0
+    )
+    budget_amount = float(row.budget_amount)
 
     return ProductMonitorRow(
         customer=row.customer,
@@ -659,6 +685,11 @@ def _to_monitor_row(
         remaining_shipments=remaining_shipments,
         typical_qty_per_shipment=typical_qty,
         projection_confidence=proj_confidence,
+        current_taxed_amount=current_taxed_amount,
+        estimated_eom_amount=estimated_eom_amount,
+        final_forecast_amount=final_forecast_amount,
+        last_year_amount=last_year_amount,
+        budget_amount=budget_amount,
     )
 
 

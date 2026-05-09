@@ -174,16 +174,63 @@
                     </span>
                   </div>
 
+                  {# ── 數量三軸比較 ── #}
                   <div class="detail-section detail-compare">
                     <span class="detail-label">數量比較</span>
-                    <div class="detail-compare-grid">
-                      <span class="compare-label">本月目前</span><strong>{{ "{:,.0f}".format(row.current_quantity) }}</strong>
-                      <span class="compare-label">推估月底</span><strong>{{ "{:,.0f}".format(row.estimated_eom_qty) }}</strong>
-                      <span class="compare-label">最終預估</span><strong>{{ "{:,.0f}".format(row.forecast_quantity) }}</strong>
-                      <span class="compare-label">去年同期</span><strong>{{ "{:,.0f}".format(row.last_year_quantity) if row.last_year_quantity > 0 else "-" }}</strong>
-                      <span class="compare-label">本月預算</span><strong>{{ "{:,.0f}".format(row.budget_quantity) if row.budget_quantity > 0 else "-" }}</strong>
+                    <div class="detail-compare-grid detail-compare-grid--3col">
+                      <span class="compare-label"></span><span class="compare-label compare-col-head">數量</span><span class="compare-label compare-col-head">GAP</span>
+
+                      <span class="compare-label">本月目前</span>
+                      <strong>{{ "{:,.0f}".format(row.current_quantity) }}</strong>
+                      <span></span>
+
+                      <span class="compare-label">推估月底</span>
+                      <strong>{{ "{:,.0f}".format(row.estimated_eom_qty) }}</strong>
+                      <span></span>
+
+                      <span class="compare-label">vs 最終預估</span>
+                      <span class="muted">{{ "{:,.0f}".format(row.forecast_quantity) }}</span>
+                      {% set gap_fcst = row.estimated_eom_qty - row.forecast_quantity %}
+                      <span class="gap-value {% if gap_fcst < 0 %}falling{% elif gap_fcst > 0 %}rising{% endif %}">{{ "{:+,.0f}".format(gap_fcst) }}</span>
+
+                      {% if row.last_year_quantity > 0 %}
+                      <span class="compare-label">vs 去年同期</span>
+                      <span class="muted">{{ "{:,.0f}".format(row.last_year_quantity) }}</span>
+                      {% set gap_yoy = row.estimated_eom_qty - row.last_year_quantity %}
+                      <span class="gap-value {% if gap_yoy < 0 %}falling{% elif gap_yoy > 0 %}rising{% endif %}">{{ "{:+,.0f}".format(gap_yoy) }}</span>
+                      {% endif %}
+
+                      {% if row.budget_quantity > 0 %}
+                      <span class="compare-label">vs 預算</span>
+                      <span class="muted">{{ "{:,.0f}".format(row.budget_quantity) }}</span>
+                      {% set gap_bud = row.estimated_eom_qty - row.budget_quantity %}
+                      <span class="gap-value {% if gap_bud < 0 %}falling{% elif gap_bud > 0 %}rising{% endif %}">{{ "{:+,.0f}".format(gap_bud) }}</span>
+                      {% endif %}
                     </div>
                   </div>
+
+                  {# ── 金額比較 ── #}
+                  {% if row.current_taxed_amount > 0 or row.final_forecast_amount > 0 %}
+                  <div class="detail-section detail-compare">
+                    <span class="detail-label">金額比較</span>
+                    <div class="detail-compare-grid">
+                      <span class="compare-label">本月目前含稅</span>
+                      <strong>{{ "{:,.0f}".format(row.current_taxed_amount) if row.current_taxed_amount > 0 else "-" }}</strong>
+
+                      <span class="compare-label">推估月底金額</span>
+                      <strong>{{ "{:,.0f}".format(row.estimated_eom_amount) if row.estimated_eom_amount > 0 else "-" }}</strong>
+
+                      <span class="compare-label">最終預估金額</span>
+                      <strong>{{ "{:,.0f}".format(row.final_forecast_amount) if row.final_forecast_amount > 0 else "-" }}</strong>
+
+                      <span class="compare-label">去年同期金額</span>
+                      <strong>{{ "{:,.0f}".format(row.last_year_amount) if row.last_year_amount > 0 else "-" }}</strong>
+
+                      <span class="compare-label">本月預算金額</span>
+                      <strong>{{ "{:,.0f}".format(row.budget_amount) if row.budget_amount > 0 else "-" }}</strong>
+                    </div>
+                  </div>
+                  {% endif %}
 
                   <div class="detail-section detail-compare">
                     <span class="detail-label">週期 &amp; 推估</span>

@@ -2473,3 +2473,12 @@ details[open] .discontinued-toggle {
   color: var(--muted);
   white-space: nowrap;
 }
+
+.detail-compare-grid--3col {
+  grid-template-columns: auto 1fr 1fr;
+}
+
+.compare-col-head {
+  font-weight: 600;
+  color: var(--text);
+}
