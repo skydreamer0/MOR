@@ -17,6 +17,26 @@
       <section class="alert" role="alert">{{ error_message }}</section>
     {% endif %}
 
+    <section class="workbench-panel" aria-labelledby="daily-import-title">
+      <div class="workbench-toolbar">
+        <div class="toolbar-title">
+          <h2 id="daily-import-title">選擇當月累積業績檔</h2>
+          <span>系統將依欄位格式判斷資料，不限制檔名。</span>
+        </div>
+        <form class="toolbar-controls" method="post" action="{{ url_for('import_product_monitor_daily_sales') }}" enctype="multipart/form-data">
+          <input type="file" name="daily_sales_file" accept=".xlsx,.xls" required>
+          <button type="submit">匯入</button>
+        </form>
+      </div>
+    </section>
+
+    {% if import_message %}
+      <section class="alert alert-info" role="status">{{ import_message }}</section>
+    {% endif %}
+    {% if import_error %}
+      <section class="alert" role="alert">{{ import_error }}</section>
+    {% endif %}
+
     <section class="monitor-workspace workbench-panel" aria-labelledby="monitor-title">
       <div class="monitor-toolbar workbench-toolbar" aria-label="跳單監控工具">
         <div class="monitor-toolbar__title toolbar-title">

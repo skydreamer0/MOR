@@ -1,3 +1,4 @@
+from io import BytesIO
 from pathlib import Path
 import re
 import shutil
@@ -1203,3 +1204,91 @@ def test_export_rejects_invalid_manual_quantity_without_500():
 
     assert response.status_code == 400
     assert "人工數量" in response.get_data(as_text=True)
+
+
+# ---------------------------------------------------------------------------
+# Daily sales import route and upload UI
+# ---------------------------------------------------------------------------
+
+def _daily_import_workbook() -> BytesIO:
+    stream = BytesIO()
+    pd.DataFrame(
+        [
+            {
+                "出貨日期": "2026-05-04",
+                "客戶代號": "C001",
+                "客戶簡稱": "Hospital A",
+                "產品": "P1",
+                "產品簡稱": "Product One",
+                "銷售數量": 5,
+                "贈品數量": 1,
+                "銷貨淨價": 100,
+                "含稅淨額": 600,
+                "折後業績": 0,
+                "發票編號": "INV",
+                "出貨單號": "SHIP",
+                "單別": "正常銷",
+                "業績屬性": "處方",
+            }
+        ]
+    ).to_excel(stream, index=False)
+    stream.seek(0)
+    return stream
+
+
+def test_product_monitor_import_route_stores_daily_actuals(monkeypatch):
+    db_base_path = _isolated_db_base()
+    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
+    columns = config.required_columns
+    data = pd.DataFrame(
+        [
+            {
+                columns[0]: 2025,
+                columns[1]: 5,
+                columns[2]: 10,
+                columns[3]: "Hospital A",
+                columns[4]: "P1",
+                columns[5]: "Product One",
+                columns[6]: 10,
+                columns[7]: 100,
+                columns[8]: 0,
+            },
+            {
+                columns[0]: 2026,
+                columns[1]: 4,
+                columns[2]: 10,
+                columns[3]: "Hospital A",
+                columns[4]: "P1",
+                columns[5]: "Product One",
+                columns[6]: 3,
+                columns[7]: 100,
+                columns[8]: 0,
+            },
+        ]
+    )
+    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config: data)
+    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
+
+    response = client.post(
+        "/monitor/products/import",
+        data={"daily_sales_file": (_daily_import_workbook(), "daily.xlsx")},
+        content_type="multipart/form-data",
+        follow_redirects=True,
+    )
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "匯入完成" in html
+    assert "6" in html
+
+
+def test_product_monitor_page_exposes_daily_sales_import_form():
+    client = _client()
+
+    html = client.get("/monitor/products").get_data(as_text=True)
+
+    assert 'action="/monitor/products/import"' in html
+    assert 'name="daily_sales_file"' in html
+    assert "選擇當月累積業績檔" in html
+    assert "系統將依欄位格式判斷資料，不限制檔名。" in html

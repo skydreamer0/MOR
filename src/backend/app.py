@@ -27,6 +27,7 @@ from src.backend.operational_views import (
 )
 from src.backend.web.form_parser import FormValidationError, parse_manual_quantities, parse_target_period
 from src.backend.web.forecast_presenter import product_display_name
+from src.backend.daily_sales_importer import import_daily_sales_workbook
 from src.backend.database import get_db
 from src.backend.etl import sync_excel_to_db
 from src.backend.snapshot_service import (
@@ -268,6 +269,32 @@ def create_app(config: dict | None = None) -> Flask:
             month=context.target.month if context else request.args.get("month", ""),
             rows=context.monitor_rows if context else [],
             error_message=error_message,
+            import_message=request.args.get("import_message"),
+            import_error=request.args.get("import_error"),
+        )
+
+    @app.post("/monitor/products/import")
+    def import_product_monitor_daily_sales() -> Response:
+        uploaded = request.files.get("daily_sales_file")
+        if uploaded is None or not uploaded.filename:
+            return redirect(url_for("product_monitor", import_error="請選擇當月累積業績檔。"))
+        try:
+            result = import_daily_sales_workbook(db, uploaded.stream, uploaded.filename)
+            cache.clear()
+        except Exception as exc:
+            return redirect(url_for("product_monitor", import_error=f"匯入失敗：{exc}"))
+        return redirect(
+            url_for(
+                "product_monitor",
+                year=result.sales_year,
+                month=result.sales_month,
+                import_message=(
+                    f"匯入完成：{result.sales_year}/{result.sales_month:02d}，"
+                    f"{result.row_count} 筆，"
+                    f"數量 {result.quantity_total:,.0f}，"
+                    f"含稅淨額 {result.taxed_amount_total:,.0f}"
+                ),
+            )
         )
 
     @app.post("/export")

@@ -3,6 +3,7 @@ from datetime import date
 
 import pandas as pd
 
+from src.backend.daily_sales_importer import DailyActualAggregate
 from src.backend.forecast_models import ForecastRow, ForecastSummary
 from src.backend.operational_views import (
     BudgetTarget,
@@ -440,3 +441,29 @@ def test_data_health_summary_reports_source_coverage_and_row_anomalies():
     assert health.missing_budget_row_count == 1
     assert health.zero_price_row_count == 1
     assert health.no_last_year_row_count == 1
+
+
+def test_product_monitor_current_quantity_prefers_daily_actual_lookup():
+    row = _row(
+        row_id="Hospital A__P1",
+        customer="Hospital A",
+        product_code="P1",
+        product_name="Product One",
+        last_year=10,
+        last_month=0,
+        current=3,
+        final=8,
+        budget=10,
+        price=100,
+    )
+    actuals = {
+        "Hospital A__P1": DailyActualAggregate(
+            actual_quantity=12,
+            taxed_amount=1200,
+            latest_sales_date="2026-05-08",
+        )
+    }
+
+    monitor_rows = build_product_monitor_rows([row], daily_actuals=actuals)
+
+    assert monitor_rows[0].current_quantity == 12

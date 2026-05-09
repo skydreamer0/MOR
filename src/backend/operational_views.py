@@ -8,6 +8,7 @@ from typing import Iterable, Mapping
 import pandas as pd
 
 from src.backend.analytics import AnalyticsSlice
+from src.backend.daily_sales_importer import DailyActualAggregate, fetch_daily_actuals_by_row_id
 from src.backend.data_loader import default_target_from_data, load_sales_detail, normalize_product_code
 from src.backend.forecast_config import ForecastConfig
 from src.backend.forecast_engine import ForecastOptions, apply_user_adjustments, build_forecast
@@ -140,12 +141,13 @@ def build_forecast_page_context(
     summary = replace(summary, total=forecast_amount_total(summary.rows))
 
     budget_months = list_budget_months(db)
+    daily_actuals = fetch_daily_actuals_by_row_id(db, target.year, target.month)
     return ForecastPageContext(
         target=target,
         sales_data=data,
         summary=summary,
         dashboard=build_dashboard_metrics(summary.rows, budget_targets.values()),
-        monitor_rows=build_product_monitor_rows(summary.rows),
+        monitor_rows=build_product_monitor_rows(summary.rows, daily_actuals=daily_actuals),
         health=build_data_health_summary(data, summary, budget_months),
         items=build_items_from_sales_data(data, db),
     )
@@ -239,8 +241,12 @@ def _latest_price_quantity(row: ForecastRow) -> float:
     return 1.0
 
 
-def build_product_monitor_rows(rows: Iterable[ForecastRow]) -> list[ProductMonitorRow]:
-    monitor_rows = [_to_monitor_row(row) for row in rows if not row.excluded]
+def build_product_monitor_rows(
+    rows: Iterable[ForecastRow],
+    daily_actuals: Mapping[str, DailyActualAggregate] | None = None,
+) -> list[ProductMonitorRow]:
+    actuals = daily_actuals or {}
+    monitor_rows = [_to_monitor_row(row, actuals.get(row.row_id)) for row in rows if not row.excluded]
     status_order = {"high": 0, "slight": 1, "ok": 2, "no_history": 3}
     return sorted(
         monitor_rows,
@@ -487,7 +493,7 @@ def _normalize_item_status(item_status: object, legacy_status_label: object = ""
     return "active"
 
 
-def _to_monitor_row(row: ForecastRow) -> ProductMonitorRow:
+def _to_monitor_row(row: ForecastRow, actual: DailyActualAggregate | None = None) -> ProductMonitorRow:
     diff_quantity = row.final_forecast - row.last_year_same_month_qty
     if row.last_year_same_month_qty <= 0:
         status = "無去年同期"
@@ -506,13 +512,15 @@ def _to_monitor_row(row: ForecastRow) -> ProductMonitorRow:
             status_key = "ok"
 
     amount_impact = _dashboard_amount(diff_quantity, row)
+    # Prefer imported daily actuals over the sales-history this_year figure when available
+    current_quantity = actual.actual_quantity if actual is not None else row.this_year_same_month_qty
     return ProductMonitorRow(
         customer=row.customer,
         product_code=row.product_code,
         product_name=row.product_name,
         last_year_quantity=row.last_year_same_month_qty,
         last_month_quantity=row.last_month_actual,
-        current_quantity=row.this_year_same_month_qty,
+        current_quantity=current_quantity,
         forecast_quantity=row.final_forecast,
         diff_quantity=diff_quantity,
         drop_rate=drop_rate,
