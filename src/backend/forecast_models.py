@@ -57,6 +57,10 @@ class ForecastRow:
     avg_3m: float = 0.0
     excluded: bool = False
     item_status: str = "active"
+    ly_monthly: list[float]     = field(default_factory=lambda: [0.0] * 12)
+    ty_monthly: list[float]     = field(default_factory=lambda: [0.0] * 12)
+    budget_monthly: list[float] = field(default_factory=lambda: [0.0] * 12)
+    ly_price: float = 0.0
 
     def with_adjustment(self, manual_adjustment: float | None, excluded: bool) -> "ForecastRow":
         final_forecast = float(manual_adjustment) if manual_adjustment is not None else float(self.system_forecast)
@@ -98,6 +102,10 @@ class ForecastRow:
             "forecast_basis": self.forecast_basis,
             "excluded": self.excluded,
             "item_status": self.item_status,
+            "ly_monthly": self.ly_monthly,
+            "ty_monthly": self.ty_monthly,
+            "budget_monthly": self.budget_monthly,
+            "ly_price": self.ly_price,
         }
 
 

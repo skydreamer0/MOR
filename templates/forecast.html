@@ -4,10 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>預估調整 - MOR</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/mor.css') }}">
-  <script src="https://unpkg.com/htmx.org@1.9.10"
-          integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5ViYgSibmK"
-          crossorigin="anonymous"></script>
+  {% include "_head_assets.html" %}
 </head>
 <body>
   {% set page_title = "預估調整" %}
@@ -140,7 +137,7 @@
 
     <!-- Row detail drawer -->
     <div class="row-detail-backdrop" id="row-detail-backdrop" hidden aria-hidden="true"></div>
-    <aside class="row-detail" id="row-detail" hidden role="complementary" aria-label="列詳細資料">
+    <aside class="row-detail" id="row-detail" data-forecast-year="{{ year }}" data-forecast-month="{{ month }}" hidden role="complementary" aria-label="列詳細資料">
       <div class="row-detail__header">
         <div>
           <p class="row-detail__customer" id="rd-customer"></p>
@@ -149,34 +146,89 @@
         <button type="button" class="icon-btn rd-close-btn" id="rd-close" title="關閉">✕</button>
       </div>
       <div class="row-detail__body">
-        <div class="detail-section">
+        <div class="detail-section" id="rd-lm-section">
           <h4>上月表現</h4>
           <div class="detail-row"><span>實績</span><span class="detail-val" id="rd-lm-actual">—</span></div>
           <div class="detail-row"><span>預算</span><span class="detail-val" id="rd-lm-budget">—</span></div>
           <div class="detail-row"><span>達成率</span><span class="detail-val" id="rd-lm-rate">—</span></div>
           <div class="detail-row"><span>GAP</span><span class="detail-val" id="rd-lm-gap">—</span></div>
         </div>
+
         <div class="detail-section">
-          <h4>年度比較</h4>
-          <div class="detail-row"><span>去年同期</span><span class="detail-val" id="rd-last-year">—</span></div>
-          <div class="detail-row"><span>今年同期</span><span class="detail-val" id="rd-this-year">—</span></div>
+          <h4>年度業績比較（數量）</h4>
+
+          <!-- Trend chart -->
+          <canvas id="rd-trend-canvas" class="detail-trend-canvas"></canvas>
+          <div class="detail-chart-legend">
+            <span class="legend-ly">去年</span>
+            <span class="legend-budget">預算</span>
+            <span class="legend-ty">今年</span>
+            <span class="legend-ma3">MA3</span>
+            <span class="legend-ma6">MA6</span>
+          </div>
+
+          <!-- 6-column monthly table: 月 去年 預算 今年 達成% YoY% -->
+          <table class="detail-monthly-table">
+            <thead>
+              <tr>
+                <th>月</th>
+                <th>去年</th>
+                <th>預算</th>
+                <th>今年</th>
+                <th>達成</th>
+                <th>YoY</th>
+              </tr>
+            </thead>
+            <tbody id="rd-monthly-tbody"></tbody>
+            <tfoot>
+              <tr class="detail-monthly-total">
+                <th>合計</th>
+                <td id="rd-ly-total">—</td>
+                <td id="rd-budget-total">—</td>
+                <td id="rd-ty-total">—</td>
+                <td id="rd-budget-rate-total">—</td>
+                <td id="rd-yoy-total">—</td>
+              </tr>
+            </tfoot>
+          </table>
         </div>
+
+        <!-- YTD cumulative comparison -->
         <div class="detail-section">
-          <h4>預算達成</h4>
+          <h4>累計比較（YTD）</h4>
+          <div id="rd-ytd-container"></div>
+        </div>
+
+        <!-- Price -->
+        <div class="detail-section">
+          <h4>單價</h4>
+          <div class="detail-row"><span>去年同月</span><span class="detail-val" id="rd-ly-price">—</span></div>
+          <div class="detail-row"><span>今年最新</span><span class="detail-val" id="rd-ty-price">—</span></div>
+          <div class="detail-row" id="rd-price-change-row" hidden>
+            <span>漲跌幅</span><span class="detail-val" id="rd-price-change">—</span>
+          </div>
+        </div>
+
+        <!-- Assessment: MA3, MA6, trend -->
+        <div class="detail-section">
+          <h4>評估指標</h4>
+          <div id="rd-assessment-container"></div>
+        </div>
+
+        <!-- Budget & forecast (dynamic, updates on manual adjustment) -->
+        <div class="detail-section">
+          <h4>預算 &amp; 預估<span class="badge off" id="rd-included-badge" hidden></span></h4>
           <div class="detail-row"><span>預算目標</span><span class="detail-val" id="rd-budget">—</span></div>
           <div class="detail-row"><span>最後預估</span><span class="detail-val" id="rd-final">—</span></div>
           <div class="detail-row"><span>達成率</span><span class="detail-val" id="rd-achieve-rate">—</span></div>
           <div class="detail-row"><span>差異</span><span class="detail-val" id="rd-diff">—</span></div>
-        </div>
-        <div class="detail-section">
-          <h4>金額</h4>
           <div class="detail-row"><span>預估金額</span><span class="detail-val" id="rd-amount">—</span></div>
-          <div class="detail-row"><span>計算狀態</span><span class="detail-val" id="rd-included">—</span></div>
         </div>
       </div>
     </aside>
   </main>
 
+  <script src="{{ url_for('static', filename='js/analytics-renderer.js') }}"></script>
   <script src="{{ url_for('static', filename='js/forecast-table.js') }}"></script>
   <script>
     // 填滿視窗高度（扣掉 sticky header）

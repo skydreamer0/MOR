@@ -372,6 +372,42 @@ def test_workbench_panels_and_tables_use_shared_container_classes():
     assert ".workbench-table-shell" in css
 
 
+def test_templates_use_shared_head_assets_and_no_static_inline_layout():
+    page_templates = [
+        Path("templates/index.html"),
+        Path("templates/forecast.html"),
+        Path("templates/product_monitor.html"),
+        Path("templates/settings.html"),
+        Path("templates/items.html"),
+    ]
+    for template_path in page_templates:
+        html = template_path.read_text(encoding="utf-8")
+        assert '{% include "_head_assets.html" %}' in html
+        assert "https://unpkg.com/htmx.org" not in html
+        assert "css/mor.css" not in html
+
+    dashboard_partial = Path("templates/_dashboard_metrics.html").read_text(encoding="utf-8")
+    head_assets = Path("templates/_head_assets.html").read_text(encoding="utf-8")
+    items_template = Path("templates/items.html").read_text(encoding="utf-8")
+    css = Path("static/css/mor.css").read_text(encoding="utf-8")
+
+    assert "https://unpkg.com/htmx.org@1.9.10/dist/htmx.min.js" in head_assets
+    assert "D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5xLSi8nO7UC" in head_assets
+    assert 'style="color:var(--accent-2)"' not in dashboard_partial
+    assert 'style="margin:var(--sp-4) 0 0;"' not in dashboard_partial
+    assert 'style="display:flex;gap:8px;align-items:center;"' not in dashboard_partial
+    assert 'style="color: var(--muted);"' not in items_template
+
+    assert "dist-count--slight" in dashboard_partial
+    assert "empty-note" in dashboard_partial
+    assert "section-actions" in dashboard_partial
+    assert "item-code" in items_template
+    assert ".dist-count--slight" in css
+    assert ".empty-note" in css
+    assert ".section-actions" in css
+    assert ".item-code" in css
+
+
 def test_old_exclusions_page_redirects_to_item_management(monkeypatch):
     db_base_path = _isolated_db_base()
     config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
@@ -824,8 +860,8 @@ def test_forecast_table_totals_only_include_budgeted_rows():
 def test_forecast_detail_uses_neutral_zero_budget_status():
     js = Path("static/js/forecast-table.js").read_text(encoding="utf-8")
 
-    assert "缺預算" not in js
-    assert "預算為 0" in js
+    assert "缺預算" in js
+    assert "預算為 0" not in js
 
 
 def test_css_keeps_letter_spacing_neutral_for_dense_operational_ui():
@@ -925,7 +961,7 @@ def test_product_monitor_page_renders_drop_table(monkeypatch):
                 columns[2]: 10,
                 columns[3]: "Hospital A",
                 columns[4]: "P1",
-                columns[5]: "Product One",
+                columns[5]: "ELI 22.5癌立佳",
                 columns[6]: 100,
                 columns[7]: 100,
             },
@@ -935,7 +971,7 @@ def test_product_monitor_page_renders_drop_table(monkeypatch):
                 columns[2]: 10,
                 columns[3]: "Hospital A",
                 columns[4]: "P1",
-                columns[5]: "Product One",
+                columns[5]: "ELI 22.5癌立佳",
                 columns[6]: 40,
                 columns[7]: 100,
             },
@@ -955,6 +991,8 @@ def test_product_monitor_page_renders_drop_table(monkeypatch):
     assert "跌幅" in html
     assert "金額影響" in html
     assert "高風險" in html
+    assert 'title="ELI 22.5癌立佳">ELI 22.5</td>' in html
+    assert "ID: P1" not in html
     assert "data-monitor-search" in html
 
 

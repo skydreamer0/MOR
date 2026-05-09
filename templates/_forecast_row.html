@@ -18,6 +18,10 @@
   data-trend="{{ row.trend_6m | tojson if row.trend_6m else '[0,0,0,0,0,0]' }}"
   data-lm-actual="{{ row.last_month_actual }}"
   data-lm-budget="{{ row.last_month_budget }}"
+  data-ly-monthly="{{ row.ly_monthly | tojson }}"
+  data-ty-monthly="{{ row.ty_monthly | tojson }}"
+  data-budget-monthly="{{ row.budget_monthly | tojson }}"
+  data-ly-price="{{ row.ly_price }}"
 >
   <!-- 1. 狀態 -->
   <td>

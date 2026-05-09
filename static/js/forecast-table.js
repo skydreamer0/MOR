@@ -1,6 +1,10 @@
 const formatter = new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 0 });
 const precisionFormatter = formatter;
 
+const _fp   = (n) => precisionFormatter.format(n);
+const _pct  = (n) => n.toFixed(1) + "%";
+const _sign = (n) => (n > 0 ? "+" : "") + _fp(n);
+
 /* ── Sparkline Renderer ─────────────────────────────────────────── */
 
 /**
@@ -307,31 +311,27 @@ function openDetailPanel(row) {
 
   _detailRowId = row.dataset.rowId;
 
-  const state    = readRowState(row);
-  const f        = (n) => formatter.format(n);
-  const fp       = (n) => precisionFormatter.format(n);
-  const sign     = (n) => (n > 0 ? "+" : "") + fp(n);
-  const pct      = (n) => n.toFixed(1) + "%";
+  const state = readRowState(row);
 
   // Header
   document.getElementById("rd-customer").textContent = row.dataset.customer || "";
   document.getElementById("rd-product").textContent  = row.dataset.productName || "";
 
-  // 上月表現
+  // 上月表現 — 兩者都是 0 時整個 section 無意義，直接隱藏
   const lmActual = state.lmActual;
   const lmBudget = state.lmBudget;
-  const lmRate   = lmBudget > 0 ? (lmActual / lmBudget) * 100 : 0;
-  const lmGap    = lmActual - lmBudget;
-  document.getElementById("rd-lm-actual").textContent = fp(lmActual);
-  document.getElementById("rd-lm-budget").textContent = fp(lmBudget);
-  setDetailVal("rd-lm-rate", pct(lmRate), lmRate >= 100 ? "high" : lmRate < 80 ? "low" : "");
-  setDetailVal("rd-lm-gap",  sign(lmGap), lmGap >= 0 ? "positive" : "negative");
+  const lmSection = document.getElementById("rd-lm-section");
+  if (lmSection) lmSection.hidden = lmActual === 0 && lmBudget === 0;
 
-  // 年度比較
-  const lastYear = Number(row.dataset.lastYearQty || 0);
-  const thisYear = Number(row.dataset.actualQty   || 0);
-  document.getElementById("rd-last-year").textContent = fp(lastYear);
-  document.getElementById("rd-this-year").textContent = fp(thisYear);
+  const lmRate = lmBudget > 0 ? (lmActual / lmBudget) * 100 : 0;
+  const lmGap  = lmActual - lmBudget;
+  document.getElementById("rd-lm-actual").textContent = _fp(lmActual);
+  document.getElementById("rd-lm-budget").textContent = _fp(lmBudget);
+  setDetailVal("rd-lm-rate", _pct(lmRate), lmRate >= 100 ? "high" : lmRate < 80 ? "low" : "");
+  setDetailVal("rd-lm-gap",  _sign(lmGap), lmGap >= 0 ? "positive" : "negative");
+
+  // 年度業績比較：趨勢圖 + 月份表格 + YTD + 評估
+  renderAnalytics(row);
 
   // 預算達成 (動態，跟著人工調整更新)
   refreshDetailBudget(state);
@@ -349,23 +349,27 @@ function openDetailPanel(row) {
 }
 
 function refreshDetailBudget(state) {
-  const fp      = (n) => precisionFormatter.format(n);
-  const pct     = (n) => n.toFixed(1) + "%";
-  const sign    = (n) => (n > 0 ? "+" : "") + fp(n);
-
   const budget   = state.budgetQuantity;
   const finalQty = finalForecastQuantity(state);
   const diff     = finalQty - budget;
   const rate     = budget > 0 ? (finalQty / budget) * 100 : 0;
   const amount   = calculateAmount(state);
-  const included = state.excluded ? "排除" : (budget <= 0 ? "預算為 0" : "納入");
 
-  document.getElementById("rd-budget").textContent = fp(budget);
-  document.getElementById("rd-final").textContent  = fp(finalQty);
-  setDetailVal("rd-achieve-rate", pct(rate), rate >= 100 ? "high" : rate < 80 ? "low" : "");
-  setDetailVal("rd-diff",         sign(diff), diff >= 0 ? "positive" : "negative");
-  document.getElementById("rd-amount").textContent   = formatter.format(amount);
-  document.getElementById("rd-included").textContent = included;
+  document.getElementById("rd-budget").textContent = _fp(budget);
+  document.getElementById("rd-final").textContent  = _fp(finalQty);
+  setDetailVal("rd-achieve-rate", _pct(rate), rate >= 100 ? "high" : rate < 80 ? "low" : "");
+  setDetailVal("rd-diff",         _sign(diff), diff >= 0 ? "positive" : "negative");
+  document.getElementById("rd-amount").textContent = formatter.format(amount);
+
+  // 計算狀態 badge（放在 section header 旁）
+  const badge = document.getElementById("rd-included-badge");
+  if (badge) {
+    const isExcluded = state.excluded;
+    const noBudget   = budget <= 0;
+    badge.textContent = isExcluded ? "排除" : (noBudget ? "缺預算" : "納入");
+    badge.className   = "badge" + (isExcluded || noBudget ? " off" : "");
+    badge.hidden      = false;
+  }
 }
 
 function setDetailVal(id, text, cls) {
@@ -373,6 +377,69 @@ function setDetailVal(id, text, cls) {
   if (!el) return;
   el.textContent = text;
   el.className = "detail-val" + (cls ? " " + cls : "");
+}
+
+function renderAnalytics(row) {
+  const panel = document.getElementById("row-detail");
+  const targetMonth = Number(panel?.dataset.forecastMonth || 0);
+
+  const lyMonthly     = JSON.parse(row.dataset.lyMonthly     || "[]");
+  const tyMonthly     = JSON.parse(row.dataset.tyMonthly     || "[]");
+  const budgetMonthly = JSON.parse(row.dataset.budgetMonthly || "[]");
+  const lyPrice       = Number(row.dataset.lyPrice || 0);
+  const tyPrice       = Number(row.dataset.price   || 0);
+
+  const data = { lyMonthly, tyMonthly, budgetMonthly, targetMonth };
+
+  // Trend chart
+  AnalyticsRenderer.renderTrendChart(
+    document.getElementById("rd-trend-canvas"),
+    data,
+  );
+
+  // Monthly table (6-column)
+  AnalyticsRenderer.renderMonthlyTable(
+    document.getElementById("rd-monthly-tbody"),
+    data,
+    {
+      lyTotalId:         "rd-ly-total",
+      budgetTotalId:     "rd-budget-total",
+      tyTotalId:         "rd-ty-total",
+      budgetRateTotalId: "rd-budget-rate-total",
+      yoyTotalId:        "rd-yoy-total",
+    },
+  );
+
+  // Compute shared metrics for YTD + assessment
+  const metrics = AnalyticsRenderer.computeMetrics(lyMonthly, tyMonthly, budgetMonthly, targetMonth);
+
+  // YTD cumulative
+  AnalyticsRenderer.renderYtd(
+    document.getElementById("rd-ytd-container"),
+    metrics,
+    targetMonth,
+  );
+
+  // Assessment: MA3, MA6, trend
+  AnalyticsRenderer.renderAssessment(
+    document.getElementById("rd-assessment-container"),
+    metrics,
+  );
+
+  // Price section
+  const moneyFmt = (n) => n > 0 ? formatter.format(n) : "—";
+  document.getElementById("rd-ly-price").textContent = moneyFmt(lyPrice);
+  document.getElementById("rd-ty-price").textContent = moneyFmt(tyPrice);
+
+  const priceChangeRow = document.getElementById("rd-price-change-row");
+  if (priceChangeRow && lyPrice > 0 && tyPrice > 0 && Math.abs(tyPrice - lyPrice) > 0.01) {
+    const pct = (tyPrice - lyPrice) / lyPrice * 100;
+    setDetailVal("rd-price-change", (pct > 0 ? "+" : "") + pct.toFixed(1) + "%",
+      pct > 0 ? "positive" : "negative");
+    priceChangeRow.hidden = false;
+  } else if (priceChangeRow) {
+    priceChangeRow.hidden = true;
+  }
 }
 
 function closeDetailPanel() {

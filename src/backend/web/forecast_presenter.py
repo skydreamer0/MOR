@@ -93,6 +93,10 @@ def _serialize_row(row: ForecastRow) -> dict:
         "estimated_amount": row.estimated_amount,
         "forecast_basis": row.forecast_basis,
         "excluded": row.excluded,
+        "ly_monthly": row.ly_monthly,
+        "ty_monthly": row.ty_monthly,
+        "budget_monthly": row.budget_monthly,
+        "ly_price": row.ly_price,
     }
 
 
