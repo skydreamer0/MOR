@@ -942,7 +942,7 @@ input.qty:focus {
 }
 
 
-/* ── Product abbreviation cell ──────────────────────────────── */
+/* ── Product cell ────────────────────────────────────────────── */
 .cell-product {
   white-space: nowrap;
   cursor: default;
@@ -990,10 +990,13 @@ th.col-group-end + th {
   border-left: 2px solid var(--line);
 }
 
-/* 品項欄固定窄寬，只顯示三字縮寫 */
+/* 一般品項顯示三字；ELI 額外顯示劑量，例如 ELI 7.5 / 22.5。 */
 .forecast-table th:nth-child(3),
 .forecast-table td:nth-child(3) {
-  width: 44px;
+  min-width: 96px;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 

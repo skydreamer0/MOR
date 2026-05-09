@@ -33,7 +33,7 @@
   <!-- 2. 客戶 -->
   <td>{{ row.customer }}</td>
   <!-- 3. 品項 -->
-  <td class="cell-product" title="{{ row.product_name }}">{{ row.product_name[:3] }}</td>
+  <td class="cell-product" title="{{ row.product_name }}">{{ row.product_name | product_display_name }}</td>
   <!-- 4. 趨勢 -->
   <td class="sparkline-cell"><canvas data-sparkline width="80" height="24"></canvas></td>
   <!-- 5. 上月表現 (達成% + GAP 合一格) -->

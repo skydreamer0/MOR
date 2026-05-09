@@ -728,6 +728,14 @@ def test_static_assets_define_invalid_row_validation_behavior():
     assert "data-unrendered-total" in js
 
 
+def test_forecast_row_keeps_three_char_abbreviation_except_eli_dose():
+    row_template = Path("templates/_forecast_row.html").read_text(encoding="utf-8")
+    css = Path("static/css/mor.css").read_text(encoding="utf-8")
+
+    assert "product_display_name" in row_template
+    assert "min-width: 96px;" in css
+
+
 def test_forecast_table_compares_live_gap_to_budget():
     js = Path("static/js/forecast-table.js").read_text(encoding="utf-8")
 

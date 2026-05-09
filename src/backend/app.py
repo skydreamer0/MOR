@@ -25,6 +25,7 @@ from src.backend.operational_views import (
     build_status_distribution,
 )
 from src.backend.web.form_parser import FormValidationError, parse_manual_quantities, parse_target_period
+from src.backend.web.forecast_presenter import product_display_name
 from src.backend.database import get_db
 from src.backend.etl import sync_excel_to_db
 from src.backend.snapshot_service import (
@@ -54,6 +55,7 @@ def create_app(config: dict | None = None) -> Flask:
     db = get_db(db_base_path)
     cache = Cache(config={"CACHE_TYPE": "SimpleCache", "CACHE_DEFAULT_TIMEOUT": 0})
     cache.init_app(app)
+    app.jinja_env.filters["product_display_name"] = product_display_name
 
     def _make_cache_key(year: int, month: int) -> str:
         detail_path = data_base_path / forecast_config.detail_file
