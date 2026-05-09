@@ -495,6 +495,21 @@ main {
 }
 
 
+/* ── Phase 4: Workbench panels and table containers ─────────── */
+.workbench-panel {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  box-shadow: var(--shadow-sm);
+}
+
+.workbench-table-shell {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  box-shadow: var(--shadow-sm);
+}
+
 /* ── Phase 3: Table Grid — Spreadsheet-native ───────────────── */
 .table-wrap {
   overflow-x: auto;

@@ -12,7 +12,8 @@ This is a staged UI cleanup plan. Do not implement all phases in one batch.
 - Phase 1 UI tokens: completed for font stack, control size tokens, app title size, and metric value scale.
 - Phase 2 buttons and form controls: completed for base controls, compact toolbar buttons, short inline action buttons, icon-only overrides, and Google Inter removal.
 - Phase 3 page toolbars: completed for forecast, monitor, and settings shared toolbar structure.
-- Phase 4 and later phases remain pending.
+- Phase 4 panels and table containers: completed for shared workbench panel/table shell classes across dashboard, forecast, monitor, and settings.
+- Phase 5 and later phases remain pending.
 
 ## Scope
 
@@ -139,6 +140,8 @@ Verification:
 - Confirm monitor search/status filters and settings search/save still work.
 
 ### Phase 4 — Panels And Table Containers
+
+Status: completed.
 
 Unify page workspace containers without changing business behavior.
 

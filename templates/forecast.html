@@ -107,7 +107,7 @@
         人工數量必須是 0 以上的數字。
       </div>
 
-      <div class="table-wrap">
+      <div class="table-wrap forecast-table-shell workbench-table-shell">
         <table class="forecast-table">
           {% include "_forecast_thead.html" %}
           <tbody>
@@ -123,7 +123,7 @@
           <summary class="discontinued-toggle">
             已停用品項（共 {{ discontinued_rows|length }} 項，去年業績合計：{{ "{:,.0f}".format(discontinued_last_year_total) }}）
           </summary>
-          <div class="table-wrap">
+          <div class="table-wrap forecast-table-shell workbench-table-shell">
             <table class="forecast-table">
               {% include "_forecast_thead.html" %}
               <tbody>

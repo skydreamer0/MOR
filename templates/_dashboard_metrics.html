@@ -8,7 +8,7 @@
 </section>
 {% endfor %}
 
-<section class="hero__container" aria-label="業績總覽">
+<section class="hero__container workbench-panel" aria-label="業績總覽">
   <div class="hero__header">
     <div class="hero__titles">
       <h2>業績總覽</h2>
@@ -78,7 +78,7 @@
 
 {% if status_dist %}
 <section class="risk-dashboard" aria-label="跳單狀態分布">
-  <div class="risk-panel__summary panel">
+  <div class="risk-panel__summary panel workbench-panel">
     <h3>跳單狀態</h3>
     <div class="status-dist">
       <div class="dist-item">
@@ -108,7 +108,7 @@
     </div>
   </div>
 
-  <div class="risk-panel__customer-rank panel">
+  <div class="risk-panel__customer-rank panel workbench-panel">
     <h3>客戶風險排行</h3>
     {% if customer_ranking %}
     {% set max_gap = (customer_ranking[0].gap_amount | abs) if customer_ranking[0].gap_amount != 0 else 1 %}
@@ -133,7 +133,7 @@
 </section>
 {% endif %}
 
-<section class="panel" aria-label="高風險產品追蹤">
+<section class="panel workbench-panel" aria-label="高風險產品追蹤">
   <div class="section-header">
     <h3>高風險產品追蹤</h3>
     <div style="display:flex;gap:8px;align-items:center;">
@@ -141,7 +141,7 @@
       <a class="link-btn" href="{{ url_for('forecast', year=year, month=month) }}">預估調整</a>
     </div>
   </div>
-  <div class="table-wrap compact-table">
+  <div class="table-wrap compact-table workbench-table-shell">
     <table>
       <thead>
         <tr>

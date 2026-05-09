@@ -110,6 +110,10 @@ Sticky top bar with title on the left and period controls on the right. It shoul
 
 Forecast, monitor, and settings workbars should use the shared `workbench-toolbar` structure with `toolbar-title`, `toolbar-controls`, and `toolbar-actions` regions. Page-specific classes may remain for width or behavior hooks, but the layout rhythm and control spacing should come from the shared toolbar rules.
 
+### Panels And Table Containers
+
+Dashboard panels, forecast table shells, monitor workspace, and settings workspace should use shared `workbench-panel` or `workbench-table-shell` classes for border, radius, surface, and elevation. Page-specific classes may still own height, padding, sticky columns, and overflow details.
+
 ### Dashboard Layout
 
 The dashboard follows a three-zone information hierarchy: **Status → Risk → Action**.

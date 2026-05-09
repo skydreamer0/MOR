@@ -110,7 +110,7 @@ def test_homepage_data_health_alert_appears_before_progress_hero(monkeypatch):
 
     assert response.status_code == 200
     assert 'class="alert alert-info' in html
-    assert html.index('class="alert alert-info') < html.index('class="hero__container"')
+    assert html.index('class="alert alert-info') < html.index('class="hero__container workbench-panel"')
 
 
 def test_forecast_page_renders_forecast_review_assets_and_tools():
@@ -167,7 +167,7 @@ def test_dashboard_metrics_partial_renders_fragment_only():
 
     assert response.status_code == 200
     assert "<html" not in html
-    assert 'class="hero__container"' in html
+    assert 'class="hero__container workbench-panel"' in html
     assert "業績總覽" in html
 
 
@@ -345,6 +345,31 @@ def test_workbench_toolbars_use_shared_structure_classes():
     assert ".toolbar-title" in css
     assert ".toolbar-controls" in css
     assert ".toolbar-actions" in css
+
+
+def test_workbench_panels_and_tables_use_shared_container_classes():
+    client = _client()
+
+    dashboard = client.get("/").get_data(as_text=True)
+    forecast = client.get("/forecast").get_data(as_text=True)
+    monitor = client.get("/monitor/products").get_data(as_text=True)
+    settings = client.get("/settings").get_data(as_text=True)
+    css = Path("static/css/mor.css").read_text(encoding="utf-8")
+
+    assert 'class="hero__container workbench-panel' in dashboard
+    assert "risk-panel__summary panel workbench-panel" in dashboard
+    assert "risk-panel__customer-rank panel workbench-panel" in dashboard
+    assert 'class="panel workbench-panel"' in dashboard
+    assert "table-wrap compact-table workbench-table-shell" in dashboard
+
+    assert "table-wrap forecast-table-shell workbench-table-shell" in forecast
+    assert "monitor-workspace workbench-panel" in monitor
+    assert "table-wrap monitor-table-wrap workbench-table-shell" in monitor
+    assert "settings-workspace workbench-panel" in settings
+    assert "table-wrap settings-table-wrap workbench-table-shell" in settings
+
+    assert ".workbench-panel" in css
+    assert ".workbench-table-shell" in css
 
 
 def test_old_exclusions_page_redirects_to_item_management(monkeypatch):
