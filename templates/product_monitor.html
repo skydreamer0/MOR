@@ -69,7 +69,8 @@
               <td class="num">{{ "{:,.0f}".format(row.current_quantity) }}</td>
               <td class="num">{{ "{:,.0f}".format(row.forecast_quantity) }}</td>
               <td class="num">
-                <span class="gap-value {% if row.diff_quantity < 0 %}negative{% elif row.diff_quantity > 0 %}positive{% endif %}">
+                {# 台灣慣例：漲(>0)=rising(紅)、跌(<0)=falling(綠) #}
+                <span class="gap-value {% if row.diff_quantity < 0 %}falling{% elif row.diff_quantity > 0 %}rising{% endif %}">
                   {{ "{:+,.0f}".format(row.diff_quantity) }}
                 </span>
               </td>
@@ -77,13 +78,13 @@
                 {% if row.drop_rate is none %}
                   <span class="muted">-</span>
                 {% else %}
-                  <span class="gap-value {% if row.drop_rate < 0 %}negative{% elif row.drop_rate > 0 %}positive{% endif %}">
+                  <span class="gap-value {% if row.drop_rate < 0 %}falling{% elif row.drop_rate > 0 %}rising{% endif %}">
                     {{ "{:+.1f}%".format(row.drop_rate) }}
                   </span>
                 {% endif %}
               </td>
               <td class="num">
-                <span class="gap-value {% if row.amount_impact < 0 %}negative{% elif row.amount_impact > 0 %}positive{% endif %}">
+                <span class="gap-value {% if row.amount_impact < 0 %}falling{% elif row.amount_impact > 0 %}rising{% endif %}">
                   {{ "{:+,.0f}".format(row.amount_impact) }}
                 </span>
               </td>

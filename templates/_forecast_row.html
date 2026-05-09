@@ -23,35 +23,25 @@
   data-budget-monthly="{{ row.budget_monthly | tojson }}"
   data-ly-price="{{ row.ly_price }}"
 >
-  <!-- 1. 狀態 -->
-  <td>
-    {% if row.auto_in_month %}
-      <span class="badge">自動預估</span>
-    {% else %}
-      <span class="badge off">未到期</span>
-    {% endif %}
-    {% if row.item_status == "discontinued" %}
-      <span class="badge off">停用</span>
-    {% endif %}
-  </td>
-  <!-- 2. 客戶 -->
+  <!-- 1. 客戶 — accent bar driven by CSS via data-status / data-item-status on the <tr> -->
   <td>{{ row.customer }}</td>
-  <!-- 3. 品項 -->
-  <td class="cell-product" title="{{ row.product_name }}">{{ row.product_name | product_display_name }}</td>
-  <!-- 4. 趨勢 -->
-  <td class="sparkline-cell"><canvas data-sparkline width="80" height="24"></canvas></td>
-  <!-- 5. 上月表現 (達成% + GAP 合一格) -->
+  <!-- 2. 品項 + sparkline (replaces separate Trend column) -->
+  <td class="cell-product" title="{{ row.product_name }}">
+    <div class="cell-product__name">{{ row.product_name | product_display_name }}</div>
+    <canvas data-sparkline class="product-sparkline" width="80" height="18"></canvas>
+  </td>
+  <!-- 3. 上月表現 (達成% + GAP 合一格) -->
   <td class="num" data-lm-perf-display>
     <div class="lm-perf">
       <span class="rate"></span>
       <small class="gap-value"></small>
     </div>
   </td>
-  <!-- 6. 去年同期 — col-group-start: border rendered via td.col-group-start in mor.css (matches <th col-group-start> above) -->
+  <!-- 4. 去年同期 — col-group-start: border rendered via td.col-group-start in mor.css (matches <th col-group-start> above) -->
   <td class="num col-group-start">{{ "{:,.0f}".format(row.last_year_same_month_qty) }}</td>
-  <!-- 7. 系統預估 -->
+  <!-- 5. 系統預估 -->
   <td class="num">{{ "{:,.0f}".format(row.system_forecast) }}</td>
-  <!-- 8. 人工調整 -->
+  <!-- 6. 人工調整 -->
   <td class="num">
     <div class="qty-wrapper">
       <input class="qty" name="manual_adjustment__{{ row.row_id }}" type="number" min="0" step="1" aria-label="人工調整數量" data-manual value="{% if row.manual_adjustment is not none %}{{ row.manual_adjustment|int }}{% endif %}"
@@ -65,11 +55,11 @@
       <button type="button" class="icon-btn" title="還原系統預估" data-restore {% if row.manual_adjustment is none %}hidden{% endif %}>還原</button>
     </div>
   </td>
-  <!-- 9. 最後預估 — col-group-start: opens the forecast/decision group (cols 9–10); border via td.col-group-start in mor.css -->
+  <!-- 7. 最後預估 — col-group-start: opens the forecast/decision group (cols 7–8); border via td.col-group-start in mor.css -->
   <td class="num col-group-start" data-final-forecast>{{ "{:,.0f}".format(row.final_forecast) }}</td>
-  <!-- 10. 差異 (最後預估 - 預算目標) -->
-  <td class="num" data-diff-display><span class="gap-value"></span></td>
-  <!-- 11. 調整原因 -->
+  <!-- 8. 差異 (最後預估 - 預算目標) — col-group-end 必須與 <th> 一致，讓分組框線延伸到資料列 -->
+  <td class="num col-group-end" data-diff-display><span class="gap-value"></span></td>
+  <!-- 9. 調整原因 -->
   <td>
     <input class="reason" name="adjustment_reason__{{ row.row_id }}" type="text" placeholder="原因..." data-reason value="{{ row.adjustment_reason or '' }}"
            hx-patch="{{ url_for('patch_forecast_row', row_id=row.row_id) }}"

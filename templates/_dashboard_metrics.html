@@ -62,7 +62,8 @@
       </div>
       <div class="sub-metric">
         <span class="sub-metric-label">金額 GAP</span>
-        <strong class="sub-metric-value {% if metrics.amount_gap < 0 %}danger-text{% else %}success-text{% endif %}">
+        {# 台灣慣例：漲(>0)=紅=danger-text、跌(<0)=綠=success-text #}
+        <strong class="sub-metric-value {% if metrics.amount_gap > 0 %}danger-text{% else %}success-text{% endif %}">
           {{ "{:+,.0f}".format(metrics.amount_gap) }}
         </strong>
         <small class="sub-metric-note">預估與預算差異</small>
@@ -239,17 +240,20 @@
   // ── 表格渲染 ──────────────────────────────────────────
   const fmt0 = new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 0 });
   const ARROW = { up: "↑", flat: "→", down: "↓" };
-  const ACLS  = { up: "positive", flat: "", down: "negative" };
+  // 台灣慣例：漲=紅(.rising)、跌=綠(.falling)
+  const ACLS  = { up: "rising", flat: "", down: "falling" };
 
   function _yoyTxt(ytdCurr, ytdPrev) {
     if (ytdPrev <= 0) return ["—", ""];
     const pct = (ytdCurr - ytdPrev) / ytdPrev * 100;
-    return [(pct > 0 ? "+" : "") + pct.toFixed(1) + "%", pct > 0 ? "positive" : pct < 0 ? "negative" : ""];
+    // YoY 是方向性指標：漲=rising(紅)、跌=falling(綠)
+    return [(pct > 0 ? "+" : "") + pct.toFixed(1) + "%", pct > 0 ? "rising" : pct < 0 ? "falling" : ""];
   }
 
   function _budRateTxt(ytdTy, ytdBud) {
     if (ytdBud <= 0) return ["—", ""];
     const r = ytdTy / ytdBud * 100;
+    // 預算達成率是達成語意：達成=positive(綠)、未達成=negative(紅)
     return [r.toFixed(1) + "%", r >= 100 ? "positive" : r < 80 ? "negative" : ""];
   }
 
@@ -373,8 +377,9 @@
           <td>{{ row.product_name }}</td>
           <td class="num">{{ "{:,.0f}".format(row.last_year_quantity) }}</td>
           <td class="num">{{ "{:,.0f}".format(row.forecast_quantity) }}</td>
-          <td class="num"><span class="gap-value {% if row.diff_quantity < 0 %}negative{% elif row.diff_quantity > 0 %}positive{% endif %}">{{ "{:+,.0f}".format(row.diff_quantity) }}</span></td>
-          <td class="num"><span class="gap-value {% if row.amount_impact < 0 %}negative{% elif row.amount_impact > 0 %}positive{% endif %}">{{ "{:+,.0f}".format(row.amount_impact) }}</span></td>
+          {# 台灣慣例：漲(>0)=rising(紅)、跌(<0)=falling(綠) #}
+          <td class="num"><span class="gap-value {% if row.diff_quantity < 0 %}falling{% elif row.diff_quantity > 0 %}rising{% endif %}">{{ "{:+,.0f}".format(row.diff_quantity) }}</span></td>
+          <td class="num"><span class="gap-value {% if row.amount_impact < 0 %}falling{% elif row.amount_impact > 0 %}rising{% endif %}">{{ "{:+,.0f}".format(row.amount_impact) }}</span></td>
           <td><span class="badge status-{{ row.status_key }}">{{ row.status }}</span></td>
           <td><a class="jump-link" href="{{ url_for('forecast', year=year, month=month) }}#row-{{ row.customer }}__{{ row.product_code }}" title="前往調整">調整</a></td>
         </tr>

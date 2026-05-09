@@ -314,8 +314,10 @@ const AnalyticsRenderer = (() => {
   function renderYtd(container, metrics, targetMonth, lastActualMonth) {
     if (!container) return;
     const { ytdLy, ytdTy, ytdBudget, ytdGapVsLy, ytdRateVsLy, ytdBudgetRate, ytdCutoff } = metrics;
-    const gapCls    = ytdGapVsLy >= 0 ? "positive" : "negative";
-    const rateVsLyCls = ytdRateVsLy >= 100 ? "positive" : "negative";
+    // 方向性比較（vs 去年）：台灣慣例 漲=rising(紅)、跌=falling(綠)
+    const gapCls      = ytdGapVsLy   >= 0   ? "rising"   : "falling";
+    const rateVsLyCls = ytdRateVsLy  >= 100 ? "rising"   : "falling";
+    // 預算達成率：達成語意，≥100%=好=positive(綠)，<80%=差=negative(紅)
     const budRateCls  = ytdBudgetRate >= 100 ? "positive" : ytdBudgetRate > 0 && ytdBudgetRate < 80 ? "negative" : "";
 
     // Use the confirmed cutoff month for labels so user knows it's actual data
@@ -362,7 +364,7 @@ const AnalyticsRenderer = (() => {
     const { ma3, ma6, trendDir } = metrics;
     const ARROWS = { up: "↑", flat: "→", down: "↓" };
     const LABELS = { up: "上升", flat: "持平", down: "下滑" };
-    const CLASSES = { up: "positive", flat: "", down: "negative" };
+    const CLASSES = { up: "rising", flat: "", down: "falling" };  // 台灣慣例：上升=紅、下滑=綠
     const arrow = ARROWS[trendDir] || "→";
     const label = LABELS[trendDir] || "持平";
     const cls   = CLASSES[trendDir] || "";
@@ -421,8 +423,9 @@ const AnalyticsRenderer = (() => {
   }
 
   function _diffCls(r) {
+    // YoY% 是方向性指標：台灣慣例 漲=rising(紅)、跌=falling(綠)
     if (r === null || r === undefined) return "";
-    return r > 0 ? "positive" : r < 0 ? "negative" : "";
+    return r > 0 ? "rising" : r < 0 ? "falling" : "";
   }
 
   function _setCell(id, text, cls = "") {

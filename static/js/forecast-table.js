@@ -38,19 +38,20 @@ function drawSparkline(canvas, data) {
     y: pad + plotH - ((v - min) / range) * plotH,
   }));
 
-  // Determine trend colour: compare last vs first non-zero
+  // Determine trend colour: compare last vs first non-zero.
+  // Taiwan convention: 漲=紅 (#dc2626)，跌=綠 (#047857)
   const first = data.find((v) => v > 0) ?? 0;
   const last = data[data.length - 1];
   const trendUp = last >= first;
   const lineColor = trendUp
-    ? "rgba(4, 120, 87, 0.7)"   // success-text
-    : "rgba(220, 38, 38, 0.7)"; // danger
+    ? "rgba(220, 38, 38, 0.7)"  // danger  — 漲
+    : "rgba(4, 120, 87, 0.7)";  // success — 跌
   const dotColor = trendUp
-    ? "rgb(4, 120, 87)"
-    : "rgb(220, 38, 38)";
+    ? "rgb(220, 38, 38)"
+    : "rgb(4, 120, 87)";
   const fillColor = trendUp
-    ? "rgba(4, 120, 87, 0.06)"
-    : "rgba(220, 38, 38, 0.06)";
+    ? "rgba(220, 38, 38, 0.06)"
+    : "rgba(4, 120, 87, 0.06)";
 
   // Area fill
   ctx.beginPath();
@@ -132,8 +133,9 @@ function updateGapElement(el, gapValue) {
   const isNegative = gapValue < 0;
   const sign = isPositive ? "+" : "";
   el.textContent = sign + formatter.format(gapValue);
-  el.classList.toggle("positive", isPositive);
-  el.classList.toggle("negative", isNegative);
+  // 方向性指標使用台灣慣例：漲=紅(.rising)、跌=綠(.falling)
+  el.classList.toggle("rising",  isPositive);
+  el.classList.toggle("falling", isNegative);
 }
 
 function finalForecastQuantity(state) {
@@ -328,7 +330,7 @@ function openDetailPanel(row) {
   document.getElementById("rd-lm-actual").textContent = _fp(lmActual);
   document.getElementById("rd-lm-budget").textContent = _fp(lmBudget);
   setDetailVal("rd-lm-rate", _pct(lmRate), lmRate >= 100 ? "high" : lmRate < 80 ? "low" : "");
-  setDetailVal("rd-lm-gap",  _sign(lmGap), lmGap >= 0 ? "positive" : "negative");
+  setDetailVal("rd-lm-gap",  _sign(lmGap), lmGap >= 0 ? "rising" : "falling");
 
   // 年度業績比較：趨勢圖 + 月份表格 + YTD + 評估
   renderAnalytics(row);
@@ -358,7 +360,7 @@ function refreshDetailBudget(state) {
   document.getElementById("rd-budget").textContent = _fp(budget);
   document.getElementById("rd-final").textContent  = _fp(finalQty);
   setDetailVal("rd-achieve-rate", _pct(rate), rate >= 100 ? "high" : rate < 80 ? "low" : "");
-  setDetailVal("rd-diff",         _sign(diff), diff >= 0 ? "positive" : "negative");
+  setDetailVal("rd-diff",         _sign(diff), diff >= 0 ? "rising" : "falling");
   document.getElementById("rd-amount").textContent = formatter.format(amount);
 
   // 計算狀態 badge（放在 section header 旁）
@@ -435,7 +437,7 @@ function renderAnalytics(row) {
   if (priceChangeRow && lyPrice > 0 && tyPrice > 0 && Math.abs(tyPrice - lyPrice) > 0.01) {
     const pct = (tyPrice - lyPrice) / lyPrice * 100;
     setDetailVal("rd-price-change", (pct > 0 ? "+" : "") + pct.toFixed(1) + "%",
-      pct > 0 ? "positive" : "negative");
+      pct > 0 ? "rising" : "falling");   // 漲價=紅、跌價=綠（台灣慣例）
     priceChangeRow.hidden = false;
   } else if (priceChangeRow) {
     priceChangeRow.hidden = true;

@@ -1,11 +1,11 @@
 {# Shared forecast table header — included by forecast.html (main + discontinued sections).
-   col-group-start on 去年同期 (col 6) and 最後預估 (col 9) must stay in sync with _forecast_row.html td classes. #}
+   Status accent bar (data-status on <tr>) replaces the old Status column.
+   Sparkline moves into the Product cell (below product name).
+   col-group-start on 去年同期 (col 4) and 最後預估 (col 7) must stay in sync with _forecast_row.html td classes. #}
 <thead>
   <tr>
-    <th>狀態</th>
     <th>客戶</th>
     <th>品項</th>
-    <th>趨勢</th>
     <th class="num">上月表現</th>
     <th class="num col-group-start">去年同期</th>
     <th class="num">系統預估</th>
