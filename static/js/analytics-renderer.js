@@ -389,6 +389,40 @@ const AnalyticsRenderer = (() => {
     if (cls !== undefined) el.className = cls;
   }
 
+  // ── renderSparklineInCanvas ────────────────────────────────────────────────
+  /**
+   * Draw a compact sparkline for table rows (this year only, vs last year).
+   * @param {HTMLCanvasElement} canvas
+   * @param {number[]} lyMonthly  [12]
+   * @param {number[]} tyMonthly  [12]
+   * @param {number}   targetMonth  1-based
+   */
+  function renderSparklineInCanvas(canvas, lyMonthly, tyMonthly, targetMonth) {
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    const w   = canvas.clientWidth  || 80;
+    const h   = canvas.clientHeight || 32;
+    canvas.width  = w * dpr;
+    canvas.height = h * dpr;
+    const ctx = canvas.getContext("2d");
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, w, h);
+
+    const pad = 2;
+    const allVals = [...lyMonthly, ...tyMonthly].filter(v => v > 0);
+    if (allVals.length === 0) return;
+    const maxVal = Math.max(...allVals);
+    const xOf = (i) => pad + (i / 11) * (w - pad * 2);
+    const yOf = (v) => pad + (h - pad * 2) * (1 - v / maxVal);
+
+    // Last year (gray, thin)
+    _drawLine(ctx, lyMonthly, 12, xOf, yOf, COLOR_LY, 1);
+    // This year (teal, up to targetMonth)
+    const tyMasked = tyMonthly.map((v, i) => (i < targetMonth ? v : null));
+    _drawLineMasked(ctx, tyMasked, xOf, yOf, COLOR_TY, 1.5);
+  }
+
+
   // ── Public API ─────────────────────────────────────────────────────────────
   return {
     computeMetrics,
@@ -396,5 +430,6 @@ const AnalyticsRenderer = (() => {
     renderMonthlyTable,
     renderYtd,
     renderAssessment,
+    renderSparklineInCanvas,
   };
 })();

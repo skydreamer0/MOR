@@ -17,6 +17,7 @@ from src.backend.forecast_config import ForecastConfig
 from src.backend.forecast_engine import apply_user_adjustments
 from src.backend.forecast_models import ForecastSummary
 from src.backend.operational_views import (
+    aggregate_to_analytics,
     build_customer_risk_ranking,
     build_forecast_page_context,
     forecast_amount_total,
@@ -103,9 +104,12 @@ def create_app(config: dict | None = None) -> Flask:
         customer_ranking = build_customer_risk_ranking(all_monitor)
         high_risk_rows = [row for row in all_monitor if row.status_key == "high"]
         high_risk_rows.sort(key=lambda r: r.amount_impact)
+
+        rows = context.summary.rows
+        target = context.target
         return {
-            "year": context.target.year,
-            "month": context.target.month,
+            "year": target.year,
+            "month": target.month,
             "metrics": context.dashboard,
             "health": context.health,
             "monitor_rows": high_risk_rows[:15],
@@ -113,6 +117,9 @@ def create_app(config: dict | None = None) -> Flask:
             "status_dist": status_dist,
             "customer_ranking": customer_ranking,
             "data_issues": validate_health(context.health),
+            "analytics_total":     aggregate_to_analytics(rows, "total",    target),
+            "analytics_customers": aggregate_to_analytics(rows, "customer", target),
+            "analytics_products":  aggregate_to_analytics(rows, "product",  target),
         }
 
     def _save_row_override(row_id: str, manual_qty: str | None, reason: str | None, year: int, month: int) -> None:
@@ -168,6 +175,9 @@ def create_app(config: dict | None = None) -> Flask:
             "status_dist": {},
             "customer_ranking": [],
             "data_issues": [],
+            "analytics_total": [],
+            "analytics_customers": [],
+            "analytics_products": [],
         }
         return render_template(
             "index.html",

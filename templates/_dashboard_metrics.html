@@ -89,7 +89,7 @@
       <div class="dist-item">
         <span class="dist-dot dist-dot-slight"></span>
         <span class="dist-label">輕微下滑</span>
-        <strong class="dist-count" style="color:var(--accent-2)">{{ status_dist.slight }}</strong>
+        <strong class="dist-count dist-count--slight">{{ status_dist.slight }}</strong>
       </div>
       <div class="dist-item">
         <span class="dist-dot dist-dot-ok"></span>
@@ -127,16 +127,166 @@
       {% endfor %}
     </div>
     {% else %}
-    <p class="muted" style="margin:var(--sp-4) 0 0;">目前沒有需要追蹤的客戶風險。</p>
+    <p class="muted empty-note">目前沒有需要追蹤的客戶風險。</p>
     {% endif %}
   </div>
 </section>
 {% endif %}
 
+<!-- ── 全公司年度趨勢 ─────────────────────────────────────── -->
+{% if analytics_total %}
+<section class="panel workbench-panel dash-analytics-total" aria-label="全公司年度趨勢">
+  <div class="section-header">
+    <h3>全公司年度趨勢</h3>
+    <div class="detail-chart-legend">
+      <span class="legend-ly">去年</span>
+      <span class="legend-budget">預算</span>
+      <span class="legend-ty">今年</span>
+      <span class="legend-ma3">MA3</span>
+      <span class="legend-ma6">MA6</span>
+    </div>
+  </div>
+  <canvas id="dash-total-chart" class="dash-total-canvas"></canvas>
+  <div id="dash-total-ytd"></div>
+</section>
+{% endif %}
+
+<!-- ── 客戶業績分析 ──────────────────────────────────────── -->
+{% if analytics_customers %}
+<section class="panel workbench-panel" aria-label="客戶業績分析">
+  <div class="section-header">
+    <h3>客戶業績分析</h3>
+    <span class="section-sub">YTD 1–{{ month }}月，數量</span>
+  </div>
+  <div class="table-wrap compact-table workbench-table-shell">
+    <table class="dash-analytics-table" id="dash-customer-table">
+      <thead>
+        <tr>
+          <th>客戶</th>
+          <th class="num">去年累計</th>
+          <th class="num">預算累計</th>
+          <th class="num">今年累計</th>
+          <th class="num">預算達成</th>
+          <th class="num">YoY</th>
+          <th class="num">趨勢</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="dash-customer-tbody"></tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+<!-- ── 品項業績分析 ──────────────────────────────────────── -->
+{% if analytics_products %}
+<section class="panel workbench-panel" aria-label="品項業績分析">
+  <div class="section-header">
+    <h3>品項業績分析</h3>
+    <span class="section-sub">YTD 1–{{ month }}月，數量</span>
+  </div>
+  <div class="table-wrap compact-table workbench-table-shell">
+    <table class="dash-analytics-table" id="dash-product-table">
+      <thead>
+        <tr>
+          <th>品項</th>
+          <th class="num">去年累計</th>
+          <th class="num">預算累計</th>
+          <th class="num">今年累計</th>
+          <th class="num">預算達成</th>
+          <th class="num">YoY</th>
+          <th class="num">趨勢</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="dash-product-tbody"></tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+<!-- embed analytics JSON for JS rendering -->
+{% if analytics_total %}
+<script>
+(function () {
+  const TOTAL     = {{ analytics_total     | tojson }};
+  const CUSTOMERS = {{ analytics_customers | tojson }};
+  const PRODUCTS  = {{ analytics_products  | tojson }};
+  const TARGET_MONTH = {{ month | int }};
+
+  // ── 全公司趨勢圖 ───────────────────────────────────────
+  const total = TOTAL[0];
+  if (total) {
+    const canvas = document.getElementById("dash-total-chart");
+    AnalyticsRenderer.renderTrendChart(canvas, {
+      lyMonthly:     total.ly_monthly,
+      tyMonthly:     total.ty_monthly,
+      budgetMonthly: total.budget_monthly,
+      targetMonth:   TARGET_MONTH,
+    });
+    const metrics = AnalyticsRenderer.computeMetrics(
+      total.ly_monthly, total.ty_monthly, total.budget_monthly, TARGET_MONTH
+    );
+    AnalyticsRenderer.renderYtd(
+      document.getElementById("dash-total-ytd"), metrics, TARGET_MONTH
+    );
+  }
+
+  // ── 表格渲染（客戶 & 品項共用） ────────────────────────
+  function buildRows(data, tbody, forecastUrl) {
+    if (!tbody) return;
+    const fmt0 = new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 0 });
+    const ARROW = { up: "↑", flat: "→", down: "↓" };
+    const ACLS  = { up: "positive", flat: "", down: "negative" };
+
+    data.forEach(d => {
+      const metrics = AnalyticsRenderer.computeMetrics(
+        d.ly_monthly, d.ty_monthly, d.budget_monthly, TARGET_MONTH
+      );
+      const { ytdLy, ytdTy, ytdBudget, ytdRateVsLy, ytdBudgetRate, trendDir } = metrics;
+
+      const yoyPct = ytdLy > 0 ? (ytdTy - ytdLy) / ytdLy * 100 : null;
+      const yoyTxt = yoyPct !== null ? (yoyPct > 0 ? "+" : "") + yoyPct.toFixed(1) + "%" : "—";
+      const yoyCls = yoyPct === null ? "" : yoyPct > 0 ? "positive" : yoyPct < 0 ? "negative" : "";
+
+      const budRateTxt = ytdBudget > 0 ? ytdBudgetRate.toFixed(1) + "%" : "—";
+      const budRateCls = ytdBudget > 0
+        ? (ytdBudgetRate >= 100 ? "positive" : ytdBudgetRate < 80 ? "negative" : "")
+        : "";
+
+      const tr = document.createElement("tr");
+      const canvasId = `spark-${d.entity_type}-${d.entity_id}`.replace(/[^a-z0-9-]/gi, "_");
+
+      tr.innerHTML = `
+        <td class="dash-entity-label">${d.entity_label}</td>
+        <td class="num">${ytdLy > 0 ? fmt0.format(ytdLy) : "—"}</td>
+        <td class="num">${ytdBudget > 0 ? fmt0.format(ytdBudget) : "—"}</td>
+        <td class="num">${ytdTy > 0 ? fmt0.format(ytdTy) : "—"}</td>
+        <td class="num ${budRateCls}">${budRateTxt}</td>
+        <td class="num ${yoyCls}">${yoyTxt}</td>
+        <td class="num ${ACLS[trendDir] || ""}">${ARROW[trendDir] || "→"}</td>
+        <td><canvas id="${canvasId}" class="dash-spark-canvas"></canvas></td>
+      `;
+      tbody.appendChild(tr);
+
+      // Draw sparkline after element is in DOM
+      requestAnimationFrame(() => {
+        const c = document.getElementById(canvasId);
+        AnalyticsRenderer.renderSparklineInCanvas(c, d.ly_monthly, d.ty_monthly, TARGET_MONTH);
+      });
+    });
+  }
+
+  buildRows(CUSTOMERS, document.getElementById("dash-customer-tbody"));
+  buildRows(PRODUCTS,  document.getElementById("dash-product-tbody"));
+})();
+</script>
+{% endif %}
+
 <section class="panel workbench-panel" aria-label="高風險產品追蹤">
   <div class="section-header">
     <h3>高風險產品追蹤</h3>
-    <div style="display:flex;gap:8px;align-items:center;">
+    <div class="section-actions">
       <a class="link-btn" href="{{ url_for('product_monitor', year=year, month=month) }}">查看監控</a>
       <a class="link-btn" href="{{ url_for('forecast', year=year, month=month) }}">預估調整</a>
     </div>

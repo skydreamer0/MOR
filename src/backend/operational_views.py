@@ -7,6 +7,7 @@ from typing import Iterable, Mapping
 
 import pandas as pd
 
+from src.backend.analytics import AnalyticsSlice
 from src.backend.data_loader import default_target_from_data, load_sales_detail, normalize_product_code
 from src.backend.forecast_config import ForecastConfig
 from src.backend.forecast_engine import ForecastOptions, apply_user_adjustments, build_forecast
@@ -515,3 +516,53 @@ def build_customer_risk_ranking(
     ]
     ranking.sort(key=lambda x: x.gap_amount)
     return ranking[:top_n]
+
+
+def aggregate_to_analytics(
+    rows: list[ForecastRow],
+    entity_type: str,
+    target: ForecastTarget,
+) -> list[dict]:
+    """
+    Aggregate ForecastRow monthly arrays by entity_type and return
+    a list of AnalyticsSlice.to_dict() ready for JSON embedding.
+
+    entity_type: "total" | "customer" | "product"
+    Sorted by ytd_ty descending (highest revenue first).
+    """
+    groups: dict[str, list[ForecastRow]] = {}
+    labels: dict[str, str] = {}
+
+    for row in rows:
+        if row.excluded:
+            continue
+        if entity_type == "total":
+            key, label = "total", "全公司"
+        elif entity_type == "customer":
+            key, label = row.customer, row.customer
+        else:  # product
+            key, label = row.product_code, row.product_name
+
+        groups.setdefault(key, []).append(row)
+        labels[key] = label
+
+    result: list[dict] = []
+    for entity_id, entity_rows in groups.items():
+        ly  = [sum(r.ly_monthly[i]     for r in entity_rows) for i in range(12)]
+        ty  = [sum(r.ty_monthly[i]     for r in entity_rows) for i in range(12)]
+        bud = [sum(r.budget_monthly[i] for r in entity_rows) for i in range(12)]
+
+        slc = AnalyticsSlice(
+            entity_id=entity_id,
+            entity_label=labels[entity_id],
+            entity_type=entity_type,
+            target_year=target.year,
+            target_month=target.month,
+            ly_monthly=ly,
+            ty_monthly=ty,
+            budget_monthly=bud,
+        )
+        result.append(slc.to_dict())
+
+    result.sort(key=lambda x: x["ytd_ty"], reverse=True)
+    return result

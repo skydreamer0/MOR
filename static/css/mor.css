@@ -1505,6 +1505,62 @@ details[open] .discontinued-toggle {
   gap: var(--sp-2);
 }
 
+.section-sub {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  font-weight: 400;
+  align-self: center;
+}
+
+/* ── Dashboard analytics sections ───────────────────────── */
+.dash-analytics-total {
+  padding-bottom: var(--sp-4);
+}
+
+.dash-analytics-total .section-header {
+  align-items: center;
+  margin-bottom: var(--sp-2);
+}
+
+.dash-analytics-total .detail-chart-legend {
+  margin-bottom: 0;
+}
+
+.dash-total-canvas {
+  display: block;
+  width: 100%;
+  height: 140px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+  margin-bottom: var(--sp-3);
+}
+
+.dash-analytics-table {
+  min-width: 620px;
+}
+
+.dash-analytics-table th,
+.dash-analytics-table td {
+  white-space: nowrap;
+}
+
+.dash-entity-label {
+  font-weight: 500;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dash-spark-canvas {
+  display: block;
+  width: 80px;
+  height: 32px;
+}
+
+.dash-analytics-table td.positive { color: var(--success-text); font-weight: 600; }
+.dash-analytics-table td.negative { color: var(--danger);       font-weight: 600; }
+
 .compact-table {
   max-height: 360px;
   box-shadow: none;
