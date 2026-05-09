@@ -122,7 +122,7 @@ def test_forecast_page_renders_forecast_review_assets_and_tools():
     assert response.status_code == 200
     assert 'href="/static/css/mor.css"' in html
     assert 'src="/static/js/forecast-table.js"' in html
-    assert 'class="forecast-tools"' in html
+    assert 'class="forecast-tools workbench-toolbar"' in html
     assert "搜尋客戶或品項" in html
     assert "狀態篩選" in html
     assert "data-filter-search" in html
@@ -141,6 +141,22 @@ def test_frontend_pages_load_htmx_assets():
 
     assert "https://unpkg.com/htmx.org@1.9.10" in dashboard
     assert "https://unpkg.com/htmx.org@1.9.10" in forecast
+
+
+def test_frontend_pages_do_not_load_google_inter_font():
+    client = _client()
+
+    pages = [
+        client.get("/").get_data(as_text=True),
+        client.get("/forecast").get_data(as_text=True),
+        client.get("/monitor/products").get_data(as_text=True),
+        client.get("/settings").get_data(as_text=True),
+    ]
+    rendered = "\n".join(pages)
+
+    assert "fonts.googleapis.com" not in rendered
+    assert "fonts.gstatic.com" not in rendered
+    assert "Inter:wght" not in rendered
 
 
 def test_dashboard_metrics_partial_renders_fragment_only():
@@ -303,6 +319,32 @@ def test_header_navigation_is_consistent_across_frontend_pages(monkeypatch):
         assert 'href="/exclusions"' not in html
         assert active_link in html
         assert "同步資料" in html
+
+
+def test_workbench_toolbars_use_shared_structure_classes():
+    client = _client()
+
+    pages = {
+        "/forecast": client.get("/forecast").get_data(as_text=True),
+        "/monitor/products": client.get("/monitor/products").get_data(as_text=True),
+        "/settings": client.get("/settings").get_data(as_text=True),
+    }
+    css = Path("static/css/mor.css").read_text(encoding="utf-8")
+
+    for html in pages.values():
+        assert "workbench-toolbar" in html
+        assert "toolbar-title" in html
+        assert "toolbar-controls" in html
+
+    assert "toolbar-actions" in pages["/forecast"]
+    assert "toolbar-actions" in pages["/settings"]
+    assert "data-filter-search" in pages["/forecast"]
+    assert "data-monitor-search" in pages["/monitor/products"]
+    assert "data-item-search" in pages["/settings"]
+    assert ".workbench-toolbar" in css
+    assert ".toolbar-title" in css
+    assert ".toolbar-controls" in css
+    assert ".toolbar-actions" in css
 
 
 def test_old_exclusions_page_redirects_to_item_management(monkeypatch):

@@ -66,8 +66,14 @@
   --text-base:  13px;
   --text-md:    14px;
   --text-lg:    16px;
-  --text-xl:    20px;
+  --text-xl:    22px;
   --text-2xl:   28px;
+
+  /* Control sizing */
+  --control-h:         32px;
+  --control-compact-h: 28px;
+  --control-nav-h:     28px;
+  --control-icon-size: 28px;
 
   /* Spacing — 4px grid */
   --sp-1:  4px;
@@ -98,7 +104,7 @@ body {
   margin: 0;
   color: var(--ink);
   background: var(--bg);
-  font-family: 'Inter', "Microsoft JhengHei", "Segoe UI", Arial, sans-serif;
+  font-family: "Microsoft JhengHei", "Segoe UI", Arial, sans-serif;
   font-size: var(--text-base);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
@@ -140,7 +146,7 @@ header {
 
 h1 {
   margin: 0;
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
   font-weight: 700;
   letter-spacing: 0;
   color: var(--ink);
@@ -179,7 +185,7 @@ nav a[aria-current="page"] {
 }
 
 .nav-action-btn {
-  height: 24px;
+  height: var(--control-nav-h);
   padding: 0 var(--sp-2);
   border-color: transparent;
   background: transparent;
@@ -206,11 +212,11 @@ nav a[aria-current="page"] {
 
 /* ── Global form controls ───────────────────────────────────── */
 input, select, button {
-  height: 32px;
+  height: var(--control-h);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   padding: 0 var(--sp-3);
-  font-size: var(--text-base);
+  font-size: var(--text-md);
   background: var(--panel);
   color: var(--ink);
   transition: border-color var(--duration) ease, box-shadow var(--duration) ease, background var(--duration) ease;
@@ -220,6 +226,13 @@ input, select, button {
 input:focus, select:focus {
   outline: none;
   border-color: var(--focus);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+button:focus-visible,
+a:focus-visible,
+summary:focus-visible {
+  outline: none;
   box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
@@ -242,7 +255,7 @@ button {
   background: var(--accent);
   color: #fff;
   cursor: pointer;
-  font-weight: 600;
+  font-weight: 700;
   box-shadow: var(--shadow-xs);
   transition: background var(--duration) ease, border-color var(--duration) ease, transform 0.1s ease, box-shadow var(--duration) ease;
 }
@@ -381,26 +394,72 @@ main {
   border: 0;
 }
 
-/* ── Forecast toolbar ───────────────────────────────────────── */
-.forecast-tools {
+/* ── Workbench toolbar ──────────────────────────────────────── */
+.workbench-toolbar {
   display: flex;
   align-items: center;
-  gap: var(--sp-2);
-  flex-wrap: nowrap;
+  gap: var(--sp-3);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   background: var(--panel);
-  padding: var(--sp-2) var(--sp-3);
+  padding: var(--sp-3);
   margin-bottom: var(--sp-3);
   box-shadow: var(--shadow-xs);
+}
+
+.toolbar-title {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  margin-right: auto;
+  white-space: nowrap;
+}
+
+.toolbar-title--hidden {
+  display: none;
+}
+
+.toolbar-title h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--text-lg);
+  line-height: 1.2;
+}
+
+.toolbar-title span {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.toolbar-title strong {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.toolbar-controls,
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.toolbar-controls label {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+/* ── Forecast toolbar ───────────────────────────────────────── */
+.forecast-tools {
+  flex-wrap: nowrap;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
 }
 
 .forecast-tools input[type="search"] { width: 200px; }
 
 .filter-group {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
   margin-left: auto;
   color: var(--muted);
   font-size: var(--text-sm);
@@ -415,10 +474,10 @@ main {
 }
 
 .btn-toolbar {
-  height: 26px !important;
-  padding: 0 var(--sp-3) !important;
-  font-size: var(--text-xs) !important;
-  font-weight: 600;
+  height: var(--control-compact-h);
+  padding: 0 var(--sp-3);
+  font-size: var(--text-sm);
+  font-weight: 700;
 }
 
 .tool-counts {
@@ -622,23 +681,33 @@ input.qty:focus {
 }
 
 .icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--control-icon-size);
+  height: var(--control-icon-size);
   background: none;
   border: none;
   color: var(--muted-light);
   cursor: pointer;
-  font-size: var(--text-lg);
-  padding: 2px;
+  font-size: var(--text-base);
+  padding: 0 var(--sp-2);
   line-height: 1;
-  height: auto;
   transition: color var(--duration) ease, transform 0.2s var(--ease-out);
 }
 
 .icon-btn:hover {
   color: var(--accent);
-  transform: rotate(-45deg);
+  transform: none;
   background: none;
   border: none;
   box-shadow: none;
+}
+
+.snapshot-action .icon-btn,
+.rd-close-btn {
+  width: var(--control-icon-size);
+  padding: 0;
 }
 
 
@@ -708,9 +777,9 @@ input.qty:focus {
 
 .view-toggle-btn {
   padding: 0 var(--sp-3);
-  height: 28px;
+  height: var(--control-compact-h);
   font-size: var(--text-sm);
-  font-weight: 500;
+  font-weight: 700;
   border: none;
   border-radius: 0;
   background: transparent;
@@ -1285,14 +1354,15 @@ details[open] .discontinued-toggle {
 .btn-link {
   display: inline-flex;
   align-items: center;
-  height: 32px;
+  height: var(--control-h);
   padding: 0 var(--sp-4);
   border: 1px solid var(--accent);
   border-radius: var(--radius-md);
   background: var(--accent);
   color: #fff;
   text-decoration: none;
-  font-weight: 600;
+  font-size: var(--text-md);
+  font-weight: 700;
 }
 
 .btn-link:hover {
@@ -1344,44 +1414,14 @@ details[open] .discontinued-toggle {
   overflow: hidden;
 }
 
-.monitor-toolbar {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  padding: var(--sp-3);
+.monitor-toolbar,
+.settings-toolbar {
   border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  border-width: 0 0 1px;
+  box-shadow: none;
+  margin-bottom: 0;
   background: var(--panel);
-}
-
-.monitor-toolbar__title {
-  display: flex;
-  align-items: baseline;
-  gap: var(--sp-3);
-  margin-right: auto;
-  white-space: nowrap;
-}
-
-.monitor-toolbar__title h2 {
-  margin: 0;
-  color: var(--ink);
-  font-size: var(--text-lg);
-  line-height: 1.2;
-}
-
-.monitor-toolbar__title span {
-  color: var(--muted);
-  font-size: var(--text-sm);
-}
-
-.monitor-toolbar__title strong {
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-}
-
-.monitor-toolbar label {
-  color: var(--muted);
-  font-size: var(--text-sm);
-  font-weight: 600;
 }
 
 .monitor-toolbar input[type="search"] {
@@ -1560,7 +1600,7 @@ details[open] .discontinued-toggle {
 .settings-health-panel summary {
   display: flex;
   align-items: center;
-  min-height: 32px;
+  min-height: var(--control-h);
   padding: 0 var(--sp-3);
   color: var(--muted);
   cursor: pointer;
@@ -1606,52 +1646,8 @@ details[open] .discontinued-toggle {
   white-space: nowrap;
 }
 
-.settings-toolbar {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  padding: var(--sp-3);
-  border-bottom: 1px solid var(--line);
-  background: var(--panel);
-}
-
-.settings-toolbar__title {
-  display: flex;
-  align-items: baseline;
-  gap: var(--sp-3);
-  margin-right: auto;
-  white-space: nowrap;
-}
-
-.settings-toolbar__title h2 {
-  margin: 0;
-  color: var(--ink);
-  font-size: var(--text-lg);
-  line-height: 1.2;
-}
-
-.settings-toolbar__title span {
-  color: var(--muted);
-  font-size: var(--text-sm);
-}
-
-.settings-toolbar__title strong {
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-}
-
-.settings-toolbar label {
-  color: var(--muted);
-  font-size: var(--text-sm);
-  font-weight: 600;
-}
-
 .settings-toolbar input[type="search"] {
   width: 220px;
-}
-
-.settings-toolbar .btn-toolbar {
-  margin-left: var(--sp-2);
 }
 
 .settings-table-wrap {
@@ -1670,7 +1666,9 @@ details[open] .discontinued-toggle {
 }
 
 .checkbox-label input {
-  height: auto;
+  width: 16px;
+  height: 16px;
+  padding: 0;
 }
 
 
@@ -1724,7 +1722,7 @@ details[open] .discontinued-toggle {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 28px;
+  height: var(--control-compact-h);
   padding: 0 var(--sp-3);
   border-radius: 14px;
   background: var(--surface-subtle);
@@ -2037,8 +2035,8 @@ details[open] .discontinued-toggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: var(--control-icon-size);
+  height: var(--control-icon-size);
   border-radius: var(--radius-sm);
   color: var(--muted-light);
   text-decoration: none;

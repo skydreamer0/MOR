@@ -4,9 +4,6 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>預估調整 - MOR</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/mor.css') }}">
   <script src="https://unpkg.com/htmx.org@1.9.10"
           integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5ViYgSibmK"
@@ -72,26 +69,29 @@
       <input type="hidden" name="forecast_signature" value="{{ forecast_signature }}">
       <input type="hidden" data-unrendered-total value="{{ unrendered_total }}">
 
-      <div class="forecast-tools" aria-label="篩選工具">
-        <div class="view-toggle" role="group" aria-label="檢視模式">
-          <button type="button" class="view-toggle-btn active" id="btn-anomaly-only">只看異常</button>
-          <button type="button" class="view-toggle-btn" id="btn-show-all">全部明細</button>
+      <div class="forecast-tools workbench-toolbar" aria-label="篩選工具">
+        <div class="toolbar-title toolbar-title--hidden" aria-hidden="true">篩選工具</div>
+        <div class="toolbar-controls">
+          <div class="view-toggle" role="group" aria-label="檢視模式">
+            <button type="button" class="view-toggle-btn active" id="btn-anomaly-only">只看異常</button>
+            <button type="button" class="view-toggle-btn" id="btn-show-all">全部明細</button>
+          </div>
+          {# data-filter-customer: picked up by bindForecastTable() in forecast-table.js; replaces the old onchange="filterRows()" #}
+          <select id="customer-filter" data-filter-customer aria-label="篩選客戶">
+            <option value="">全部客戶</option>
+            {% for customer in customers %}
+              <option value="{{ customer }}">{{ customer }}</option>
+            {% endfor %}
+          </select>
+          <input type="search" data-filter-search aria-label="搜尋客戶或品項" placeholder="搜尋客戶、產品或代號…">
+          <select data-filter-status aria-label="狀態篩選">
+            <option value="all">全部狀態</option>
+            <option value="auto">自動預估</option>
+            <option value="not_due">未到期</option>
+            <option value="edited">已手動調整</option>
+          </select>
         </div>
-        {# data-filter-customer: picked up by bindForecastTable() in forecast-table.js; replaces the old onchange="filterRows()" #}
-        <select id="customer-filter" data-filter-customer aria-label="篩選客戶">
-          <option value="">全部客戶</option>
-          {% for customer in customers %}
-            <option value="{{ customer }}">{{ customer }}</option>
-          {% endfor %}
-        </select>
-        <input type="search" data-filter-search aria-label="搜尋客戶或品項" placeholder="搜尋客戶、產品或代號…">
-        <select data-filter-status aria-label="狀態篩選">
-          <option value="all">全部狀態</option>
-          <option value="auto">自動預估</option>
-          <option value="not_due">未到期</option>
-          <option value="edited">已手動調整</option>
-        </select>
-        <div class="filter-group">
+        <div class="filter-group toolbar-actions">
           <span>顯示 <strong data-visible-count>0</strong> / {{ row_count }}</span>
           <span id="edited-badge" hidden>已調整 <strong data-edited-count>0</strong></span>
           <span id="save-status"></span>

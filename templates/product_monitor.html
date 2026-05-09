@@ -4,9 +4,6 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>產品跳單監控 - MOR</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/mor.css') }}">
   <script src="https://unpkg.com/htmx.org@1.9.10"
           integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5ViYgSibmK"
@@ -24,25 +21,27 @@
     {% endif %}
 
     <section class="monitor-workspace" aria-labelledby="monitor-title">
-      <div class="monitor-toolbar" aria-label="跳單監控工具">
-        <div class="monitor-toolbar__title">
+      <div class="monitor-toolbar workbench-toolbar" aria-label="跳單監控工具">
+        <div class="monitor-toolbar__title toolbar-title">
           <h2 id="monitor-title">跳單明細</h2>
           <span><strong data-monitor-visible>{{ rows|length }}</strong> / {{ rows|length }} 筆</span>
         </div>
-        <label>
-          搜尋
-          <input type="search" data-monitor-search placeholder="客戶、品項、ID">
-        </label>
-        <label>
-          狀態
-          <select data-monitor-status>
-            <option value="all">全部</option>
-            <option value="high">高風險</option>
-            <option value="slight">輕微下滑</option>
-            <option value="ok">正常/成長</option>
-            <option value="no_history">無去年同期</option>
-          </select>
-        </label>
+        <div class="toolbar-controls">
+          <label>
+            搜尋
+            <input type="search" data-monitor-search placeholder="客戶、品項、ID">
+          </label>
+          <label>
+            狀態
+            <select data-monitor-status>
+              <option value="all">全部</option>
+              <option value="high">高風險</option>
+              <option value="slight">輕微下滑</option>
+              <option value="ok">正常/成長</option>
+              <option value="no_history">無去年同期</option>
+            </select>
+          </label>
+        </div>
       </div>
 
       <div class="table-wrap monitor-table-wrap">

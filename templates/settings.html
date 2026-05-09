@@ -4,9 +4,6 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>系統設定 - MOR</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/mor.css') }}">
   <script src="https://unpkg.com/htmx.org@1.9.10"
           integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5ViYgSibmK"
@@ -24,16 +21,20 @@
     {% endif %}
 
     <form action="/items/save" method="post" class="settings-workspace">
-      <div class="settings-toolbar" aria-label="品項設定搜尋">
-        <div class="settings-toolbar__title">
+      <div class="settings-toolbar workbench-toolbar" aria-label="品項設定搜尋">
+        <div class="settings-toolbar__title toolbar-title">
           <h2>系統設定 / 資料檢核</h2>
           <span><strong data-item-visible>{{ items|length }}</strong> / {{ items|length }} 項</span>
         </div>
-        <label>
-          搜尋
-          <input type="search" data-item-search placeholder="品項名稱或 ID">
-        </label>
-        <button type="submit" class="btn-toolbar">儲存設定</button>
+        <div class="toolbar-controls">
+          <label>
+            搜尋
+            <input type="search" data-item-search placeholder="品項名稱或 ID">
+          </label>
+        </div>
+        <div class="toolbar-actions">
+          <button type="submit" class="btn-toolbar">儲存設定</button>
+        </div>
       </div>
 
       {% if health %}
