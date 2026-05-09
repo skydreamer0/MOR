@@ -1292,3 +1292,64 @@ def test_product_monitor_page_exposes_daily_sales_import_form():
     assert 'name="daily_sales_file"' in html
     assert "選擇當月累積業績檔" in html
     assert "系統將依欄位格式判斷資料，不限制檔名。" in html
+
+
+def test_close_month_route_creates_record_and_blocks_reimport(monkeypatch):
+    db_base_path = _isolated_db_base()
+    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
+    columns = config.required_columns
+    data = pd.DataFrame([{
+        columns[0]: 2025, columns[1]: 5, columns[2]: 10,
+        columns[3]: "Hospital A", columns[4]: "P1", columns[5]: "Product One",
+        columns[6]: 10, columns[7]: 100, columns[8]: 0,
+    }])
+    monkeypatch.setattr(app, "load_sales_detail", lambda *_: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda *_: data)
+    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
+
+    # Import May 2026 data
+    client.post(
+        "/monitor/products/import",
+        data={"daily_sales_file": (_daily_import_workbook(), "may.xlsx")},
+        content_type="multipart/form-data",
+    )
+    # Close May 2026
+    close_resp = client.post(
+        "/monitor/products/close-month",
+        data={"year": "2026", "month": "5"},
+        follow_redirects=True,
+    )
+    assert "結月完成" in close_resp.get_data(as_text=True)
+
+    # Reimport should be blocked
+    blocked = client.post(
+        "/monitor/products/import",
+        data={"daily_sales_file": (_daily_import_workbook(), "may_v2.xlsx")},
+        content_type="multipart/form-data",
+        follow_redirects=True,
+    )
+    assert "已結月" in blocked.get_data(as_text=True)
+
+
+def test_product_monitor_shows_close_button_after_import(monkeypatch):
+    db_base_path = _isolated_db_base()
+    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
+    columns = config.required_columns
+    data = pd.DataFrame([{
+        columns[0]: 2025, columns[1]: 5, columns[2]: 10,
+        columns[3]: "Hospital A", columns[4]: "P1", columns[5]: "Product One",
+        columns[6]: 10, columns[7]: 100, columns[8]: 0,
+    }])
+    monkeypatch.setattr(app, "load_sales_detail", lambda *_: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda *_: data)
+    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
+
+    client.post(
+        "/monitor/products/import",
+        data={"daily_sales_file": (_daily_import_workbook(), "may.xlsx")},
+        content_type="multipart/form-data",
+    )
+    html = client.get("/monitor/products?year=2026&month=5").get_data(as_text=True)
+
+    assert 'action="/monitor/products/close-month"' in html
+    assert "結月" in html

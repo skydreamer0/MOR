@@ -104,6 +104,8 @@ def import_daily_sales_workbook(
     normalized = normalize_daily_sales(raw)
     year = int(normalized["sales_year"].iloc[0])
     month = int(normalized["sales_month"].iloc[0])
+    if is_month_closed(db, year, month):
+        raise ValueError(f"{year}/{month:02d} 已結月，不可覆蓋。如需修改請先解除結月。")
     date_start = normalized["sales_date"].min()
     date_end = normalized["sales_date"].max()
     quantity_total = float(normalized["actual_quantity"].sum())
@@ -189,6 +191,94 @@ def fetch_daily_actuals_by_row_id(
         )
         for row in rows
     }
+
+
+def is_month_closed(db: MORDatabase, year: int, month: int) -> bool:
+    """Return True if a close record exists for the given year/month."""
+    with db.get_connection() as conn:
+        row = conn.execute(
+            "SELECT id FROM month_close_records WHERE year = ? AND month = ?",
+            (year, month),
+        ).fetchone()
+    return row is not None
+
+
+def close_month(db: MORDatabase, year: int, month: int, note: str | None = None) -> None:
+    """Lock the given year/month, preventing further imports.
+
+    Raises ValueError if already closed or if no actuals data exists.
+    """
+    if is_month_closed(db, year, month):
+        raise ValueError(f"{year}/{month:02d} 已結月，無法重複結月。")
+    with db.get_connection() as conn:
+        summary = conn.execute(
+            """
+            SELECT COUNT(*)                     AS row_count,
+                   COALESCE(SUM(actual_quantity), 0) AS qty_total,
+                   COALESCE(SUM(taxed_amount), 0)    AS amount_total
+            FROM   daily_sales_actuals
+            WHERE  sales_year = ? AND sales_month = ?
+            """,
+            (year, month),
+        ).fetchone()
+        if summary["row_count"] == 0:
+            raise ValueError(f"{year}/{month:02d} 尚無匯入資料，無法結月。")
+        batch_row = conn.execute(
+            """
+            SELECT id FROM daily_import_batches
+            WHERE  sales_year = ? AND sales_month = ?
+            ORDER  BY id DESC LIMIT 1
+            """,
+            (year, month),
+        ).fetchone()
+        conn.execute(
+            """
+            INSERT INTO month_close_records
+            (year, month, source_batch_id, actual_row_count,
+             actual_quantity_total, actual_amount_total, note)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                year, month,
+                batch_row["id"] if batch_row else None,
+                summary["row_count"],
+                summary["qty_total"],
+                summary["amount_total"],
+                note,
+            ),
+        )
+        conn.commit()
+
+
+def get_latest_import_batch(db: MORDatabase, year: int, month: int) -> dict | None:
+    """Return the latest import batch summary for the given month, or None."""
+    with db.get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT id, source_filename, imported_at,
+                   row_count, quantity_total, taxed_amount_total, status
+            FROM   daily_import_batches
+            WHERE  sales_year = ? AND sales_month = ?
+            ORDER  BY id DESC LIMIT 1
+            """,
+            (year, month),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def get_close_record(db: MORDatabase, year: int, month: int) -> dict | None:
+    """Return the close record for the given month, or None."""
+    with db.get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT year, month, closed_at,
+                   actual_row_count, actual_quantity_total, actual_amount_total, note
+            FROM   month_close_records
+            WHERE  year = ? AND month = ?
+            """,
+            (year, month),
+        ).fetchone()
+    return dict(row) if row else None
 
 
 def _number(values: pd.Series) -> pd.Series:

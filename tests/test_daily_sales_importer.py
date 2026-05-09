@@ -174,3 +174,75 @@ def test_fetch_daily_actuals_by_row_id_aggregates_quantity_and_latest_date(tmp_p
     assert row.actual_quantity == 7
     assert row.taxed_amount == 1400
     assert str(row.latest_sales_date) == "2026-05-08"
+
+
+# ---------------------------------------------------------------------------
+# Phase 6: close_month / is_month_closed / guard on import
+# ---------------------------------------------------------------------------
+
+from src.backend.daily_sales_importer import (
+    close_month,
+    get_close_record,
+    get_latest_import_batch,
+    is_month_closed,
+)
+
+
+def test_is_month_closed_false_before_close(tmp_path: Path):
+    db = MORDatabase(tmp_path / "mor_workbench.db")
+    assert is_month_closed(db, 2026, 5) is False
+
+
+def test_close_month_creates_record(tmp_path: Path):
+    db = MORDatabase(tmp_path / "mor_workbench.db")
+    stream = _workbook_bytes([_daily_row("2026-05-04", "Hospital A", "P1", 10, 2000)])
+    import_daily_sales_workbook(db, stream, "may.xlsx")
+
+    close_month(db, 2026, 5)
+
+    assert is_month_closed(db, 2026, 5) is True
+    rec = get_close_record(db, 2026, 5)
+    assert rec is not None
+    assert rec["actual_row_count"] == 1
+    assert rec["actual_quantity_total"] == 10
+    assert rec["actual_amount_total"] == 2000
+
+
+def test_close_month_raises_when_already_closed(tmp_path: Path):
+    db = MORDatabase(tmp_path / "mor_workbench.db")
+    stream = _workbook_bytes([_daily_row("2026-05-04", "H", "P1", 5, 1000)])
+    import_daily_sales_workbook(db, stream, "may.xlsx")
+    close_month(db, 2026, 5)
+
+    with pytest.raises(ValueError, match="已結月"):
+        close_month(db, 2026, 5)
+
+
+def test_close_month_raises_when_no_data(tmp_path: Path):
+    db = MORDatabase(tmp_path / "mor_workbench.db")
+    with pytest.raises(ValueError, match="尚無匯入資料"):
+        close_month(db, 2026, 5)
+
+
+def test_import_blocked_after_close(tmp_path: Path):
+    db = MORDatabase(tmp_path / "mor_workbench.db")
+    stream = _workbook_bytes([_daily_row("2026-05-04", "H", "P1", 5, 1000)])
+    import_daily_sales_workbook(db, stream, "may.xlsx")
+    close_month(db, 2026, 5)
+
+    new_stream = _workbook_bytes([_daily_row("2026-05-10", "H", "P1", 8, 1600)])
+    with pytest.raises(ValueError, match="已結月"):
+        import_daily_sales_workbook(db, new_stream, "may_v2.xlsx")
+
+
+def test_get_latest_import_batch_returns_most_recent(tmp_path: Path):
+    db = MORDatabase(tmp_path / "mor_workbench.db")
+    first = _workbook_bytes([_daily_row("2026-05-04", "H", "P1", 5, 1000)])
+    second = _workbook_bytes([_daily_row("2026-05-08", "H", "P1", 9, 1800)])
+    import_daily_sales_workbook(db, first, "first.xlsx")
+    import_daily_sales_workbook(db, second, "second.xlsx")
+
+    batch = get_latest_import_batch(db, 2026, 5)
+    assert batch is not None
+    assert batch["source_filename"] == "second.xlsx"
+    assert batch["row_count"] == 1

@@ -2482,3 +2482,26 @@ details[open] .discontinued-toggle {
   font-weight: 600;
   color: var(--text);
 }
+
+/* ── Phase 6: Close-month status panel ── */
+.close-status-panel {
+  border-left: 3px solid var(--accent-2);
+}
+.close-status-panel--closed {
+  border-left-color: var(--success-text);
+}
+.close-status-time {
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+.btn-close-month {
+  background: var(--accent-2);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--sp-1) var(--sp-3);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.btn-close-month:hover { opacity: .85; }

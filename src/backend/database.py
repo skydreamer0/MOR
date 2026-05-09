@@ -147,6 +147,22 @@ class MORDatabase:
                 )
             """)
 
+            # Month Close Records (Phase 6: lock a closed month's actuals)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS month_close_records (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    year INTEGER NOT NULL,
+                    month INTEGER NOT NULL,
+                    closed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    source_batch_id INTEGER,
+                    actual_row_count INTEGER DEFAULT 0,
+                    actual_quantity_total REAL DEFAULT 0,
+                    actual_amount_total REAL DEFAULT 0,
+                    note TEXT,
+                    UNIQUE (year, month)
+                )
+            """)
+
             # Daily Sales Import (Phase 1: current-month actuals)
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS daily_import_batches (

@@ -27,7 +27,12 @@ from src.backend.operational_views import (
 )
 from src.backend.web.form_parser import FormValidationError, parse_manual_quantities, parse_target_period
 from src.backend.web.forecast_presenter import product_display_name
-from src.backend.daily_sales_importer import import_daily_sales_workbook
+from src.backend.daily_sales_importer import (
+    close_month,
+    get_close_record,
+    get_latest_import_batch,
+    import_daily_sales_workbook,
+)
 from src.backend.database import get_db
 from src.backend.etl import sync_excel_to_db
 from src.backend.snapshot_service import (
@@ -263,15 +268,35 @@ def create_app(config: dict | None = None) -> Flask:
             context = None
             error_message = f"無法產生跳單監控：{exc}"
 
+        year = context.target.year if context else request.args.get("year", type=int) or 0
+        month = context.target.month if context else request.args.get("month", type=int) or 0
         return render_template(
             "product_monitor.html",
-            year=context.target.year if context else request.args.get("year", ""),
-            month=context.target.month if context else request.args.get("month", ""),
+            year=year,
+            month=month,
             rows=context.monitor_rows if context else [],
             error_message=error_message,
             import_message=request.args.get("import_message"),
             import_error=request.args.get("import_error"),
+            latest_batch=get_latest_import_batch(db, year, month) if year and month else None,
+            close_record=get_close_record(db, year, month) if year and month else None,
         )
+
+    @app.post("/monitor/products/close-month")
+    def close_product_monitor_month() -> Response:
+        year = request.form.get("year", type=int)
+        month = request.form.get("month", type=int)
+        note = request.form.get("note", "").strip() or None
+        if not year or not month:
+            return redirect(url_for("product_monitor", import_error="缺少年月資訊。"))
+        try:
+            close_month(db, year, month, note=note)
+            cache.clear()
+        except Exception as exc:
+            return redirect(url_for("product_monitor", year=year, month=month,
+                                    import_error=f"結月失敗：{exc}"))
+        return redirect(url_for("product_monitor", year=year, month=month,
+                                import_message=f"{year}/{month:02d} 結月完成。"))
 
     @app.post("/monitor/products/import")
     def import_product_monitor_daily_sales() -> Response:
