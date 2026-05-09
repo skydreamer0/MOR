@@ -99,7 +99,7 @@
                 </label>
               </td>
               <td>
-                <input class="qty" name="price_quantity_{{ item.product_code }}" type="number" min="0" step="0.01" value="{{ item.price_quantity or '' }}" aria-label="包裝量 {{ item.product_code }}">
+                <input class="qty" name="price_quantity_{{ item.product_code }}" type="number" min="0" step="1" value="{% if item.price_quantity %}{{ item.price_quantity|int }}{% endif %}" aria-label="包裝量 {{ item.product_code }}">
               </td>
               <td>
                 <select name="item_status_{{ item.product_code }}" class="status-select">

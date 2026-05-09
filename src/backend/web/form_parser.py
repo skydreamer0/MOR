@@ -36,10 +36,10 @@ def parse_manual_quantities(
             result[row_id] = None
             continue
         try:
-            quantity = type_cast(clean)
+            quantity = int(float(clean)) if type_cast is int else type_cast(clean)
         except ValueError as exc:
             raise FormValidationError("人工數量必須是數字。") from exc
-        if type_cast is float and quantity < 0:
+        if type_cast in {float, int} and quantity < 0:
             raise FormValidationError("人工數量不可小於 0。")
         result[row_id] = quantity
     return result

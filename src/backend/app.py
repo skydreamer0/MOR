@@ -116,7 +116,7 @@ def create_app(config: dict | None = None) -> Flask:
     def _save_row_override(row_id: str, manual_qty: str | None, reason: str | None, year: int, month: int) -> None:
         customer, product_code = row_id.split("__", 1)
         try:
-            val = float(manual_qty) if manual_qty and manual_qty.strip() else None
+            val = int(float(manual_qty)) if manual_qty and manual_qty.strip() else None
         except ValueError as exc:
             raise FormValidationError("Invalid quantity") from exc
 
@@ -272,8 +272,8 @@ def create_app(config: dict | None = None) -> Flask:
                 {"year": str(target.year), "month": str(target.month)},
             )
             summary = context.summary
-            manual_adjustments = parse_manual_quantities(request.form, key_prefix="manual_adjustment__")
-            legacy_manual_adjustments = parse_manual_quantities(request.form)
+            manual_adjustments = parse_manual_quantities(request.form, key_prefix="manual_adjustment__", type_cast=int)
+            legacy_manual_adjustments = parse_manual_quantities(request.form, type_cast=int)
             manual_adjustments = {**legacy_manual_adjustments, **manual_adjustments}
             adjustment_reasons = parse_manual_quantities(request.form, key_prefix="adjustment_reason__", type_cast=str)
 
@@ -342,9 +342,9 @@ def create_app(config: dict | None = None) -> Flask:
                 is_budgeted = 1 if request.form.get(f"is_budgeted_{pid}") == "1" else 0
                 is_visible = 1 if request.form.get(f"is_visible_{pid}") == "1" else 0
                 try:
-                    price_quantity = float(request.form.get(f"price_quantity_{pid}") or 0)
+                    price_quantity = int(float(request.form.get(f"price_quantity_{pid}") or 0))
                 except ValueError:
-                    price_quantity = 0.0
+                    price_quantity = 0
                 item_status = request.form.get(f"item_status_{pid}")
                 if item_status not in {"active", "discontinued"}:
                     item_status = "active"

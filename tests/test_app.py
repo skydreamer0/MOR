@@ -228,7 +228,7 @@ def test_patch_forecast_row_updates_adjustment_and_returns_row_fragment():
     assert response.status_code == 200
     assert html.lstrip().startswith("<tr")
     assert f'id="row-{row_id}"' in html
-    assert 'value="7.5"' in html
+    assert 'value="7"' in html
     assert 'value="reviewed"' in html
 
 
@@ -523,6 +523,9 @@ def test_item_settings_save_price_quantity_and_forecast_uses_it(monkeypatch):
     forecast = client.get("/forecast?year=2026&month=4").get_data(as_text=True)
 
     assert response.status_code == 200
+    saved_settings = response.get_data(as_text=True)
+    assert 'name="price_quantity_P1" type="number" min="0" step="1" value="100"' in saved_settings
+    assert 'value="100.0"' not in saved_settings
     with sqlite3.connect(db_base_path / "mor_workbench.db") as conn:
         columns = [row[1] for row in conn.execute("PRAGMA table_info(item_configs)")]
         saved = conn.execute("SELECT price_quantity FROM item_configs WHERE product_code = 'P1'").fetchone()
@@ -671,8 +674,37 @@ def test_forecast_page_renders_review_validation_and_accessibility_hooks():
 
     assert response.status_code == 200
     assert 'aria-label="人工調整數量"' in html
+    assert re.search(r'name="manual_adjustment__[^"]+" type="number" min="0" step="1"', html)
+    assert 'step="0.01"' not in html
     assert 'data-validation-message' in html
     assert "人工數量必須是 0 以上的數字" in html
+
+
+def test_adjustment_save_manual_quantity_as_integer():
+    db_base_path = _isolated_db_base()
+    client = _client({"DB_BASE_PATH": db_base_path})
+
+    response = client.post(
+        "/adjustments/save",
+        data={
+            "row_id": "Hospital A__P1",
+            "manual_adjustment": "12.7",
+            "reason": "Review",
+            "year": "2026",
+            "month": "5",
+        },
+    )
+
+    assert response.status_code == 200
+    with sqlite3.connect(db_base_path / "mor_workbench.db") as conn:
+        saved = conn.execute(
+            """
+            SELECT manual_quantity
+            FROM forecast_adjustments
+            WHERE year = 2026 AND month = 5 AND customer_name = 'Hospital A' AND product_code = 'P1'
+            """
+        ).fetchone()
+    assert saved == (12,)
 
 
 def test_forecast_rows_expose_dashboard_jump_anchor():

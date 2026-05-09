@@ -1,5 +1,5 @@
 const formatter = new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 0 });
-const precisionFormatter = new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 2 });
+const precisionFormatter = formatter;
 
 /* ── Sparkline Renderer ─────────────────────────────────────────── */
 
