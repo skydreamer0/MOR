@@ -224,7 +224,7 @@ def test_forecast_page_exposes_customer_filter_and_row_metadata():
     assert 'data-risk="' in html
 
 
-def test_forecast_page_exposes_expand_all_for_collapsed_low_risk_rows():
+def test_forecast_page_exposes_view_toggle_for_risk_rows():
     client = _client()
 
     response = client.get("/forecast")
@@ -232,9 +232,11 @@ def test_forecast_page_exposes_expand_all_for_collapsed_low_risk_rows():
     css = Path("static/css/mor.css").read_text(encoding="utf-8")
 
     assert response.status_code == 200
-    assert 'id="expand-all-btn"' in html
-    assert "function expandAll()" in html
-    assert "forecast-table__row--collapsed" in html
+    assert 'id="btn-anomaly-only"' in html
+    assert 'id="btn-show-all"' in html
+    # collapsed class is applied client-side by applyViewMode()
+    js = Path("static/js/forecast-table.js").read_text(encoding="utf-8")
+    assert "forecast-table__row--collapsed" in js
     assert ".forecast-table__row--collapsed" in css
 
 
@@ -504,7 +506,8 @@ def test_item_settings_save_price_quantity_and_forecast_uses_it(monkeypatch):
     assert "price_quantity" in columns
     assert saved == (100,)
     assert 'data-price-quantity="100' in forecast
-    assert ">9,600</td>" in forecast
+    # Estimated amount is now computed client-side from data attributes
+    assert 'data-price=' in forecast
 
 
 def test_adjustment_save_migrates_old_database_without_updated_by():

@@ -73,38 +73,35 @@
       <input type="hidden" data-unrendered-total value="{{ unrendered_total }}">
 
       <div class="forecast-tools" aria-label="篩選工具">
-        <span class="sr-only">搜尋客戶與產品 狀態篩選</span>
-        <label>
-          客戶
-          <select id="customer-filter" onchange="filterRows(this.value)">
-            <option value="">全部客戶</option>
-            {% for customer in customers %}
-              <option value="{{ customer }}">{{ customer }}</option>
-            {% endfor %}
-          </select>
-        </label>
-        <label>
-          搜尋客戶或品項
-          <input type="search" data-filter-search placeholder="輸入客戶、產品或代號">
-        </label>
-        <label>
-          狀態篩選
-          <select data-filter-status>
-            <option value="all">全部</option>
-            <option value="auto">自動預估</option>
-            <option value="not_due">未到期</option>
-            <option value="edited">已手動調整</option>
-          </select>
-        </label>
+        <div class="view-toggle" role="group" aria-label="檢視模式">
+          <button type="button" class="view-toggle-btn active" id="btn-anomaly-only">只看異常</button>
+          <button type="button" class="view-toggle-btn" id="btn-show-all">全部明細</button>
+        </div>
+        <select id="customer-filter" aria-label="篩選客戶" onchange="filterRows(this.value)">
+          <option value="">全部客戶</option>
+          {% for customer in customers %}
+            <option value="{{ customer }}">{{ customer }}</option>
+          {% endfor %}
+        </select>
+        <input type="search" data-filter-search aria-label="搜尋客戶或品項" placeholder="搜尋客戶、產品或代號…">
+        <select data-filter-status aria-label="狀態篩選">
+          <option value="all">全部狀態</option>
+          <option value="auto">自動預估</option>
+          <option value="not_due">未到期</option>
+          <option value="edited">已手動調整</option>
+        </select>
         <div class="filter-group">
-          <span>顯示: </span>
-          <strong data-visible-count>0</strong> / {{ row_count }}
-          <span style="margin-left: var(--sp-3);">已調整 </span>
-          <strong data-edited-count>0</strong>
+          <span>顯示 <strong data-visible-count>0</strong> / {{ row_count }}</span>
+          <span id="edited-badge" hidden>已調整 <strong data-edited-count>0</strong></span>
           <span id="save-status"></span>
+          <span class="toolbar-divider" aria-hidden="true"></span>
+          {% if not is_finalized %}
+          <button type="button" id="btn-save-snapshot" class="btn-secondary btn-toolbar">草稿</button>
+          <button type="button" id="btn-finalize" class="btn-danger btn-toolbar">定稿</button>
+          {% endif %}
+          <button type="submit" class="btn-toolbar">匯出</button>
         </div>
       </div>
-      <button type="button" id="expand-all-btn" onclick="expandAll()" style="display:none;margin-bottom:8px"></button>
       <div class="validation-message" data-validation-message role="alert" hidden>
         人工數量必須是 0 以上的數字。
       </div>
@@ -116,22 +113,14 @@
               <th>狀態</th>
               <th>客戶</th>
               <th>品項</th>
-              <th class="col-group-start">趨勢</th>
-              <th class="num">上月實績</th>
-              <th class="num">上月預算</th>
-              <th class="num">上月達成</th>
-              <th class="num col-group-end">上月 GAP</th>
+              <th>趨勢</th>
+              <th class="num">上月表現</th>
               <th class="num col-group-start">去年同期</th>
-              <th class="num">今年同期</th>
               <th class="num">系統預估</th>
-              <th class="num col-group-end">人工調整</th>
-              <th class="num col-group-start">最後預估</th>
-              <th class="num">預算目標</th>
-              <th class="num">達成率</th>
+              <th class="num">人工調整</th>
+              <th class="num">最後預估</th>
               <th class="num col-group-end">差異</th>
               <th>調整原因</th>
-              <th class="num">納入計算</th>
-              <th class="num">預估金額</th>
             </tr>
           </thead>
           <tbody>
@@ -151,25 +140,17 @@
             <table class="forecast-table">
               <thead>
                 <tr>
-                  <th>???/th>
-                  <th>摰Ｘ</th>
-                  <th>??</th>
-                  <th class="col-group-start">頞典</th>
-                  <th class="num">銝?撖衣蜀</th>
-                  <th class="num">銝???</th>
-                  <th class="num">銝???</th>
-                  <th class="num col-group-end">銝? GAP</th>
-                  <th class="num col-group-start">?餃僑??</th>
-                  <th class="num">隞僑??</th>
-                  <th class="num">蝟餌絞?摯</th>
-                  <th class="num col-group-end">鈭箏極隤踵</th>
-                  <th class="num col-group-start">?敺?隡?/th>
-                  <th class="num">???格?</th>
-                  <th class="num">????/th>
-                  <th class="num col-group-end">撌桃</th>
-                  <th>隤踵??</th>
-                  <th class="num">蝝閮?</th>
-                  <th class="num">?摯??</th>
+                  <th>狀態</th>
+                  <th>客戶</th>
+                  <th>品項</th>
+                  <th>趨勢</th>
+                  <th class="num">上月表現</th>
+                  <th class="num col-group-start">去年同期</th>
+                  <th class="num">系統預估</th>
+                  <th class="num">人工調整</th>
+                  <th class="num">最後預估</th>
+                  <th class="num col-group-end">差異</th>
+                  <th>調整原因</th>
                 </tr>
               </thead>
               <tbody>
@@ -182,17 +163,45 @@
         </details>
       </section>
       {% endif %}
-      <div class="bottom-bar">
-        <div>預估總金額 <strong id="grand-total">{{ "{:,.0f}".format(total) }}</strong></div>
-        <div class="bottom-bar-actions">
-          {% if not is_finalized %}
-          <button type="button" id="btn-save-snapshot" class="btn-secondary">儲存草稿</button>
-          <button type="button" id="btn-finalize" class="btn-danger">定稿</button>
-          {% endif %}
-          <button type="submit">匯出 Excel</button>
+    </form>
+
+    <!-- Row detail drawer -->
+    <div class="row-detail-backdrop" id="row-detail-backdrop" hidden aria-hidden="true"></div>
+    <aside class="row-detail" id="row-detail" hidden role="complementary" aria-label="列詳細資料">
+      <div class="row-detail__header">
+        <div>
+          <p class="row-detail__customer" id="rd-customer"></p>
+          <h3 class="row-detail__product" id="rd-product"></h3>
+        </div>
+        <button type="button" class="icon-btn rd-close-btn" id="rd-close" title="關閉">✕</button>
+      </div>
+      <div class="row-detail__body">
+        <div class="detail-section">
+          <h4>上月表現</h4>
+          <div class="detail-row"><span>實績</span><span class="detail-val" id="rd-lm-actual">—</span></div>
+          <div class="detail-row"><span>預算</span><span class="detail-val" id="rd-lm-budget">—</span></div>
+          <div class="detail-row"><span>達成率</span><span class="detail-val" id="rd-lm-rate">—</span></div>
+          <div class="detail-row"><span>GAP</span><span class="detail-val" id="rd-lm-gap">—</span></div>
+        </div>
+        <div class="detail-section">
+          <h4>年度比較</h4>
+          <div class="detail-row"><span>去年同期</span><span class="detail-val" id="rd-last-year">—</span></div>
+          <div class="detail-row"><span>今年同期</span><span class="detail-val" id="rd-this-year">—</span></div>
+        </div>
+        <div class="detail-section">
+          <h4>預算達成</h4>
+          <div class="detail-row"><span>預算目標</span><span class="detail-val" id="rd-budget">—</span></div>
+          <div class="detail-row"><span>最後預估</span><span class="detail-val" id="rd-final">—</span></div>
+          <div class="detail-row"><span>達成率</span><span class="detail-val" id="rd-achieve-rate">—</span></div>
+          <div class="detail-row"><span>差異</span><span class="detail-val" id="rd-diff">—</span></div>
+        </div>
+        <div class="detail-section">
+          <h4>金額</h4>
+          <div class="detail-row"><span>預估金額</span><span class="detail-val" id="rd-amount">—</span></div>
+          <div class="detail-row"><span>計算狀態</span><span class="detail-val" id="rd-included">—</span></div>
         </div>
       </div>
-    </form>
+    </aside>
   </main>
 
   <script src="{{ url_for('static', filename='js/forecast-table.js') }}"></script>
@@ -203,30 +212,17 @@
       });
     }
 
-    function expandAll() {
-      document.querySelectorAll('.forecast-table__row--collapsed').forEach((tr) => {
-        tr.classList.remove('forecast-table__row--collapsed');
-      });
-      document.getElementById('expand-all-btn').style.display = 'none';
-    }
-
-    (function() {
-      const rows = document.querySelectorAll('tr[data-risk]');
-      if (rows.length <= 50) return;
-
-      let hidden = 0;
-      rows.forEach((tr) => {
-        if (tr.dataset.risk !== 'high') {
-          tr.classList.add('forecast-table__row--collapsed');
-          hidden++;
-        }
-      });
-
-      if (hidden > 0) {
-        const btn = document.getElementById('expand-all-btn');
-        btn.textContent = `顯示全部 ${rows.length} 筆（目前隱藏 ${hidden} 筆低風險）`;
-        btn.style.display = 'inline-block';
-      }
+    // 捲動時收合 summary
+    (function () {
+      const summary = document.querySelector('.summary');
+      if (!summary) return;
+      const sentinel = document.createElement('div');
+      sentinel.style.cssText = 'height:1px;margin-top:-1px;';
+      summary.after(sentinel);
+      const obs = new IntersectionObserver((entries) => {
+        summary.classList.toggle('summary--collapsed', !entries[0].isIntersecting);
+      }, { rootMargin: '-52px 0px 0px 0px' }); // 52px = 大約 header 高度
+      obs.observe(sentinel);
     })();
   </script>
 </body>

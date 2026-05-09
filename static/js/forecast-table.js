@@ -172,21 +172,19 @@ function renderRow(state, amount, visible) {
   manualInput.setAttribute("aria-invalid", invalid ? "true" : "false");
 
   const finalQty = finalForecastQuantity(state);
-  // Budget & Rate
+
+  // 差異 (最後預估 - 預算目標)
   const budget = Number(state.row.dataset.budget || 0);
   const gap = finalQty - budget;
-  const rate = budget > 0 ? (finalQty / budget) * 100 : 0;
-  updateRateElement(state.row.querySelector("[data-rate-display] .rate"), rate);
   updateGapElement(state.row.querySelector("[data-diff-display] .gap-value"), gap);
 
-  // Last Month Stats
+  // 上月表現合一格 (達成% + GAP)
   const lmRate = state.lmBudget > 0 ? (state.lmActual / state.lmBudget) * 100 : 0;
   const lmGap = state.lmActual - state.lmBudget;
-  updateRateElement(state.row.querySelector("[data-lm-rate-display] .rate"), lmRate);
-  updateGapElement(state.row.querySelector("[data-lm-gap-display] .gap-value"), lmGap);
+  updateRateElement(state.row.querySelector("[data-lm-perf-display] .rate"), lmRate);
+  updateGapElement(state.row.querySelector("[data-lm-perf-display] .gap-value"), lmGap);
 
   state.row.querySelector("[data-final-forecast]").textContent = precisionFormatter.format(finalQty);
-  state.row.querySelector("[data-amount]").textContent = formatter.format(amount);
 }
 
 function recalculate() {
@@ -210,21 +208,18 @@ function recalculate() {
     renderRow(state, amount, visible);
   });
 
-  const grandTotalEl = document.getElementById("grand-total");
   const topTotalEl = document.getElementById("top-total");
 
-  if (grandTotalEl.dataset.prevTotal && grandTotalEl.dataset.prevTotal !== String(total)) {
-    [grandTotalEl, topTotalEl].forEach(el => {
-      el.classList.remove("value-flash");
-      void el.offsetWidth; // Trigger reflow
-      el.classList.add("value-flash");
-    });
+  if (topTotalEl.dataset.prevTotal && topTotalEl.dataset.prevTotal !== String(total)) {
+    topTotalEl.classList.remove("value-flash");
+    void topTotalEl.offsetWidth;
+    topTotalEl.classList.add("value-flash");
   }
-  grandTotalEl.dataset.prevTotal = total;
-
-  grandTotalEl.textContent = formatter.format(total);
+  topTotalEl.dataset.prevTotal = total;
   topTotalEl.textContent = formatter.format(total);
   document.querySelector("[data-visible-count]").textContent = formatter.format(visibleCount);
+  const editedBadge = document.getElementById("edited-badge");
+  if (editedBadge) editedBadge.hidden = editedCount === 0;
   document.querySelector("[data-edited-count]").textContent = formatter.format(editedCount);
 }
 
@@ -297,6 +292,129 @@ const saveToServer = debounce((state) => {
     });
 }, 800);
 
+/* ── Row Detail Panel ────────────────────────────────────────────── */
+
+let _detailRowId = null;
+
+function openDetailPanel(row) {
+  const panel   = document.getElementById("row-detail");
+  const backdrop = document.getElementById("row-detail-backdrop");
+  if (!panel || !backdrop) return;
+
+  _detailRowId = row.dataset.rowId;
+
+  const state    = readRowState(row);
+  const f        = (n) => formatter.format(n);
+  const fp       = (n) => precisionFormatter.format(n);
+  const sign     = (n) => (n > 0 ? "+" : "") + fp(n);
+  const pct      = (n) => n.toFixed(1) + "%";
+
+  // Header
+  document.getElementById("rd-customer").textContent = row.dataset.customer || "";
+  document.getElementById("rd-product").textContent  = row.dataset.productName || "";
+
+  // 上月表現
+  const lmActual = state.lmActual;
+  const lmBudget = state.lmBudget;
+  const lmRate   = lmBudget > 0 ? (lmActual / lmBudget) * 100 : 0;
+  const lmGap    = lmActual - lmBudget;
+  document.getElementById("rd-lm-actual").textContent = fp(lmActual);
+  document.getElementById("rd-lm-budget").textContent = fp(lmBudget);
+  setDetailVal("rd-lm-rate", pct(lmRate), lmRate >= 100 ? "high" : lmRate < 80 ? "low" : "");
+  setDetailVal("rd-lm-gap",  sign(lmGap), lmGap >= 0 ? "positive" : "negative");
+
+  // 年度比較
+  const lastYear = Number(row.dataset.lastYearQty || 0);
+  const thisYear = Number(row.dataset.actualQty   || 0);
+  document.getElementById("rd-last-year").textContent = fp(lastYear);
+  document.getElementById("rd-this-year").textContent = fp(thisYear);
+
+  // 預算達成 (動態，跟著人工調整更新)
+  refreshDetailBudget(state);
+
+  // 展開
+  document.querySelectorAll("tr.row-detail-active").forEach(r => r.classList.remove("row-detail-active"));
+  row.classList.add("row-detail-active");
+
+  panel.hidden   = false;
+  backdrop.hidden = false;
+  requestAnimationFrame(() => {
+    panel.classList.add("open");
+    backdrop.classList.add("open");
+  });
+}
+
+function refreshDetailBudget(state) {
+  const fp      = (n) => precisionFormatter.format(n);
+  const pct     = (n) => n.toFixed(1) + "%";
+  const sign    = (n) => (n > 0 ? "+" : "") + fp(n);
+
+  const budget   = state.budgetQuantity;
+  const finalQty = finalForecastQuantity(state);
+  const diff     = finalQty - budget;
+  const rate     = budget > 0 ? (finalQty / budget) * 100 : 0;
+  const amount   = calculateAmount(state);
+  const included = state.excluded ? "排除" : (budget <= 0 ? "缺預算" : "納入");
+
+  document.getElementById("rd-budget").textContent = fp(budget);
+  document.getElementById("rd-final").textContent  = fp(finalQty);
+  setDetailVal("rd-achieve-rate", pct(rate), rate >= 100 ? "high" : rate < 80 ? "low" : "");
+  setDetailVal("rd-diff",         sign(diff), diff >= 0 ? "positive" : "negative");
+  document.getElementById("rd-amount").textContent   = formatter.format(amount);
+  document.getElementById("rd-included").textContent = included;
+}
+
+function setDetailVal(id, text, cls) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = text;
+  el.className = "detail-val" + (cls ? " " + cls : "");
+}
+
+function closeDetailPanel() {
+  const panel    = document.getElementById("row-detail");
+  const backdrop = document.getElementById("row-detail-backdrop");
+  if (!panel || !backdrop) return;
+
+  panel.classList.remove("open");
+  backdrop.classList.remove("open");
+  document.querySelectorAll("tr.row-detail-active").forEach(r => r.classList.remove("row-detail-active"));
+  _detailRowId = null;
+
+  panel.addEventListener("transitionend", () => {
+    panel.hidden    = true;
+    backdrop.hidden = true;
+  }, { once: true });
+}
+
+/* ── View Toggle (只看異常 / 全部明細) ──────────────────────────── */
+
+let _viewMode = "anomaly"; // default: only high risk
+
+function applyViewMode(mode) {
+  _viewMode = mode;
+  const rows = document.querySelectorAll("tr[data-risk]");
+
+  rows.forEach((tr) => {
+    if (mode === "anomaly") {
+      if (tr.dataset.risk !== "high") {
+        tr.classList.add("forecast-table__row--collapsed");
+      } else {
+        tr.classList.remove("forecast-table__row--collapsed");
+      }
+    } else {
+      tr.classList.remove("forecast-table__row--collapsed");
+    }
+  });
+
+  document.getElementById("btn-anomaly-only")?.classList.toggle("active", mode === "anomaly");
+  document.getElementById("btn-show-all")?.classList.toggle("active", mode === "all");
+
+  recalculate();
+}
+
+/* ── Main bind ───────────────────────────────────────────────────── */
+
 function bindForecastTable() {
   document.querySelectorAll("[data-manual], [data-reason], [data-filter-search], [data-filter-status]").forEach((input) => {
     input.addEventListener("input", (e) => {
@@ -306,6 +424,10 @@ function bindForecastTable() {
         const restoreBtn = row.querySelector("[data-restore]");
         if (restoreBtn) restoreBtn.hidden = e.target.hasAttribute("data-manual") && e.target.value === "";
         saveToServer(readRowState(row));
+        // refresh side panel if open for this row
+        if (_detailRowId && _detailRowId === row.dataset.rowId) {
+          refreshDetailBudget(readRowState(row));
+        }
       }
     });
     input.addEventListener("change", recalculate);
@@ -319,19 +441,50 @@ function bindForecastTable() {
       btn.hidden = true;
       recalculate();
       saveToServer(readRowState(row));
+      if (_detailRowId && _detailRowId === row.dataset.rowId) {
+        refreshDetailBudget(readRowState(row));
+      }
     });
   });
 
-  // Click to select all for manual quantity inputs
   document.querySelectorAll("[data-manual]").forEach((input) => {
     input.addEventListener("focus", (e) => e.target.select());
   });
 
+  // Row click → open detail panel
+  document.querySelectorAll("tr[data-row]").forEach((tr) => {
+    tr.addEventListener("click", (e) => {
+      if (e.target.closest("input, button, a, label")) return;
+      if (_detailRowId === tr.dataset.rowId) {
+        closeDetailPanel();
+      } else {
+        openDetailPanel(tr);
+      }
+    });
+  });
+
+  // Detail panel close
+  document.getElementById("rd-close")?.addEventListener("click", closeDetailPanel);
+  document.getElementById("row-detail-backdrop")?.addEventListener("click", closeDetailPanel);
+
+  // View toggle
+  const highRiskCount = document.querySelectorAll("tr[data-risk='high']").length;
+  const totalRows     = document.querySelectorAll("tr[data-risk]").length;
+
+  if (highRiskCount > 0 && totalRows > highRiskCount) {
+    applyViewMode("anomaly");
+  } else {
+    // All rows are same risk level, default to show all
+    applyViewMode("all");
+    document.querySelector(".view-toggle")?.style.setProperty("display", "none");
+  }
+
+  document.getElementById("btn-anomaly-only")?.addEventListener("click", () => applyViewMode("anomaly"));
+  document.getElementById("btn-show-all")?.addEventListener("click",     () => applyViewMode("all"));
+
   document.getElementById("forecast-form").addEventListener("submit", validateBeforeSubmit);
 
-  // Phase 4: Render sparklines on initial load
   renderAllSparklines();
-
   recalculate();
 }
 
