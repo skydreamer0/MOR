@@ -39,6 +39,7 @@ from src.backend.snapshot_service import (
     delete_snapshot,
     is_finalized,
     list_snapshots,
+    load_snapshot_items,
     save_snapshot,
 )
 
@@ -282,6 +283,43 @@ def create_app(config: dict | None = None) -> Flask:
             close_record=get_close_record(db, year, month) if year and month else None,
         )
 
+    def _find_or_create_close_snapshot(year: int, month: int) -> int | None:
+        """Return an existing Final/CloseMonth snapshot ID, or auto-create one."""
+        with db.get_connection() as conn:
+            row = conn.execute(
+                """
+                SELECT id FROM forecast_snapshots
+                WHERE year = ? AND month = ? AND snapshot_type IN ('Final', 'CloseMonth')
+                ORDER BY id DESC LIMIT 1
+                """,
+                (year, month),
+            ).fetchone()
+        if row:
+            return row["id"]
+        # Auto-create from current forecast state
+        try:
+            ctx = build_forecast_page_context(
+                data_base_path, forecast_config, db,
+                {"year": str(year), "month": str(month)},
+            )
+            snapshot_rows = [
+                {
+                    "customer_name": r.customer,
+                    "product_code": r.product_code,
+                    "system_forecast": r.system_forecast,
+                    "manual_adjustment": r.manual_adjustment,
+                    "final_forecast": r.final_forecast,
+                }
+                for r in ctx.summary.rows
+            ]
+        except Exception:
+            snapshot_rows = []
+        return save_snapshot(
+            db, year, month,
+            f"結月快照 {year}/{month:02d}", "CloseMonth",
+            snapshot_rows, created_by="結月",
+        )
+
     @app.post("/monitor/products/close-month")
     def close_product_monitor_month() -> Response:
         year = request.form.get("year", type=int)
@@ -290,7 +328,8 @@ def create_app(config: dict | None = None) -> Flask:
         if not year or not month:
             return redirect(url_for("product_monitor", import_error="缺少年月資訊。"))
         try:
-            close_month(db, year, month, note=note)
+            snapshot_id = _find_or_create_close_snapshot(year, month)
+            close_month(db, year, month, snapshot_id=snapshot_id, note=note)
             cache.clear()
         except Exception as exc:
             return redirect(url_for("product_monitor", year=year, month=month,

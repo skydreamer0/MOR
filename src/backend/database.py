@@ -159,9 +159,14 @@ class MORDatabase:
                     actual_quantity_total REAL DEFAULT 0,
                     actual_amount_total REAL DEFAULT 0,
                     note TEXT,
+                    final_snapshot_id INTEGER,
                     UNIQUE (year, month)
                 )
             """)
+            # Migration: add final_snapshot_id if upgrading from earlier Phase 6 DB
+            mcr_cols = [col[1] for col in conn.execute("PRAGMA table_info(month_close_records)").fetchall()]
+            if "final_snapshot_id" not in mcr_cols:
+                conn.execute("ALTER TABLE month_close_records ADD COLUMN final_snapshot_id INTEGER")
 
             # Daily Sales Import (Phase 1: current-month actuals)
             conn.execute("""

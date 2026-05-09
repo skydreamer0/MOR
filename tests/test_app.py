@@ -1331,6 +1331,40 @@ def test_close_month_route_creates_record_and_blocks_reimport(monkeypatch):
     assert "已結月" in blocked.get_data(as_text=True)
 
 
+def test_close_month_auto_saves_forecast_snapshot(monkeypatch):
+    """結月路由應自動儲存最終預估快照，供 Phase 7 月底檢討頁使用。"""
+    db_base_path = _isolated_db_base()
+    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
+    columns = config.required_columns
+    data = pd.DataFrame([{
+        columns[0]: 2025, columns[1]: 5, columns[2]: 10,
+        columns[3]: "Hospital A", columns[4]: "P1", columns[5]: "Product One",
+        columns[6]: 10, columns[7]: 100, columns[8]: 0,
+    }])
+    monkeypatch.setattr(app, "load_sales_detail", lambda *_: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda *_: data)
+    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
+
+    client.post(
+        "/monitor/products/import",
+        data={"daily_sales_file": (_daily_import_workbook(), "may.xlsx")},
+        content_type="multipart/form-data",
+    )
+    client.post("/monitor/products/close-month", data={"year": "2026", "month": "5"})
+
+    from src.backend.daily_sales_importer import get_close_record
+    from src.backend.database import get_db
+    db = get_db(db_base_path)
+    rec = get_close_record(db, 2026, 5)
+
+    assert rec is not None
+    assert rec["final_snapshot_id"] is not None
+
+    from src.backend.snapshot_service import load_snapshot_items
+    items = load_snapshot_items(db, rec["final_snapshot_id"])
+    assert len(items) >= 1  # at least one forecast row saved
+
+
 def test_product_monitor_shows_close_button_after_import(monkeypatch):
     db_base_path = _isolated_db_base()
     config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")

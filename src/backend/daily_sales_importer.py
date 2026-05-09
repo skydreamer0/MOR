@@ -203,9 +203,16 @@ def is_month_closed(db: MORDatabase, year: int, month: int) -> bool:
     return row is not None
 
 
-def close_month(db: MORDatabase, year: int, month: int, note: str | None = None) -> None:
+def close_month(
+    db: MORDatabase,
+    year: int,
+    month: int,
+    snapshot_id: int | None = None,
+    note: str | None = None,
+) -> None:
     """Lock the given year/month, preventing further imports.
 
+    snapshot_id: ID of the forecast snapshot saved at close time (for Phase 7 review).
     Raises ValueError if already closed or if no actuals data exists.
     """
     if is_month_closed(db, year, month):
@@ -213,7 +220,7 @@ def close_month(db: MORDatabase, year: int, month: int, note: str | None = None)
     with db.get_connection() as conn:
         summary = conn.execute(
             """
-            SELECT COUNT(*)                     AS row_count,
+            SELECT COUNT(*)                          AS row_count,
                    COALESCE(SUM(actual_quantity), 0) AS qty_total,
                    COALESCE(SUM(taxed_amount), 0)    AS amount_total
             FROM   daily_sales_actuals
@@ -235,8 +242,8 @@ def close_month(db: MORDatabase, year: int, month: int, note: str | None = None)
             """
             INSERT INTO month_close_records
             (year, month, source_batch_id, actual_row_count,
-             actual_quantity_total, actual_amount_total, note)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+             actual_quantity_total, actual_amount_total, note, final_snapshot_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 year, month,
@@ -245,6 +252,7 @@ def close_month(db: MORDatabase, year: int, month: int, note: str | None = None)
                 summary["qty_total"],
                 summary["amount_total"],
                 note,
+                snapshot_id,
             ),
         )
         conn.commit()
@@ -271,7 +279,7 @@ def get_close_record(db: MORDatabase, year: int, month: int) -> dict | None:
     with db.get_connection() as conn:
         row = conn.execute(
             """
-            SELECT year, month, closed_at,
+            SELECT year, month, closed_at, final_snapshot_id,
                    actual_row_count, actual_quantity_total, actual_amount_total, note
             FROM   month_close_records
             WHERE  year = ? AND month = ?
@@ -279,6 +287,15 @@ def get_close_record(db: MORDatabase, year: int, month: int) -> dict | None:
             (year, month),
         ).fetchone()
     return dict(row) if row else None
+
+
+def list_closed_months(db: MORDatabase) -> list[tuple[int, int]]:
+    """Return all closed (year, month) pairs sorted descending."""
+    with db.get_connection() as conn:
+        rows = conn.execute(
+            "SELECT year, month FROM month_close_records ORDER BY year DESC, month DESC"
+        ).fetchall()
+    return [(r["year"], r["month"]) for r in rows]
 
 
 def _number(values: pd.Series) -> pd.Series:
