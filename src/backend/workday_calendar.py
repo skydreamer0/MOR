@@ -149,6 +149,29 @@ def workdays_remaining_in_month(db: MORDatabase, year: int, month: int, as_of: d
 # Internal
 # ---------------------------------------------------------------------------
 
+def fetch_workday_set(db: MORDatabase, start: date, end: date) -> frozenset[date]:
+    """One DB query → frozenset of workday dates in [start, end].
+
+    Falls back to Mon–Fri for any days not covered by the DB, so the result is
+    always complete for the requested range.
+    """
+    iso_start, iso_end = start.isoformat(), end.isoformat()
+    with db.get_connection() as conn:
+        rows = conn.execute(
+            "SELECT date, is_workday FROM workday_calendar WHERE date >= ? AND date <= ?",
+            (iso_start, iso_end),
+        ).fetchall()
+    total_days = (end - start).days + 1
+    if len(rows) >= total_days:
+        return frozenset(date.fromisoformat(row["date"]) for row in rows if row["is_workday"])
+    # Fallback: Mon–Fri for dates not covered by the calendar table
+    return frozenset(
+        start + timedelta(days=i)
+        for i in range(total_days)
+        if (start + timedelta(days=i)).weekday() < 5
+    )
+
+
 def _month_end(year: int, month: int) -> date:
     _, last = calendar.monthrange(year, month)
     return date(year, month, last)

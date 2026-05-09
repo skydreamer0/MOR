@@ -186,11 +186,17 @@
                   </div>
 
                   <div class="detail-section detail-compare">
-                    <span class="detail-label">週期分析</span>
+                    <span class="detail-label">週期 &amp; 推估</span>
                     <div class="detail-compare-grid">
                       <span class="compare-label">最近出貨日</span><strong>{% if row.latest_order_date %}{{ row.latest_order_date }}{% else %}-{% endif %}</strong>
                       <span class="compare-label">距今工作日</span><strong>{% if row.days_since_last_shipment_workdays is not none %}{{ row.days_since_last_shipment_workdays }}{% else %}-{% endif %}</strong>
                       <span class="compare-label">歷史平均週期</span><strong>{% if row.cycle_days %}{{ row.cycle_days }} 天{% else %}-{% endif %}</strong>
+                      <span class="compare-label">典型單次出貨量</span><strong>{% if row.typical_qty_per_shipment > 0 %}{{ "{:,.0f}".format(row.typical_qty_per_shipment) }}{% else %}-{% endif %}</strong>
+                      <span class="compare-label">月底前預計再出貨</span><strong>{{ row.remaining_shipments }} 次</strong>
+                      <span class="compare-label">推估信心</span>
+                      <strong class="{% if row.projection_confidence == 'high' %}success-text{% elif row.projection_confidence == 'medium' %}rate-warning{% else %}muted{% endif %}">
+                        {{ {"high": "高", "medium": "中", "low": "低"}.get(row.projection_confidence, "-") }}
+                      </strong>
                     </div>
                   </div>
 
