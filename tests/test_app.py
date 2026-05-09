@@ -221,7 +221,9 @@ def test_forecast_page_exposes_customer_filter_and_row_metadata():
 
     assert response.status_code == 200
     assert 'id="customer-filter"' in html
-    assert "filterRows(this.value)" in html
+    # customer filter now uses data-filter-customer (picked up by bindForecastTable in forecast-table.js)
+    # instead of the old onchange="filterRows(this.value)" inline handler
+    assert 'data-filter-customer' in html
     assert 'data-customer="' in html
     assert 'data-risk="' in html
 

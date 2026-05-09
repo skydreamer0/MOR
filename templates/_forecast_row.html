@@ -43,8 +43,8 @@
       <small class="gap-value"></small>
     </div>
   </td>
-  <!-- 6. 去年同期 -->
-  <td class="num">{{ "{:,.2f}".format(row.last_year_same_month_qty) }}</td>
+  <!-- 6. 去年同期 — col-group-start: border rendered via td.col-group-start in mor.css (matches <th col-group-start> above) -->
+  <td class="num col-group-start">{{ "{:,.2f}".format(row.last_year_same_month_qty) }}</td>
   <!-- 7. 系統預估 -->
   <td class="num">{{ "{:,.2f}".format(row.system_forecast) }}</td>
   <!-- 8. 人工調整 -->
@@ -61,8 +61,8 @@
       <button type="button" class="icon-btn" title="還原系統預估" data-restore {% if row.manual_adjustment is none %}hidden{% endif %}>還原</button>
     </div>
   </td>
-  <!-- 9. 最後預估 -->
-  <td class="num" data-final-forecast>{{ "{:,.2f}".format(row.final_forecast) }}</td>
+  <!-- 9. 最後預估 — col-group-start: opens the forecast/decision group (cols 9–10); border via td.col-group-start in mor.css -->
+  <td class="num col-group-start" data-final-forecast>{{ "{:,.2f}".format(row.final_forecast) }}</td>
   <!-- 10. 差異 (最後預估 - 預算目標) -->
   <td class="num" data-diff-display><span class="gap-value"></span></td>
   <!-- 11. 調整原因 -->

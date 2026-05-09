@@ -46,6 +46,13 @@
   --focus:            #38bdf8;
   --focus-ring:       rgba(56, 189, 248, 0.25);
 
+  /* Interactive row states — #eef6ff/#e0f0ff kept blue-tinted intentionally for contrast with teal accent */
+  --row-hover:        #eef6ff;
+  --row-active:       #e0f0ff;
+
+  /* Danger hover — one step darker than --danger (#dc2626) */
+  --danger-hover:     #b91c1c;
+
   /* Shadows — layered depth system */
   --shadow-xs:  0 1px 2px 0 rgba(0, 0, 0, 0.03);
   --shadow-sm:  0 1px 3px 0 rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.06);
@@ -508,11 +515,11 @@ tbody tr[data-row] {
 }
 
 tbody tr:hover {
-  background-color: #eef6ff;
+  background-color: var(--row-hover);
 }
 
 tr[data-row].row-detail-active td {
-  background-color: #e0f0ff !important;
+  background-color: var(--row-active) !important;
 }
 
 /* Last row bottom border removal within rounded container */
@@ -908,8 +915,9 @@ input.qty:focus {
 
 
 /* ── Column-group visual separators ─────────────────────────── */
+/* td.col-group-start replaces legacy td:nth-child(4/9/13) rules — add class to <td> in _forecast_row.html instead */
 th.col-group-start,
-td:nth-child(4) {
+td.col-group-start {
   border-left: 2px solid var(--line);
 }
 
@@ -918,21 +926,10 @@ th.col-group-end + th {
   border-left: 2px solid var(--line);
 }
 
-/* Match td positions for group borders: review cols 4-8, current 9-12, decision 13-16 */
-tbody td:nth-child(9),
-tbody td:nth-child(13) {
-  border-left: 2px solid var(--line);
-}
-
 /* 品項欄固定窄寬，只顯示三字縮寫 */
 .forecast-table th:nth-child(3),
 .forecast-table td:nth-child(3) {
   width: 44px;
-}
-
-thead th:nth-child(9),
-thead th:nth-child(13) {
-  border-left: 2px solid var(--line);
 }
 
 
@@ -1158,8 +1155,8 @@ details[open] .discontinued-toggle {
 }
 
 .btn-danger:hover {
-  background: #b91c1c;
-  border-color: #b91c1c;
+  background: var(--danger-hover);
+  border-color: var(--danger-hover);
 }
 
 .metric--locked {

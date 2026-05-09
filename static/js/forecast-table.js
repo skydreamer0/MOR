@@ -149,17 +149,19 @@ function hasInvalidManualQuantity(state) {
   return state.manualValue !== "" && (Number.isNaN(Number(state.manualValue)) || Number(state.manualValue) < 0);
 }
 
+// Single source of truth for row visibility. All four filter axes must pass for a row to show.
+// Reads _customerFilter and _viewMode from module state (set at top of recalculate()).
 function matchesFilters(state, searchValue, statusValue) {
   const matchesSearch = searchValue === "" || state.searchText.includes(searchValue);
   let matchesStatus = true;
-
   if (statusValue === "auto" || statusValue === "not_due") {
     matchesStatus = state.status === statusValue;
   } else if (statusValue === "edited") {
     matchesStatus = isEdited(state);
   }
-
-  return matchesSearch && matchesStatus;
+  const matchesCustomer = _customerFilter === "" || state.row.dataset.customer === _customerFilter;
+  const matchesView = _viewMode !== "anomaly" || state.row.dataset.risk === "high";
+  return matchesSearch && matchesStatus && matchesCustomer && matchesView;
 }
 
 function renderRow(state, amount, visible) {
@@ -193,6 +195,8 @@ function recalculate() {
   const unrenderedTotalInput = document.querySelector("[data-unrendered-total]");
   const searchValue = (searchInput?.value || "").trim().toLowerCase();
   const statusValue = statusInput?.value || "all";
+  // Sync module state from DOM before the visibility pass; [data-filter-customer] is on the customer <select> in forecast.html
+  _customerFilter = document.querySelector("[data-filter-customer]")?.value || "";
   let total = Number(unrenderedTotalInput?.value || 0);
   let visibleCount = 0;
   let editedCount = 0;
@@ -389,34 +393,25 @@ function closeDetailPanel() {
 
 /* ── View Toggle (只看異常 / 全部明細) ──────────────────────────── */
 
-let _viewMode = "anomaly"; // default: only high risk
+// All row visibility goes through recalculate() — do not manipulate row.hidden or style.display elsewhere.
+// _viewMode and _customerFilter are read inside matchesFilters(); update them before calling recalculate().
+let _viewMode = "anomaly";
+let _customerFilter = "";
 
 function applyViewMode(mode) {
+  // Previously used forEach + classList.toggle("forecast-table__row--collapsed"); now delegates to recalculate()
+  // so view mode, customer filter, search, and status all go through one visibility pass.
   _viewMode = mode;
-  const rows = document.querySelectorAll("tr[data-risk]");
-
-  rows.forEach((tr) => {
-    if (mode === "anomaly") {
-      if (tr.dataset.risk !== "high") {
-        tr.classList.add("forecast-table__row--collapsed");
-      } else {
-        tr.classList.remove("forecast-table__row--collapsed");
-      }
-    } else {
-      tr.classList.remove("forecast-table__row--collapsed");
-    }
-  });
-
   document.getElementById("btn-anomaly-only")?.classList.toggle("active", mode === "anomaly");
   document.getElementById("btn-show-all")?.classList.toggle("active", mode === "all");
-
   recalculate();
 }
 
 /* ── Main bind ───────────────────────────────────────────────────── */
 
 function bindForecastTable() {
-  document.querySelectorAll("[data-manual], [data-reason], [data-filter-search], [data-filter-status]").forEach((input) => {
+  // [data-filter-customer] replaces the old onchange="filterRows()" on the customer <select>
+  document.querySelectorAll("[data-manual], [data-reason], [data-filter-search], [data-filter-status], [data-filter-customer]").forEach((input) => {
     input.addEventListener("input", (e) => {
       recalculate();
       if (e.target.hasAttribute("data-manual") || e.target.hasAttribute("data-reason")) {

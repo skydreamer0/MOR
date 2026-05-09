@@ -17,27 +17,57 @@ The best visual direction is a structured data workspace inspired more by Airtab
 
 ## 2. Color Palette & Roles
 
-Current tokens:
+All tokens are defined in `static/css/mor.css` `:root`. Edit values there; this table is the reference.
+
+**Neutral**
 
 | Token | Hex | Role |
 | --- | --- | --- |
-| `--ink` | `#16202a` | Primary text |
-| `--muted` | `#667085` | Secondary labels and metadata |
-| `--line` | `#d9e0e7` | Borders and table dividers |
+| `--ink` | `#0f172a` | Primary text |
+| `--ink-secondary` | `#1e293b` | Secondary headings |
+| `--muted` | `#64748b` | Labels and metadata |
+| `--muted-light` | `#94a3b8` | Placeholder, disabled text |
+| `--line` | `#e2e8f0` | Borders and table dividers |
+| `--line-subtle` | `#f1f5f9` | Subtle dividers |
 | `--panel` | `#ffffff` | Cards, table surfaces, fixed bars |
-| `--bg` | `#f3f6f8` | Page background |
-| `--accent` | `#0f766e` | Primary actions, totals, active status |
-| `--accent-2` | `#b45309` | Warning / not-due status |
+| `--bg` | `#f8fafc` | Page background |
+| `--surface-subtle` | `#f1f5f9` | Hover rows, grouped controls |
+| `--surface-elevated` | `#ffffff` | Elevated panels |
 
-Recommended additions:
+**Brand — Teal**
 
 | Token | Hex | Role |
 | --- | --- | --- |
-| `--success-bg` | `#e7f5ef` | Forecast-in-month badge background |
-| `--warning-bg` | `#fff4df` | Not-due badge background |
-| `--danger` | `#b42318` | Validation and export errors |
-| `--focus` | `#2563eb` | Keyboard focus ring |
-| `--surface-subtle` | `#f8fafc` | Hover rows and grouped controls |
+| `--accent` | `#0d9488` | Primary actions, active state |
+| `--accent-hover` | `#0f766e` | Button hover |
+| `--accent-active` | `#115e59` | Button active / pressed |
+| `--accent-subtle` | `rgba(13,148,136,0.08)` | Tint backgrounds, nav hover |
+| `--accent-ring` | `rgba(13,148,136,0.25)` | Focus ring glow |
+| `--accent-2` | `#d97706` | Warning / not-due status |
+
+**Semantic**
+
+| Token | Hex | Role |
+| --- | --- | --- |
+| `--danger` | `#dc2626` | Errors, destructive actions |
+| `--danger-hover` | `#b91c1c` | Danger button hover |
+| `--danger-bg` | `#fef2f2` | Error backgrounds |
+| `--danger-border` | `#fca5a5` | Error borders |
+| `--success-bg` | `#ecfdf5` | Success backgrounds, badge bg |
+| `--success-text` | `#047857` | Success text, positive values |
+| `--success-border` | `#a7f3d0` | Success borders |
+| `--warning-bg` | `#fffbeb` | Warning backgrounds |
+| `--warning-text` | `#92400e` | Warning text |
+| `--warning-border` | `#fde68a` | Warning borders |
+| `--focus` | `#38bdf8` | Keyboard focus ring color |
+| `--focus-ring` | `rgba(56,189,248,0.25)` | Focus ring glow |
+
+**Interactive Row States**
+
+| Token | Hex | Role |
+| --- | --- | --- |
+| `--row-hover` | `#eef6ff` | Table row hover background |
+| `--row-active` | `#e0f0ff` | Row with detail panel open |
 
 ## 3. Typography Rules
 

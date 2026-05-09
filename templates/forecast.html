@@ -77,7 +77,8 @@
           <button type="button" class="view-toggle-btn active" id="btn-anomaly-only">只看異常</button>
           <button type="button" class="view-toggle-btn" id="btn-show-all">全部明細</button>
         </div>
-        <select id="customer-filter" aria-label="篩選客戶" onchange="filterRows(this.value)">
+        {# data-filter-customer: picked up by bindForecastTable() in forecast-table.js; replaces the old onchange="filterRows()" #}
+        <select id="customer-filter" data-filter-customer aria-label="篩選客戶">
           <option value="">全部客戶</option>
           {% for customer in customers %}
             <option value="{{ customer }}">{{ customer }}</option>
@@ -108,21 +109,7 @@
 
       <div class="table-wrap">
         <table class="forecast-table">
-          <thead>
-            <tr>
-              <th>狀態</th>
-              <th>客戶</th>
-              <th>品項</th>
-              <th>趨勢</th>
-              <th class="num">上月表現</th>
-              <th class="num col-group-start">去年同期</th>
-              <th class="num">系統預估</th>
-              <th class="num">人工調整</th>
-              <th class="num">最後預估</th>
-              <th class="num col-group-end">差異</th>
-              <th>調整原因</th>
-            </tr>
-          </thead>
+          {% include "_forecast_thead.html" %}
           <tbody>
             {% for row in rows %}
             {% include "_forecast_row.html" %}
@@ -138,21 +125,7 @@
           </summary>
           <div class="table-wrap">
             <table class="forecast-table">
-              <thead>
-                <tr>
-                  <th>狀態</th>
-                  <th>客戶</th>
-                  <th>品項</th>
-                  <th>趨勢</th>
-                  <th class="num">上月表現</th>
-                  <th class="num col-group-start">去年同期</th>
-                  <th class="num">系統預估</th>
-                  <th class="num">人工調整</th>
-                  <th class="num">最後預估</th>
-                  <th class="num col-group-end">差異</th>
-                  <th>調整原因</th>
-                </tr>
-              </thead>
+              {% include "_forecast_thead.html" %}
               <tbody>
                 {% for row in discontinued_rows %}
                 {% include "_forecast_row.html" %}
@@ -206,12 +179,6 @@
 
   <script src="{{ url_for('static', filename='js/forecast-table.js') }}"></script>
   <script>
-    function filterRows(customer) {
-      document.querySelectorAll('tr[data-customer]').forEach((tr) => {
-        tr.style.display = (!customer || tr.dataset.customer === customer) ? '' : 'none';
-      });
-    }
-
     // 填滿視窗高度（扣掉 sticky header）
     (function () {
       const header = document.querySelector('header');
