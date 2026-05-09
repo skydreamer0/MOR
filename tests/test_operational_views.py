@@ -2,6 +2,7 @@ from dataclasses import replace
 from datetime import date
 
 import pandas as pd
+import pytest
 
 from src.backend.daily_sales_importer import DailyActualAggregate
 from src.backend.forecast_models import ForecastRow, ForecastSummary
@@ -470,6 +471,41 @@ def test_product_monitor_current_quantity_prefers_daily_actual_lookup():
     monitor_rows = build_product_monitor_rows([row], daily_actuals=actuals)
 
     assert monitor_rows[0].current_quantity == 12
+
+
+def test_monitor_row_applies_pack_factor_to_all_quantity_fields():
+    """包裝量應套用到所有顯示數量欄位，比值（成長率）與金額欄位不受影響。"""
+    base = _row(
+        row_id="A__P1",
+        customer="A",
+        product_code="P1",
+        product_name="Packed",
+        last_year=100,
+        last_month=50,
+        current=80,
+        final=90,
+        budget=100,
+        price=10,
+    )
+    from dataclasses import replace as dreplace
+    row_with_pack = dreplace(base, price_quantity=6.0)
+
+    from src.backend.operational_views import _to_monitor_row
+    mr = _to_monitor_row(row_with_pack)
+
+    # All displayed quantities × 6
+    assert mr.last_year_quantity == 100 * 6
+    assert mr.last_month_quantity == 50 * 6
+    assert mr.current_quantity == 80 * 6      # this_year_same_month_qty × pack
+    assert mr.forecast_quantity == 90 * 6
+    assert mr.budget_quantity == 100 * 6
+    assert mr.diff_quantity == (90 - 100) * 6
+
+    # Rates — pack_factor cancels in ratio, must be identical to raw calculation
+    assert mr.yoy_growth_rate == pytest.approx(90 / 100)
+    assert mr.budget_achievement_rate == pytest.approx(90 / 100)
+    # drop_rate is also a ratio
+    assert mr.drop_rate == pytest.approx((90 - 100) / 100 * 100)
 
 
 # ---------------------------------------------------------------------------

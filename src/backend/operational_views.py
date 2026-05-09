@@ -600,23 +600,26 @@ def _to_monitor_row(
     target_month: int = 0,
 ) -> ProductMonitorRow:
     today = today or date.today()
-    # Prefer daily actuals (Phase 1) over historical this_year figure
-    current_quantity = actual.actual_quantity if actual is not None else row.this_year_same_month_qty
 
-    # Workday distance since last shipment
-    # Prefer current-month daily-actual date over historical latest_order_date (Phase 4 fix)
+    # 包裝量換算係數：所有顯示數量都需乘上此係數，比值（成長率、達成率）和金額欄位不動
+    pack_factor = row.price_quantity if row.price_quantity > 0 else 1.0
+
+    # Raw quantities (same unit as Excel "銷+贈S量") — used for rates, amounts, cycle logic
+    raw_current = actual.actual_quantity if actual is not None else row.this_year_same_month_qty
+
+    # Workday distance — prefer current-month daily-actual date (Phase 4 fix)
     days_since: int | None = None
     if workday_set is not None:
         reference_date: date | None = None
         if actual is not None and actual.latest_sales_date is not None:
-            raw = actual.latest_sales_date
-            reference_date = date.fromisoformat(str(raw)[:10])
+            raw_ls = actual.latest_sales_date
+            reference_date = date.fromisoformat(str(raw_ls)[:10])
         elif row.latest_order_date:
             reference_date = row.latest_order_date
         if reference_date is not None:
             days_since = _days_since_order(workday_set, reference_date, today)
 
-    # Rate computations (using final_forecast as the expected EOMonth quantity)
+    # Rates use raw quantities — pack_factor cancels in ratios, no adjustment needed
     yoy_rate = (row.final_forecast / row.last_year_same_month_qty) if row.last_year_same_month_qty > 0 else None
     bud_rate = (row.final_forecast / row.budget_quantity) if row.budget_quantity > 0 else None
 
@@ -626,29 +629,29 @@ def _to_monitor_row(
         row.last_year_same_month_qty, row.budget_quantity,
     )
 
-    diff_quantity = row.final_forecast - row.last_year_same_month_qty
-    drop_rate = (diff_quantity / row.last_year_same_month_qty * 100) if row.last_year_same_month_qty > 0 else None
-    amount_impact = _dashboard_amount(diff_quantity, row)
+    # diff/amount: computed from raw quantities so amount_impact is correct in NT$
+    raw_diff = row.final_forecast - row.last_year_same_month_qty
+    drop_rate = (raw_diff / row.last_year_same_month_qty * 100) if row.last_year_same_month_qty > 0 else None
+    amount_impact = _dashboard_amount(raw_diff, row)
 
-    # Phase 4: use projection model for estimated_eom_qty when available
+    # Phase 4: projection model
     if projection is not None:
-        estimated_eom = projection.estimated_eom_qty
+        raw_estimated_eom = projection.estimated_eom_qty      # in raw units
         remaining_shipments = projection.remaining_shipments
-        typical_qty = projection.typical_qty_per_shipment
+        raw_typical_qty = projection.typical_qty_per_shipment  # in raw units
         proj_confidence = projection.confidence
-        projected_remaining_qty = projection.projected_remaining_qty
+        projected_remaining_qty = projection.projected_remaining_qty  # raw units
     else:
-        estimated_eom = row.system_forecast
+        raw_estimated_eom = row.system_forecast
         remaining_shipments = 0
-        typical_qty = 0.0
+        raw_typical_qty = 0.0
         proj_confidence = "low"
         projected_remaining_qty = 0.0
 
-    # Phase 5: amount fields
+    # Phase 5: amount fields — use raw_current for implied price so projected amount stays correct
     current_taxed_amount = float(actual.taxed_amount) if actual is not None else 0.0
-    # Unit price for remaining projected shipments — prefer implied price from actuals
-    if current_quantity > 0 and current_taxed_amount > 0:
-        implied_unit_price = current_taxed_amount / current_quantity
+    if raw_current > 0 and current_taxed_amount > 0:
+        implied_unit_price = current_taxed_amount / raw_current  # price per raw unit
     else:
         implied_unit_price = row.latest_price
     estimated_eom_amount = current_taxed_amount + projected_remaining_qty * implied_unit_price
@@ -663,11 +666,12 @@ def _to_monitor_row(
         customer=row.customer,
         product_code=row.product_code,
         product_name=row.product_name,
-        last_year_quantity=row.last_year_same_month_qty,
-        last_month_quantity=row.last_month_actual,
-        current_quantity=current_quantity,
-        forecast_quantity=row.final_forecast,
-        diff_quantity=diff_quantity,
+        # All quantity fields × pack_factor for display
+        last_year_quantity=row.last_year_same_month_qty * pack_factor,
+        last_month_quantity=row.last_month_actual * pack_factor,
+        current_quantity=raw_current * pack_factor,
+        forecast_quantity=row.final_forecast * pack_factor,
+        diff_quantity=raw_diff * pack_factor,
         drop_rate=drop_rate,
         status=status,
         status_key=status_key,
@@ -676,14 +680,14 @@ def _to_monitor_row(
         amount_impact=amount_impact,
         latest_order_date=row.latest_order_date,
         days_since_last_shipment_workdays=days_since,
-        estimated_eom_qty=estimated_eom,
+        estimated_eom_qty=raw_estimated_eom * pack_factor,
         yoy_growth_rate=yoy_rate,
         budget_achievement_rate=bud_rate,
         cycle_status=cycle_status_key,
         cycle_days=row.cycle_days,
-        budget_quantity=row.budget_quantity,
+        budget_quantity=row.budget_quantity * pack_factor,
         remaining_shipments=remaining_shipments,
-        typical_qty_per_shipment=typical_qty,
+        typical_qty_per_shipment=raw_typical_qty * pack_factor,
         projection_confidence=proj_confidence,
         current_taxed_amount=current_taxed_amount,
         estimated_eom_amount=estimated_eom_amount,
