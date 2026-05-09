@@ -380,6 +380,7 @@ def test_templates_use_shared_head_assets_and_no_static_inline_layout():
         Path("templates/index.html"),
         Path("templates/forecast.html"),
         Path("templates/product_monitor.html"),
+        Path("templates/monthly_review.html"),
         Path("templates/settings.html"),
         Path("templates/items.html"),
     ]
@@ -1329,6 +1330,15 @@ def test_close_month_route_creates_record_and_blocks_reimport(monkeypatch):
         follow_redirects=True,
     )
     assert "已結月" in blocked.get_data(as_text=True)
+
+
+def test_monthly_review_page_loads_without_data():
+    client = _client()
+    response = client.get("/monthly-review")
+    html = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert "月底檢討" in html
+    assert "尚無結月資料" in html
 
 
 def test_close_month_auto_saves_forecast_snapshot(monkeypatch):

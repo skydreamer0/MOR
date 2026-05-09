@@ -11,6 +11,7 @@ from flask import Flask, Response, redirect, render_template, request, send_file
 from flask_caching import Cache
 
 from src.backend.data_validator import validate_health
+from src.backend.monthly_review import build_monthly_review, list_reviewable_months
 from src.backend.data_loader import default_target_from_data, load_sales_detail, normalize_product_code
 from src.backend.exporter import export_forecast
 from src.backend.forecast_config import ForecastConfig
@@ -428,6 +429,27 @@ def create_app(config: dict | None = None) -> Flask:
             data_issues=data_issues,
             year=context.target.year if context else request.args.get("year", ""),
             month=context.target.month if context else request.args.get("month", ""),
+            error_message=error_message,
+        )
+
+    @app.get("/monthly-review")
+    def monthly_review() -> str:
+        reviewable = list_reviewable_months(db)
+        year  = request.args.get("year",  type=int) or (reviewable[0][0] if reviewable else 0)
+        month = request.args.get("month", type=int) or (reviewable[0][1] if reviewable else 0)
+        summary = None
+        error_message = None
+        if year and month:
+            try:
+                summary = build_monthly_review(db, year, month)
+            except (ValueError, Exception) as exc:
+                error_message = str(exc)
+        return render_template(
+            "monthly_review.html",
+            year=year,
+            month=month,
+            summary=summary,
+            reviewable_months=reviewable,
             error_message=error_message,
         )
 
