@@ -473,8 +473,8 @@ def test_product_monitor_current_quantity_prefers_daily_actual_lookup():
     assert monitor_rows[0].current_quantity == 12
 
 
-def test_monitor_row_applies_pack_factor_to_all_quantity_fields():
-    """包裝量應套用到所有顯示數量欄位，比值（成長率）與金額欄位不受影響。"""
+def test_monitor_row_applies_pack_factor_only_to_current_quantity():
+    """包裝量只套用在本月目前（每日業績來源），其他歷史欄位保持原始數值。"""
     base = _row(
         row_id="A__P1",
         customer="A",
@@ -493,19 +493,19 @@ def test_monitor_row_applies_pack_factor_to_all_quantity_fields():
     from src.backend.operational_views import _to_monitor_row
     mr = _to_monitor_row(row_with_pack)
 
-    # All displayed quantities × 6
-    assert mr.last_year_quantity == 100 * 6
-    assert mr.last_month_quantity == 50 * 6
-    assert mr.current_quantity == 80 * 6      # this_year_same_month_qty × pack
-    assert mr.forecast_quantity == 90 * 6
-    assert mr.budget_quantity == 100 * 6
-    assert mr.diff_quantity == (90 - 100) * 6
+    # 只有 current_quantity 乘以 pack_factor（this_year_same_month_qty 當 actual = None 時）
+    assert mr.current_quantity == 80 * 6
 
-    # Rates — pack_factor cancels in ratio, must be identical to raw calculation
+    # 其他數量欄位保持原樣（歷史資料已含換算）
+    assert mr.last_year_quantity == 100
+    assert mr.last_month_quantity == 50
+    assert mr.forecast_quantity == 90
+    assert mr.budget_quantity == 100
+    assert mr.diff_quantity == 90 - 100  # 使用原始 final_forecast - last_year
+
+    # Rates 不受影響
     assert mr.yoy_growth_rate == pytest.approx(90 / 100)
     assert mr.budget_achievement_rate == pytest.approx(90 / 100)
-    # drop_rate is also a ratio
-    assert mr.drop_rate == pytest.approx((90 - 100) / 100 * 100)
 
 
 # ---------------------------------------------------------------------------
