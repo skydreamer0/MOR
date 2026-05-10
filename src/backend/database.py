@@ -1,3 +1,15 @@
+"""MOR Workbench Database
+
+Single SQLite file (mor_workbench.db) with two sales data tables:
+
+- sales_records          歷史業績，來源為月底更新的業績明細 Excel，sync 時整批覆蓋。
+- current_month_records  當月累積業績，來源為使用者隨時上傳的 SHPB 報表，
+                         上傳時只取代當月，月底 sync 後自動清除。
+
+兩表的欄位結構相同；load_sales_detail() 在讀取時合併兩者，
+forecast_engine 永遠只看合併後的結果，不感知資料來源的差異。
+詳見 docs/architecture/current-month-data-integration.md。
+"""
 import sqlite3
 from pathlib import Path
 from typing import Optional
@@ -115,6 +127,29 @@ class MORDatabase:
                     FOREIGN KEY (snapshot_id) REFERENCES forecast_snapshots(id)
                 )
             """)
+
+            # Current Month Records (From SHPB upload — volatile, replaced on each upload)
+            # Mirrors sales_records schema; imported_at tracks when the last SHPB was loaded.
+            # Cleared automatically when sync_excel_to_db covers the same month.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS current_month_records (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    order_date DATE NOT NULL,
+                    customer_name TEXT NOT NULL,
+                    product_code TEXT NOT NULL,
+                    product_name TEXT,
+                    quantity REAL DEFAULT 0,
+                    unit_price REAL DEFAULT 0,
+                    amount REAL DEFAULT 0,
+                    imported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_cmr_date ON current_month_records(order_date)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_cmr_product ON current_month_records(product_code)"
+            )
 
             # Budget Targets (From 2026預算報表)
             conn.execute("""

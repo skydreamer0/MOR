@@ -11,6 +11,15 @@
       <form action="/sync" method="post" class="nav-action-form" onsubmit="return confirm('確定要同步 Excel 資料到工作台？')">
         <button type="submit" class="nav-action-btn">同步資料</button>
       </form>
+      <form action="/upload/current-month" method="post" enctype="multipart/form-data"
+            class="nav-action-form"
+            onsubmit="return !!this.querySelector('input[type=file]').files.length || (alert('請先選擇 SHPB 檔案') && false)">
+        <label class="nav-action-btn nav-action-btn--file">
+          上傳當月業績
+          <input type="file" name="file" accept=".xlsx" style="display:none"
+                 onchange="this.closest('form').submit()">
+        </label>
+      </form>
     </nav>
   </div>
   {% if show_period_toolbar %}
