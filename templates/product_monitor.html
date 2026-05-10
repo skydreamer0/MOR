@@ -17,17 +17,17 @@
       <section class="alert" role="alert">{{ error_message }}</section>
     {% endif %}
 
-    <section class="workbench-panel" aria-labelledby="daily-import-title">
-      <div class="workbench-toolbar">
-        <div class="toolbar-title">
-          <h2 id="daily-import-title">選擇當月累積業績檔</h2>
-          <span>系統將依欄位格式判斷資料，不限制檔名。</span>
-        </div>
-        <form class="toolbar-controls" method="post" action="{{ url_for('import_product_monitor_daily_sales') }}" enctype="multipart/form-data">
-          <input type="file" name="daily_sales_file" accept=".xlsx,.xls" required>
-          <button type="submit">匯入</button>
-        </form>
+    <section id="import-toolbar" class="workbench-toolbar import-toolbar" aria-labelledby="daily-import-title">
+      <div class="toolbar-title">
+        <h2 id="daily-import-title">選擇當月累積業績檔</h2>
+        <span>系統將依欄位格式判斷資料，不限制檔名。</span>
       </div>
+      <form class="toolbar-controls" id="import-form" method="post" action="{{ url_for('import_product_monitor_daily_sales') }}" enctype="multipart/form-data">
+        <input type="file" id="daily-sales-file" name="daily_sales_file" accept=".xlsx,.xls" required class="sr-only">
+        <label for="daily-sales-file" class="btn-secondary file-pick-btn" id="file-pick-label">選擇檔案</label>
+        <span id="file-pick-name" class="file-pick-name muted">未選擇檔案</span>
+        <button type="submit">匯入</button>
+      </form>
     </section>
 
     {% if import_message %}
@@ -39,37 +39,33 @@
 
     {# ── 結月狀態列 ── #}
     {% if close_record %}
-      <section class="workbench-panel close-status-panel close-status-panel--closed">
-        <div class="workbench-toolbar">
-          <div class="toolbar-title">
-            <span class="badge status-ok">已結月</span>
-            <span>{{ close_record.year }}/{{ "%02d"|format(close_record.month) }} &nbsp;·&nbsp;
-              {{ close_record.actual_row_count }} 筆 &nbsp;·&nbsp;
-              數量 {{ "{:,.0f}".format(close_record.actual_quantity_total) }} &nbsp;·&nbsp;
-              金額 {{ "{:,.0f}".format(close_record.actual_amount_total) }}
-            </span>
-          </div>
-          <span class="muted close-status-time">{{ close_record.closed_at[:16] if close_record.closed_at else "" }}</span>
+      <section class="workbench-toolbar close-status-panel close-status-panel--closed">
+        <div class="toolbar-title">
+          <span class="badge status-ok">已結月</span>
+          <span>{{ close_record.year }}/{{ "%02d"|format(close_record.month) }} &nbsp;·&nbsp;
+            {{ close_record.actual_row_count }} 筆 &nbsp;·&nbsp;
+            數量 {{ "{:,.0f}".format(close_record.actual_quantity_total) }} &nbsp;·&nbsp;
+            金額 {{ "{:,.0f}".format(close_record.actual_amount_total) }}
+          </span>
         </div>
+        <span class="muted close-status-time">{{ close_record.closed_at[:16] if close_record.closed_at else "" }}</span>
       </section>
     {% elif latest_batch %}
-      <section class="workbench-panel close-status-panel">
-        <div class="workbench-toolbar">
-          <div class="toolbar-title">
-            <span>{{ year }}/{{ "%02d"|format(month) }} &nbsp;·&nbsp;
-              已匯入 {{ latest_batch.row_count }} 筆 &nbsp;·&nbsp;
-              數量 {{ "{:,.0f}".format(latest_batch.quantity_total) }} &nbsp;·&nbsp;
-              金額 {{ "{:,.0f}".format(latest_batch.taxed_amount_total) }}
-            </span>
-          </div>
-          <form class="toolbar-controls" method="post"
-                action="{{ url_for('close_product_monitor_month') }}"
-                onsubmit="return confirm('確認結月 {{ year }}/{{ '%02d'|format(month) }}？結月後無法再匯入或覆蓋。')">
-            <input type="hidden" name="year" value="{{ year }}">
-            <input type="hidden" name="month" value="{{ month }}">
-            <button type="submit" class="btn-close-month">結月</button>
-          </form>
+      <section class="workbench-toolbar close-status-panel">
+        <div class="toolbar-title">
+          <span>{{ year }}/{{ "%02d"|format(month) }} &nbsp;·&nbsp;
+            已匯入 {{ latest_batch.row_count }} 筆 &nbsp;·&nbsp;
+            數量 {{ "{:,.0f}".format(latest_batch.quantity_total) }} &nbsp;·&nbsp;
+            金額 {{ "{:,.0f}".format(latest_batch.taxed_amount_total) }}
+          </span>
         </div>
+        <form class="toolbar-controls" method="post"
+              action="{{ url_for('close_product_monitor_month') }}"
+              onsubmit="return confirm('確認結月 {{ year }}/{{ '%02d'|format(month) }}？結月後無法再匯入或覆蓋。')">
+          <input type="hidden" name="year" value="{{ year }}">
+          <input type="hidden" name="month" value="{{ month }}">
+          <button type="submit" class="btn-close-month">結月</button>
+        </form>
       </section>
     {% endif %}
 
@@ -301,6 +297,34 @@
 
   <script src="{{ url_for('static', filename='js/monitor-table.js') }}"></script>
   <script>
+    // 選檔後更新顯示的檔名
+    document.getElementById('daily-sales-file').addEventListener('change', function () {
+      const name = this.files[0] ? this.files[0].name : '未選擇檔案';
+      document.getElementById('file-pick-name').textContent = name;
+    });
+
+    // 捲動隱藏匯入列
+    // wheel 偵測向下方向（列數不足時也能正確觸發）
+    // scroll 偵測回到頂部才展開
+    (function () {
+      const toolbar   = document.getElementById('import-toolbar');
+      const tableWrap = document.querySelector('.monitor-table-wrap');
+      if (!toolbar || !tableWrap) return;
+      let collapsed = false;
+      tableWrap.addEventListener('wheel', (e) => {
+        if (e.deltaY > 0 && !collapsed) {
+          collapsed = true;
+          toolbar.classList.add('import-toolbar--collapsed');
+        }
+      }, { passive: true });
+      tableWrap.addEventListener('scroll', () => {
+        if (collapsed && tableWrap.scrollTop < 8) {
+          collapsed = false;
+          toolbar.classList.remove('import-toolbar--collapsed');
+        }
+      }, { passive: true });
+    })();
+
     // 填滿視窗高度（扣掉 sticky header），與預估調整表格一致。
     (function () {
       const header = document.querySelector('header');
