@@ -134,6 +134,62 @@ def test_forecast_page_renders_forecast_review_assets_and_tools():
     assert "data-search=" in html
 
 
+def test_monthly_review_defaults_to_latest_closed_sales_month(monkeypatch):
+    db_base_path = _isolated_db_base()
+    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
+    columns = config.required_columns
+    data = pd.DataFrame(
+        [
+            {
+                columns[0]: 2026,
+                columns[1]: 3,
+                columns[2]: 10,
+                columns[3]: "Hospital A",
+                columns[4]: "P1",
+                columns[5]: "Product One",
+                columns[6]: 4,
+                columns[7]: 100,
+                columns[8]: 420,
+            },
+            {
+                columns[0]: 2026,
+                columns[1]: 4,
+                columns[2]: 10,
+                columns[3]: "Hospital A",
+                columns[4]: "P1",
+                columns[5]: "Product One",
+                columns[6]: 8,
+                columns[7]: 100,
+                columns[8]: 840,
+            },
+            {
+                columns[0]: 2025,
+                columns[1]: 4,
+                columns[2]: 10,
+                columns[3]: "Hospital A",
+                columns[4]: "P1",
+                columns[5]: "Product One",
+                columns[6]: 6,
+                columns[7]: 90,
+                columns[8]: 567,
+            },
+        ]
+    )
+    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config: data)
+    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
+
+    response = client.get("/monthly-review")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert '<a href="/monthly-review" aria-current="page">月底檢討</a>' in html
+    assert 'name="month" type="number" min="1" max="12" value="4"' in html
+    assert "2026/04 月底檢討" in html
+    assert "實績數量" in html
+    assert "840" in html
+
+
 def test_frontend_pages_load_htmx_assets():
     client = _client()
 
@@ -306,6 +362,7 @@ def test_header_navigation_is_consistent_across_frontend_pages(monkeypatch):
     expectations = {
         "/": 'href="/" aria-current="page"',
         "/forecast": 'href="/forecast" aria-current="page"',
+        "/monthly-review": 'href="/monthly-review" aria-current="page"',
         "/monitor/products": 'href="/monitor/products" aria-current="page"',
         "/settings": 'href="/settings" aria-current="page"',
     }

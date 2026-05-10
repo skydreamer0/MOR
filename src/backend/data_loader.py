@@ -135,3 +135,9 @@ def default_target_from_data(data: pd.DataFrame, config: ForecastConfig | None =
     if latest.month == 12:
         return ForecastTarget(latest.year + 1, 1)
     return ForecastTarget(latest.year, latest.month + 1)
+
+
+def latest_closed_month_from_data(data: pd.DataFrame, config: ForecastConfig | None = None) -> ForecastTarget:
+    prepared = prepare_sales_data(data, config)
+    latest = prepared["order_date"].max().date()
+    return ForecastTarget(latest.year, latest.month)

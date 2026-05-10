@@ -95,6 +95,51 @@ class ForecastPageContext:
         return self.summary.rows
 
 
+@dataclass(frozen=True)
+class MonthlyReviewRow:
+    customer: str
+    product_code: str
+    product_name: str
+    actual_quantity: float
+    actual_amount: float
+    forecast_quantity: float
+    forecast_amount: float
+    forecast_gap_quantity: float
+    forecast_gap_amount: float
+    budget_quantity: float
+    budget_amount: float
+    budget_gap_quantity: float
+    budget_gap_amount: float
+    last_year_quantity: float
+    last_year_amount: float
+    year_gap_quantity: float
+    year_gap_amount: float
+
+
+@dataclass(frozen=True)
+class MonthlyReviewTotals:
+    actual_quantity: float
+    actual_amount: float
+    forecast_quantity: float
+    forecast_amount: float
+    forecast_gap_quantity: float
+    forecast_gap_amount: float
+    budget_quantity: float
+    budget_amount: float
+    budget_gap_quantity: float
+    budget_gap_amount: float
+    last_year_quantity: float
+    last_year_amount: float
+    year_gap_quantity: float
+    year_gap_amount: float
+
+
+@dataclass(frozen=True)
+class MonthlyReviewReport:
+    totals: MonthlyReviewTotals
+    rows: list[MonthlyReviewRow]
+
+
 def build_forecast_page_context(
     data_base_path: Path,
     forecast_config: ForecastConfig,
@@ -148,6 +193,35 @@ def build_forecast_page_context(
         monitor_rows=build_product_monitor_rows(summary.rows),
         health=build_data_health_summary(data, summary, budget_months),
         items=build_items_from_sales_data(data, db),
+    )
+
+
+def build_monthly_review_report(context: ForecastPageContext) -> MonthlyReviewReport:
+    month_index = context.target.month - 1
+    rows = [
+        _to_monthly_review_row(row, month_index)
+        for row in context.summary.rows
+        if not row.excluded
+    ]
+    rows.sort(key=lambda row: (abs(row.forecast_gap_amount), abs(row.budget_gap_amount)), reverse=True)
+    return MonthlyReviewReport(
+        totals=MonthlyReviewTotals(
+            actual_quantity=sum(row.actual_quantity for row in rows),
+            actual_amount=sum(row.actual_amount for row in rows),
+            forecast_quantity=sum(row.forecast_quantity for row in rows),
+            forecast_amount=sum(row.forecast_amount for row in rows),
+            forecast_gap_quantity=sum(row.forecast_gap_quantity for row in rows),
+            forecast_gap_amount=sum(row.forecast_gap_amount for row in rows),
+            budget_quantity=sum(row.budget_quantity for row in rows),
+            budget_amount=sum(row.budget_amount for row in rows),
+            budget_gap_quantity=sum(row.budget_gap_quantity for row in rows),
+            budget_gap_amount=sum(row.budget_gap_amount for row in rows),
+            last_year_quantity=sum(row.last_year_quantity for row in rows),
+            last_year_amount=sum(row.last_year_amount for row in rows),
+            year_gap_quantity=sum(row.year_gap_quantity for row in rows),
+            year_gap_amount=sum(row.year_gap_amount for row in rows),
+        ),
+        rows=rows,
     )
 
 
@@ -237,6 +311,35 @@ def _latest_price_quantity(row: ForecastRow) -> float:
     if row.budget_quantity > 0 and row.base_budget_quantity > 0:
         return row.budget_quantity / row.base_budget_quantity
     return 1.0
+
+
+def _to_monthly_review_row(row: ForecastRow, month_index: int) -> MonthlyReviewRow:
+    actual_quantity = row.this_year_same_month_qty
+    actual_amount = row.ty_monthly_amount[month_index] if 0 <= month_index < len(row.ty_monthly_amount) else 0.0
+    forecast_quantity = row.final_forecast
+    forecast_amount = _dashboard_amount(forecast_quantity, row)
+    budget_amount = row.budget_amount if row.budget_amount > 0 else _dashboard_amount(row.budget_quantity, row)
+    last_year_quantity = row.last_year_same_month_qty
+    last_year_amount = row.ly_monthly_amount[month_index] if 0 <= month_index < len(row.ly_monthly_amount) else 0.0
+    return MonthlyReviewRow(
+        customer=row.customer,
+        product_code=row.product_code,
+        product_name=row.product_name,
+        actual_quantity=actual_quantity,
+        actual_amount=actual_amount,
+        forecast_quantity=forecast_quantity,
+        forecast_amount=forecast_amount,
+        forecast_gap_quantity=actual_quantity - forecast_quantity,
+        forecast_gap_amount=actual_amount - forecast_amount,
+        budget_quantity=row.budget_quantity,
+        budget_amount=budget_amount,
+        budget_gap_quantity=actual_quantity - row.budget_quantity,
+        budget_gap_amount=actual_amount - budget_amount,
+        last_year_quantity=last_year_quantity,
+        last_year_amount=last_year_amount,
+        year_gap_quantity=actual_quantity - last_year_quantity,
+        year_gap_amount=actual_amount - last_year_amount,
+    )
 
 
 def build_product_monitor_rows(rows: Iterable[ForecastRow]) -> list[ProductMonitorRow]:

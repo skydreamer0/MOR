@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>月底檢討 - MOR</title>
+  {% include "_head_assets.html" %}
+</head>
+<body>
+  {% set page_title = "月底檢討" %}
+  {% set active_page = "monthly_review" %}
+  {% set show_period_toolbar = true %}
+  {% include "_header.html" %}
+
+  <main class="monthly-review-main">
+    {% if error_message %}
+      <section class="alert" role="alert">{{ error_message }}</section>
+    {% endif %}
+
+    {% if report %}
+      <section class="summary" aria-label="月底檢討總覽">
+        <div class="metric">
+          <span>檢討月份</span>
+          <strong>{{ year }}/{{ "%02d"|format(month|int) }}</strong>
+        </div>
+        <div class="metric">
+          <span>實績數量</span>
+          <strong>{{ "{:,.0f}".format(report.totals.actual_quantity) }}</strong>
+        </div>
+        <div class="metric">
+          <span>實績金額</span>
+          <strong>{{ "{:,.0f}".format(report.totals.actual_amount) }}</strong>
+        </div>
+        <div class="metric">
+          <span>vs 最終預估</span>
+          <strong class="{% if report.totals.forecast_gap_amount < 0 %}falling{% elif report.totals.forecast_gap_amount > 0 %}rising{% endif %}">
+            {{ "{:+,.0f}".format(report.totals.forecast_gap_amount) }}
+          </strong>
+        </div>
+        <div class="metric">
+          <span>vs 預算</span>
+          <strong class="{% if report.totals.budget_gap_amount < 0 %}falling{% elif report.totals.budget_gap_amount > 0 %}rising{% endif %}">
+            {{ "{:+,.0f}".format(report.totals.budget_gap_amount) }}
+          </strong>
+        </div>
+      </section>
+
+      <section class="monthly-review-workspace workbench-panel" aria-labelledby="monthly-review-title">
+        <div class="workbench-toolbar" aria-label="月底檢討工具">
+          <div class="toolbar-title">
+            <h2 id="monthly-review-title">{{ year }}/{{ "%02d"|format(month|int) }} 月底檢討</h2>
+            <span><strong>{{ report.rows|length }}</strong> 筆</span>
+          </div>
+          <div class="toolbar-actions">
+            <a class="btn-link" href="{{ url_for('forecast', year=year, month=month) }}">查看當月預估</a>
+          </div>
+        </div>
+
+        {% if report.rows %}
+          <div class="table-wrap monthly-review-table-wrap workbench-table-shell">
+            <table class="monthly-review-table">
+              <thead>
+                <tr>
+                  <th>客戶</th>
+                  <th>品項</th>
+                  <th class="num">實績數量</th>
+                  <th class="num">實績金額</th>
+                  <th class="num">最終預估</th>
+                  <th class="num">預估差異</th>
+                  <th class="num">預算</th>
+                  <th class="num">預算差異</th>
+                  <th class="num">去年同期</th>
+                  <th class="num">同期差異</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in report.rows %}
+                <tr>
+                  <td>{{ row.customer }}</td>
+                  <td class="cell-product" title="{{ row.product_name }}">{{ row.product_name | product_display_name }}</td>
+                  <td class="num">{{ "{:,.0f}".format(row.actual_quantity) }}</td>
+                  <td class="num">{{ "{:,.0f}".format(row.actual_amount) }}</td>
+                  <td class="num">{{ "{:,.0f}".format(row.forecast_quantity) }}</td>
+                  <td class="num">
+                    <span class="gap-value {% if row.forecast_gap_quantity < 0 %}falling{% elif row.forecast_gap_quantity > 0 %}rising{% endif %}">
+                      {{ "{:+,.0f}".format(row.forecast_gap_quantity) }}
+                    </span>
+                  </td>
+                  <td class="num">{{ "{:,.0f}".format(row.budget_quantity) }}</td>
+                  <td class="num">
+                    <span class="gap-value {% if row.budget_gap_quantity < 0 %}falling{% elif row.budget_gap_quantity > 0 %}rising{% endif %}">
+                      {{ "{:+,.0f}".format(row.budget_gap_quantity) }}
+                    </span>
+                  </td>
+                  <td class="num">{{ "{:,.0f}".format(row.last_year_quantity) }}</td>
+                  <td class="num">
+                    <span class="gap-value {% if row.year_gap_quantity < 0 %}falling{% elif row.year_gap_quantity > 0 %}rising{% endif %}">
+                      {{ "{:+,.0f}".format(row.year_gap_quantity) }}
+                    </span>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <th colspan="2">合計</th>
+                  <td class="num">{{ "{:,.0f}".format(report.totals.actual_quantity) }}</td>
+                  <td class="num">{{ "{:,.0f}".format(report.totals.actual_amount) }}</td>
+                  <td class="num">{{ "{:,.0f}".format(report.totals.forecast_quantity) }}</td>
+                  <td class="num">{{ "{:+,.0f}".format(report.totals.forecast_gap_quantity) }}</td>
+                  <td class="num">{{ "{:,.0f}".format(report.totals.budget_quantity) }}</td>
+                  <td class="num">{{ "{:+,.0f}".format(report.totals.budget_gap_quantity) }}</td>
+                  <td class="num">{{ "{:,.0f}".format(report.totals.last_year_quantity) }}</td>
+                  <td class="num">{{ "{:+,.0f}".format(report.totals.year_gap_quantity) }}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        {% else %}
+          <section class="empty-state">這個月份沒有可檢討的業績資料。</section>
+        {% endif %}
+      </section>
+    {% endif %}
+  </main>
+</body>
+</html>

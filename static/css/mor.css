@@ -283,7 +283,8 @@ main {
 /* ── Forecast page fills the full viewport height ───────────── */
 .forecast-main,
 .monitor-main,
-.settings-main {
+.settings-main,
+.monthly-review-main {
   display: flex;
   flex-direction: column;
   padding-bottom: var(--sp-3);
@@ -304,7 +305,8 @@ main {
 }
 
 .monitor-main,
-.settings-main {
+.settings-main,
+.monthly-review-main {
   min-height: 0;
 }
 
@@ -533,6 +535,10 @@ table {
   min-width: 980px;
 }
 
+.monthly-review-table {
+  min-width: 1080px;
+}
+
 .forecast-table__row--collapsed {
   display: none;
 }
@@ -606,6 +612,17 @@ tr[data-row].row-detail-active td {
 /* Last row bottom border removal within rounded container */
 tbody tr:last-child td {
   border-bottom: none;
+}
+
+.monthly-review-table tfoot th,
+.monthly-review-table tfoot td {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  border-top: 1px solid var(--line);
+  border-bottom: none;
+  background: var(--panel);
+  font-weight: 700;
 }
 
 

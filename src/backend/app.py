@@ -12,7 +12,7 @@ from flask import Flask, Response, redirect, render_template, request, send_file
 from flask_caching import Cache
 
 from src.backend.data_validator import validate_health
-from src.backend.data_loader import default_target_from_data, load_sales_detail, normalize_product_code
+from src.backend.data_loader import default_target_from_data, latest_closed_month_from_data, load_sales_detail, normalize_product_code
 from src.backend.exporter import export_forecast
 from src.backend.forecast_config import ForecastConfig
 from src.backend.forecast_engine import apply_user_adjustments
@@ -21,6 +21,7 @@ from src.backend.operational_views import (
     aggregate_to_analytics,
     build_customer_risk_ranking,
     build_forecast_page_context,
+    build_monthly_review_report,
     forecast_amount_total,
     last_year_amount_total,
     recalculate_forecast_amounts,
@@ -93,6 +94,12 @@ def create_app(config: dict | None = None) -> Flask:
         # 傳入 db 讓 load_sales_detail 合併 current_month_records
         data = load_sales_detail(data_base_path, forecast_config, db)
         default_target = default_target_from_data(data, forecast_config)
+        target = parse_target_period(request.args, default_target)
+        return _build_cached_context(target.year, target.month)
+
+    def _load_monthly_review_context_from_request():
+        data = load_sales_detail(data_base_path, forecast_config)
+        default_target = latest_closed_month_from_data(data, forecast_config)
         target = parse_target_period(request.args, default_target)
         return _build_cached_context(target.year, target.month)
 
@@ -241,6 +248,26 @@ def create_app(config: dict | None = None) -> Flask:
             snapshots=list_snapshots(db, summary.year, summary.month) if summary else [],
             customers=customers,
             risk_levels=_risk_levels(rendered_rows),
+        )
+
+    @app.get("/monthly-review")
+    def monthly_review() -> str:
+        try:
+            context = _load_monthly_review_context_from_request()
+            report = build_monthly_review_report(context)
+            error_message = None
+        except (FileNotFoundError, ValueError, FormValidationError) as exc:
+            context = None
+            report = None
+            error_message = f"無法產生月底檢討：{exc}"
+
+        target = context.target if context else None
+        return render_template(
+            "monthly_review.html",
+            year=target.year if target else request.args.get("year", ""),
+            month=target.month if target else request.args.get("month", ""),
+            report=report,
+            error_message=error_message,
         )
 
     @app.patch("/forecast/row/<path:row_id>")
