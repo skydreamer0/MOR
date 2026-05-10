@@ -7,6 +7,7 @@ from dataclasses import replace
 from datetime import date
 from pathlib import Path
 
+import pandas as pd
 from flask import Flask, Response, redirect, render_template, request, send_file, url_for
 from flask_caching import Cache
 
@@ -72,7 +73,16 @@ def create_app(config: dict | None = None) -> Flask:
             mtime = int(os.path.getmtime(detail_path))
         except FileNotFoundError:
             mtime = 0
-        return f"forecast-context:{mtime}:{year}:{month}"
+        # 當月 SHPB 上傳後 current_month_records 會變動，需納入 cache key
+        try:
+            with db.get_connection() as conn:
+                row = conn.execute(
+                    "SELECT MAX(imported_at) FROM current_month_records"
+                ).fetchone()
+                cmr_stamp = str(row[0] or "")
+        except Exception:
+            cmr_stamp = ""
+        return f"forecast-context:{mtime}:{cmr_stamp}:{year}:{month}"
 
     def _build_cached_context(year: int, month: int):
         key = _make_cache_key(year, month)
@@ -88,7 +98,8 @@ def create_app(config: dict | None = None) -> Flask:
         return context
 
     def _load_context_from_request():
-        data = load_sales_detail(data_base_path, forecast_config)
+        # 傳入 db 讓 load_sales_detail 合併 current_month_records
+        data = load_sales_detail(data_base_path, forecast_config, db)
         default_target = default_target_from_data(data, forecast_config)
         target = parse_target_period(request.args, default_target)
         return _build_cached_context(target.year, target.month)
@@ -500,9 +511,29 @@ def create_app(config: dict | None = None) -> Flask:
     def sync_data() -> str:
         try:
             sync_excel_to_db(db, data_base_path)
+            cache.clear()
             return "資料同步完成！請重新載入工作台。"
         except Exception as exc:
             return f"同步失敗：{exc}"
+
+    @app.post("/upload/current-month")
+    def upload_current_month() -> str:
+        """接收 SHPB 出貨報表，寫入 current_month_records。
+
+        上傳後清除 cache，讓下次頁面請求重新合併當月資料。
+        支援重複上傳：每次只取代 SHPB 涵蓋的年月，歷史資料不受影響。
+        """
+        from src.backend.etl import import_current_month
+        file = request.files.get("file")
+        if not file or not file.filename:
+            return "請選擇檔案", 400
+        try:
+            df = pd.read_excel(file)
+            count = import_current_month(db, df)
+            cache.clear()
+            return f"已匯入 {count} 筆當月業績資料。"
+        except Exception as exc:
+            return f"匯入失敗：{exc}", 400
 
     @app.post("/adjustments/save")
     def save_adjustment() -> Response:
