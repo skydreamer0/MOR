@@ -1442,3 +1442,82 @@ def test_product_monitor_shows_close_button_after_import(monkeypatch):
 
     assert 'action="/monitor/products/close-month"' in html
     assert "結月" in html
+
+
+# ---------------------------------------------------------------------------
+# Route guard: normal page/export routes must NOT read Excel (Phase 3)
+# ---------------------------------------------------------------------------
+
+def _seed_db_sales(db_base: Path, rows: list[dict]) -> None:
+    """Seed sales_records with minimal rows for guard tests."""
+    from src.backend.database import get_db
+    db = get_db(db_base)
+    with db.get_connection() as conn:
+        for row in rows:
+            conn.execute(
+                "INSERT INTO sales_records "
+                "(order_date, customer_name, product_code, product_name, quantity, unit_price, amount) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (row["order_date"], row["customer_name"], row["product_code"],
+                 row.get("product_name", ""), row["quantity"],
+                 row.get("unit_price", 0.0), row.get("amount", 0.0)),
+            )
+        conn.commit()
+
+
+def _minimal_sales_rows() -> list[dict]:
+    return [
+        {"order_date": f"2026-{m:02d}-{d:02d}", "customer_name": "A客戶",
+         "product_code": "P1", "product_name": "商品A",
+         "quantity": 20, "unit_price": 100.0, "amount": 2000.0}
+        for m, d in [(3, 10), (3, 25), (4, 12), (4, 28)]
+    ]
+
+
+def test_normal_get_routes_do_not_call_pandas_read_excel(tmp_path, monkeypatch):
+    """After DB-first migration, GET routes must not call pd.read_excel even if Excel exists."""
+    # Create a dummy Excel file so file_path.exists() would be True
+    config = ForecastConfig()
+    dummy_excel = tmp_path / config.detail_file
+    pd.DataFrame(columns=list(config.required_columns)).to_excel(dummy_excel, index=False, sheet_name=config.detail_sheet)
+
+    excel_reads: list = []
+
+    def guard_read_excel(*args, **kwargs):
+        excel_reads.append(str(args[0]) if args else str(kwargs))
+        raise AssertionError(f"pd.read_excel called during page request: {args[0] if args else kwargs}")
+
+    monkeypatch.setattr(pd, "read_excel", guard_read_excel)
+
+    db_base = _isolated_db_base()
+    _seed_db_sales(db_base, _minimal_sales_rows())
+    client = _client({"DB_BASE_PATH": db_base, "DATA_BASE_PATH": str(tmp_path)})
+
+    routes = ["/", "/forecast", "/monitor/products", "/settings"]
+    for route in routes:
+        resp = client.get(route)
+        assert resp.status_code == 200, f"{route} returned {resp.status_code}"
+        assert not excel_reads, f"pd.read_excel called when serving {route}: {excel_reads}"
+
+
+def test_export_route_does_not_call_pandas_read_excel(tmp_path, monkeypatch):
+    """POST /export must not read Excel — it should derive the target from the DB."""
+    config = ForecastConfig()
+    dummy_excel = tmp_path / config.detail_file
+    pd.DataFrame(columns=list(config.required_columns)).to_excel(dummy_excel, index=False, sheet_name=config.detail_sheet)
+
+    excel_reads: list = []
+
+    def guard_read_excel(*args, **kwargs):
+        excel_reads.append(str(args[0]) if args else str(kwargs))
+        raise AssertionError(f"pd.read_excel called during export: {args[0] if args else kwargs}")
+
+    monkeypatch.setattr(pd, "read_excel", guard_read_excel)
+
+    db_base = _isolated_db_base()
+    _seed_db_sales(db_base, _minimal_sales_rows())
+    client = _client({"DB_BASE_PATH": db_base, "DATA_BASE_PATH": str(tmp_path)})
+
+    resp = client.post("/export", data={"year": "2026", "month": "5"})
+    assert resp.status_code == 200
+    assert not excel_reads, f"pd.read_excel called during export: {excel_reads}"
