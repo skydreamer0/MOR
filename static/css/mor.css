@@ -2506,6 +2506,48 @@ details[open] .discontinued-toggle {
 }
 .btn-close-month:hover { opacity: .85; }
 
+/* ── Import toolbar — 捲動收合 ── */
+.import-toolbar {
+  overflow: hidden;
+  max-height: 80px;
+  opacity: 1;
+  /* margin-bottom 繼承自 workbench-toolbar 的 var(--sp-3) */
+  transition: max-height 0.25s var(--ease-out),
+              opacity    0.2s  ease,
+              margin     0.25s var(--ease-out),
+              padding    0.25s var(--ease-out);
+}
+
+.import-toolbar--collapsed {
+  max-height: 0;
+  opacity: 0;
+  margin-bottom: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+/* ── File picker — 隱藏原生 input，用 label 模擬按鈕 ── */
+.file-pick-btn {
+  display: inline-flex;
+  align-items: center;
+  height: var(--control-h);
+  padding: 0 var(--sp-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.file-pick-name {
+  font-size: var(--text-sm);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ── Phase 7: Monthly Review page ── */
 .review-main {
   padding: var(--sp-4) var(--sp-5);
