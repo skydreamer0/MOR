@@ -473,8 +473,8 @@ def test_product_monitor_current_quantity_prefers_daily_actual_lookup():
     assert monitor_rows[0].current_quantity == 12
 
 
-def test_monitor_row_applies_pack_factor_only_to_current_quantity():
-    """包裝量只套用在本月目前（每日業績來源），其他歷史欄位保持原始數值。"""
+def test_monitor_row_pack_factor_only_applies_when_actual_is_present():
+    """包裝量只在有每日業績匯入時套用；無匯入資料時歷史數量直接使用（已是展示單位）。"""
     base = _row(
         row_id="A__P1",
         customer="A",
@@ -491,21 +491,21 @@ def test_monitor_row_applies_pack_factor_only_to_current_quantity():
     row_with_pack = dreplace(base, price_quantity=6.0)
 
     from src.backend.operational_views import _to_monitor_row
-    mr = _to_monitor_row(row_with_pack)
+    from src.backend.daily_sales_importer import DailyActualAggregate
 
-    # 只有 current_quantity 乘以 pack_factor（this_year_same_month_qty 當 actual = None 時）
-    assert mr.current_quantity == 80 * 6
+    # 沒有每日業績資料時：this_year_same_month_qty 直接用（不乘 pack_factor）
+    mr_no_actual = _to_monitor_row(row_with_pack)
+    assert mr_no_actual.current_quantity == 80  # 不乘
 
-    # 其他數量欄位保持原樣（歷史資料已含換算）
-    assert mr.last_year_quantity == 100
-    assert mr.last_month_quantity == 50
-    assert mr.forecast_quantity == 90
-    assert mr.budget_quantity == 100
-    assert mr.diff_quantity == 90 - 100  # 使用原始 final_forecast - last_year
+    # 有每日業績資料時：actual_quantity × pack_factor
+    actual = DailyActualAggregate(actual_quantity=10, taxed_amount=1000, latest_sales_date=None)
+    mr_with_actual = _to_monitor_row(row_with_pack, actual=actual)
+    assert mr_with_actual.current_quantity == 10 * 6  # 乘 pack_factor
 
-    # Rates 不受影響
-    assert mr.yoy_growth_rate == pytest.approx(90 / 100)
-    assert mr.budget_achievement_rate == pytest.approx(90 / 100)
+    # 其他欄位不受影響
+    assert mr_with_actual.last_year_quantity == 100
+    assert mr_with_actual.forecast_quantity == 90
+    assert mr_with_actual.yoy_growth_rate == pytest.approx(90 / 100)
 
 
 # ---------------------------------------------------------------------------

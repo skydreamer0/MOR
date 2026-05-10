@@ -601,9 +601,10 @@ def _to_monitor_row(
 ) -> ProductMonitorRow:
     today = today or date.today()
 
-    # 包裝量換算：只套用在每日業績匯入的本月目前數量，歷史資料已含換算不需再乘
+    # 每日業績匯入（actual）是最小包裝原始單位，需 × pack_factor 對齊歷史展示單位
+    # 歷史資料（this_year_same_month_qty）已是展示單位，不需再乘
     pack_factor = row.price_quantity if row.price_quantity > 0 else 1.0
-    raw_current = actual.actual_quantity if actual is not None else row.this_year_same_month_qty
+    raw_current = actual.actual_quantity if actual is not None else None
 
     # Workday distance — prefer current-month daily-actual date (Phase 4 fix)
     days_since: int | None = None
@@ -647,9 +648,10 @@ def _to_monitor_row(
 
     # Phase 5: amount fields — use raw_current for implied price so projected amount stays correct
     current_taxed_amount = float(actual.taxed_amount) if actual is not None else 0.0
-    # implied_unit_price 使用 raw_current（未乘包裝量）確保金額推估正確
-    if raw_current > 0 and current_taxed_amount > 0:
-        implied_unit_price = current_taxed_amount / raw_current
+    # display_current：本月目前展示數量（與歷史資料同單位，供金額推估用）
+    display_current = raw_current * pack_factor if raw_current is not None else row.this_year_same_month_qty
+    if display_current > 0 and current_taxed_amount > 0:
+        implied_unit_price = current_taxed_amount / display_current
     else:
         implied_unit_price = row.latest_price
     estimated_eom_amount = current_taxed_amount + projected_remaining_qty * implied_unit_price
@@ -666,8 +668,7 @@ def _to_monitor_row(
         product_name=row.product_name,
         last_year_quantity=row.last_year_same_month_qty,
         last_month_quantity=row.last_month_actual,
-        # 只有本月目前（來自每日業績匯入）需要乘上包裝量
-        current_quantity=raw_current * pack_factor,
+        current_quantity=display_current,
         forecast_quantity=row.final_forecast,
         diff_quantity=diff_quantity,
         drop_rate=drop_rate,

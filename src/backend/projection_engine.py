@@ -106,7 +106,10 @@ def batch_project_eom(
     results: dict[str, ProjectionResult] = {}
     for row in active:
         actual = daily_actuals.get(row.row_id)
-        current_qty = actual.actual_quantity if actual is not None else row.this_year_same_month_qty
+        # actual_quantity 是最小包裝原始單位；× pack_factor 對齊歷史展示單位
+        # this_year_same_month_qty 已是展示單位，不需再轉換
+        _pack = row.price_quantity if row.price_quantity > 0 else 1.0
+        current_qty = (actual.actual_quantity * _pack) if actual is not None else row.this_year_same_month_qty
 
         # Most recent shipment date: prefer current-month daily actual
         if actual is not None and actual.latest_sales_date is not None:
