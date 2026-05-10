@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 from datetime import date
+import re
 
 from src.backend.forecast_models import ForecastRow, ForecastSummary
+
+_ELI_DOSE_PATTERN = re.compile(r"^(ELI|ＥＬＩ)\s*(\d+(?:\.\d+)?)")
 
 
 def column_schema() -> list[dict]:
@@ -41,6 +44,14 @@ def serialize_summary(summary: ForecastSummary) -> dict:
         "columns": column_schema(),
         "rows": [_serialize_row(row) for row in summary.rows],
     }
+
+
+def product_display_name(product_name: object) -> str:
+    text = str(product_name or "")
+    match = _ELI_DOSE_PATTERN.match(text)
+    if match:
+        return f"{match.group(1)} {match.group(2)}"
+    return text[:3]
 
 
 def _column(key: str, label: str, column_type: str, align: str = "left", editable: bool = False) -> dict:
@@ -82,6 +93,10 @@ def _serialize_row(row: ForecastRow) -> dict:
         "estimated_amount": row.estimated_amount,
         "forecast_basis": row.forecast_basis,
         "excluded": row.excluded,
+        "ly_monthly": row.ly_monthly,
+        "ty_monthly": row.ty_monthly,
+        "budget_monthly": row.budget_monthly,
+        "ly_price": row.ly_price,
     }
 
 

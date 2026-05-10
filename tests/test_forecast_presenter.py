@@ -2,7 +2,7 @@ from dataclasses import replace
 from datetime import date
 
 from src.backend.forecast_models import ForecastRow, ForecastSummary
-from src.backend.web.forecast_presenter import column_schema, serialize_summary
+from src.backend.web.forecast_presenter import column_schema, product_display_name, serialize_summary
 
 
 def sample_summary() -> ForecastSummary:
@@ -71,3 +71,10 @@ def test_column_schema_describes_review_grid_fields():
     assert manual_adjustment["label"] == "人工調整"
     assert manual_adjustment["editable"] is True
     assert amount["align"] == "right"
+
+
+def test_product_display_name_keeps_three_chars_except_eli_dose():
+    assert product_display_name("商品ABC") == "商品A"
+    assert product_display_name("ELI 22.5癌立佳") == "ELI 22.5"
+    assert product_display_name("ELI7.5癌立佳") == "ELI 7.5"
+    assert product_display_name("ＥＬＩ 7.5癌立佳") == "ＥＬＩ 7.5"

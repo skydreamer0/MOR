@@ -52,9 +52,16 @@ def build_forecast(
         last_month_year = target.year if target.month > 1 else target.year - 1
         last_month_val = target.month - 1 if target.month > 1 else 12
         lm_qty = _month_quantity(group, last_month_year, last_month_val)
-        
+
         avg_3m_qty = _recent_months_average(group, target.year, target.month, 3)
         current_progress = _month_quantity(group, target.year, target.month)
+
+        # Full-year monthly breakdown for sidebar detail table and analytics
+        ly_monthly = [_month_quantity(group, target.year - 1, m) for m in range(1, 13)]
+        ty_monthly = [_month_quantity(group, target.year, m) for m in range(1, 13)]
+        ly_monthly_amount = [_month_amount(group, target.year - 1, m) for m in range(1, 13)]
+        ty_monthly_amount = [_month_amount(group, target.year, m) for m in range(1, 13)]
+        ly_price = _month_price(group, target.year - 1, target.month)
 
         # Baseline: recent history only. LySM is retained for risk comparison.
         references = [v for v in [lm_qty, avg_3m_qty] if v > 0]
@@ -81,6 +88,11 @@ def build_forecast(
                 auto_in_month=auto_in_month,
                 last_year_same_month_qty=lysm_qty,
                 this_year_same_month_qty=current_progress,
+                ly_monthly=ly_monthly,
+                ty_monthly=ty_monthly,
+                ly_monthly_amount=ly_monthly_amount,
+                ty_monthly_amount=ty_monthly_amount,
+                ly_price=ly_price,
                 latest_price=latest_price,
                 system_forecast=forecast_quantity,
                 manual_adjustment=None,
@@ -140,6 +152,18 @@ def _average_cycle_days(order_dates: list[pd.Timestamp], max_cycle_interval_days
 def _month_quantity(group: pd.DataFrame, year: int, month: int) -> float:
     matched = group[(group["年"] == year) & (group["月"] == month)]
     return float(matched["銷+贈S量"].sum())
+
+
+def _month_amount(group: pd.DataFrame, year: int, month: int) -> float:
+    matched = group[(group["年"] == year) & (group["月"] == month)]
+    return float(matched["含稅總額(淨)"].sum())
+
+
+def _month_price(group: pd.DataFrame, year: int, month: int) -> float:
+    matched = group[(group["年"] == year) & (group["月"] == month)]
+    if matched.empty:
+        return 0.0
+    return float(matched.iloc[-1]["單價NT(淨)"] or 0)
 
 
 def _latest_nonempty(values: pd.Series) -> str:

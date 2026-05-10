@@ -8,7 +8,7 @@
 </section>
 {% endfor %}
 
-<section class="hero__container" aria-label="業績總覽">
+<section class="hero__container workbench-panel" aria-label="業績總覽">
   <div class="hero__header">
     <div class="hero__titles">
       <h2>業績總覽</h2>
@@ -62,7 +62,8 @@
       </div>
       <div class="sub-metric">
         <span class="sub-metric-label">金額 GAP</span>
-        <strong class="sub-metric-value {% if metrics.amount_gap < 0 %}danger-text{% else %}success-text{% endif %}">
+        {# 台灣慣例：漲(>0)=紅=danger-text、跌(<0)=綠=success-text #}
+        <strong class="sub-metric-value {% if metrics.amount_gap > 0 %}danger-text{% else %}success-text{% endif %}">
           {{ "{:+,.0f}".format(metrics.amount_gap) }}
         </strong>
         <small class="sub-metric-note">預估與預算差異</small>
@@ -78,7 +79,7 @@
 
 {% if status_dist %}
 <section class="risk-dashboard" aria-label="跳單狀態分布">
-  <div class="risk-panel__summary panel">
+  <div class="risk-panel__summary panel workbench-panel">
     <h3>跳單狀態</h3>
     <div class="status-dist">
       <div class="dist-item">
@@ -87,9 +88,9 @@
         <strong class="dist-count danger-text">{{ status_dist.high }}</strong>
       </div>
       <div class="dist-item">
-        <span class="dist-dot dist-dot-slight"></span>
-        <span class="dist-label">輕微下滑</span>
-        <strong class="dist-count" style="color:var(--accent-2)">{{ status_dist.slight }}</strong>
+        <span class="dist-dot dist-dot-caution"></span>
+        <span class="dist-label">注意</span>
+        <strong class="dist-count dist-count--caution">{{ status_dist.caution }}</strong>
       </div>
       <div class="dist-item">
         <span class="dist-dot dist-dot-ok"></span>
@@ -104,11 +105,11 @@
     </div>
     <div class="dist-total">
       <span>品項總數</span>
-      <strong>{{ status_dist.high + status_dist.slight + status_dist.ok + status_dist.no_history }}</strong>
+      <strong>{{ status_dist.high + status_dist.caution + status_dist.ok + status_dist.no_history }}</strong>
     </div>
   </div>
 
-  <div class="risk-panel__customer-rank panel">
+  <div class="risk-panel__customer-rank panel workbench-panel">
     <h3>客戶風險排行</h3>
     {% if customer_ranking %}
     {% set max_gap = (customer_ranking[0].gap_amount | abs) if customer_ranking[0].gap_amount != 0 else 1 %}
@@ -127,21 +128,235 @@
       {% endfor %}
     </div>
     {% else %}
-    <p class="muted" style="margin:var(--sp-4) 0 0;">目前沒有需要追蹤的客戶風險。</p>
+    <p class="muted empty-note">目前沒有需要追蹤的客戶風險。</p>
     {% endif %}
   </div>
 </section>
 {% endif %}
 
-<section class="panel" aria-label="高風險產品追蹤">
+<!-- ── 全公司年度趨勢 ─────────────────────────────────────── -->
+{% if analytics_total %}
+<section class="panel workbench-panel dash-analytics-total" aria-label="全公司年度趨勢">
+  <div class="section-header">
+    <h3>全公司年度趨勢</h3>
+    <div class="detail-chart-legend">
+      <span class="legend-ly">去年</span>
+      <span class="legend-budget">預算</span>
+      <span class="legend-ty">今年</span>
+      <span class="legend-ma3">MA3</span>
+      <span class="legend-ma6">MA6</span>
+    </div>
+  </div>
+  <canvas id="dash-total-chart" class="dash-total-canvas"></canvas>
+  <div id="dash-total-ytd"></div>
+</section>
+{% endif %}
+
+<!-- ── 客戶業績分析 ──────────────────────────────────────── -->
+{% if analytics_customers %}
+<section class="panel workbench-panel" aria-label="客戶業績分析">
+  <div class="section-header">
+    <h3>客戶業績分析</h3>
+    <span class="section-sub" id="dash-customer-period">YTD 1–{{ month }}月 實績，數量</span>
+  </div>
+  <div class="table-wrap compact-table workbench-table-shell">
+    <table class="dash-analytics-table" id="dash-customer-table">
+      <thead>
+        <tr>
+          <th>客戶</th>
+          <th class="num">去年累計金額</th>
+          <th class="num">預算累計金額</th>
+          <th class="num">今年累計金額</th>
+          <th class="num">預算達成</th>
+          <th class="num">YoY</th>
+          <th class="num">趨勢</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="dash-customer-tbody"></tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+<!-- ── 品項業績分析 ──────────────────────────────────────── -->
+{% if analytics_products %}
+<section class="panel workbench-panel" aria-label="品項業績分析">
+  <div class="section-header">
+    <h3>品項業績分析</h3>
+    <span class="section-sub" id="dash-product-period">YTD 1–{{ month }}月 實績，金額</span>
+  </div>
+  <div class="table-wrap compact-table workbench-table-shell">
+    <table class="dash-analytics-table" id="dash-product-table">
+      <thead>
+        <tr>
+          <th>品項</th>
+          <th class="num">去年累計金額</th>
+          <th class="num">今年累計金額</th>
+          <th class="num">預算達成</th>
+          <th class="num">YoY金額</th>
+          <th class="num">量YoY</th>
+          <th class="num">趨勢</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="dash-product-tbody"></tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+<!-- embed analytics JSON for JS rendering -->
+{% if analytics_total %}
+<script>
+(function () {
+  const TOTAL     = {{ analytics_total     | tojson }};
+  const CUSTOMERS = {{ analytics_customers | tojson }};
+  const PRODUCTS  = {{ analytics_products  | tojson }};
+  const TARGET_MONTH = {{ month | int }};
+
+  // ── 全公司趨勢圖 ───────────────────────────────────────
+  const total = TOTAL[0];
+  if (total) {
+    const canvas = document.getElementById("dash-total-chart");
+    AnalyticsRenderer.renderTrendChart(canvas, {
+      lyMonthly:       total.ly_monthly,
+      tyMonthly:       total.ty_monthly,
+      budgetMonthly:   total.budget_monthly,
+      targetMonth:     TARGET_MONTH,
+      forecastMonthly: total.forecast_monthly,
+      lastActualMonth: total.last_actual_month,
+    });
+    // YTD block uses amounts (NTD) — chart stays in quantities for volume trend
+    const metrics = AnalyticsRenderer.computeMetrics(
+      total.ly_monthly_amount, total.ty_monthly_amount, total.budget_monthly_amount,
+      TARGET_MONTH, total.last_actual_month
+    );
+    AnalyticsRenderer.renderYtd(
+      document.getElementById("dash-total-ytd"), metrics, TARGET_MONTH, total.last_actual_month
+    );
+  }
+
+  // ── 表格渲染 ──────────────────────────────────────────
+  const fmt0 = new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 0 });
+  const ARROW = { up: "↑", flat: "→", down: "↓" };
+  // 台灣慣例：漲=紅(.rising)、跌=綠(.falling)
+  const ACLS  = { up: "rising", flat: "", down: "falling" };
+
+  function _yoyTxt(ytdCurr, ytdPrev) {
+    if (ytdPrev <= 0) return ["—", ""];
+    const pct = (ytdCurr - ytdPrev) / ytdPrev * 100;
+    // YoY 是方向性指標：漲=rising(紅)、跌=falling(綠)
+    return [(pct > 0 ? "+" : "") + pct.toFixed(1) + "%", pct > 0 ? "rising" : pct < 0 ? "falling" : ""];
+  }
+
+  function _budRateTxt(ytdTy, ytdBud) {
+    if (ytdBud <= 0) return ["—", ""];
+    const r = ytdTy / ytdBud * 100;
+    // 預算達成率是達成語意：達成=positive(綠)、未達成=negative(紅)
+    return [r.toFixed(1) + "%", r >= 100 ? "positive" : r < 80 ? "negative" : ""];
+  }
+
+  // 客戶表：純金額
+  function buildCustomerRows(data, tbody) {
+    if (!tbody) return;
+    data.forEach(d => {
+      const amtM = AnalyticsRenderer.computeMetrics(
+        d.ly_monthly_amount, d.ty_monthly_amount, d.budget_monthly_amount,
+        TARGET_MONTH, d.last_actual_month
+      );
+      const { ytdLy: lyAmt, ytdTy: tyAmt, ytdBudget: budAmt, trendDir } = amtM;
+
+      const [yoyTxt, yoyCls]   = _yoyTxt(tyAmt, lyAmt);
+      const [budTxt, budCls]   = _budRateTxt(tyAmt, budAmt);
+
+      const tr = document.createElement("tr");
+      const canvasId = `spark-${d.entity_type}-${d.entity_id}`.replace(/[^a-z0-9-]/gi, "_");
+      tr.innerHTML = `
+        <td class="dash-entity-label">${d.entity_label}</td>
+        <td class="num">${lyAmt > 0 ? fmt0.format(lyAmt) : "—"}</td>
+        <td class="num">${budAmt > 0 ? fmt0.format(budAmt) : "—"}</td>
+        <td class="num">${tyAmt > 0 ? fmt0.format(tyAmt) : "—"}</td>
+        <td class="num ${budCls}">${budTxt}</td>
+        <td class="num ${yoyCls}">${yoyTxt}</td>
+        <td class="num ${ACLS[trendDir] || ""}">${ARROW[trendDir] || "→"}</td>
+        <td><canvas id="${canvasId}" class="dash-spark-canvas"></canvas></td>
+      `;
+      tbody.appendChild(tr);
+      requestAnimationFrame(() => {
+        const c = document.getElementById(canvasId);
+        AnalyticsRenderer.renderSparklineInCanvas(
+          c, d.ly_monthly, d.ty_monthly, TARGET_MONTH, d.last_actual_month
+        );
+      });
+    });
+  }
+
+  // 品項表：金額為主 + 量YoY 洞察欄
+  function buildProductRows(data, tbody) {
+    if (!tbody) return;
+    data.forEach(d => {
+      const amtM = AnalyticsRenderer.computeMetrics(
+        d.ly_monthly_amount, d.ty_monthly_amount, d.budget_monthly_amount,
+        TARGET_MONTH, d.last_actual_month
+      );
+      const qtyM = AnalyticsRenderer.computeMetrics(
+        d.ly_monthly, d.ty_monthly, d.budget_monthly,
+        TARGET_MONTH, d.last_actual_month
+      );
+      const { ytdLy: lyAmt, ytdTy: tyAmt, ytdBudget: budAmt, trendDir } = amtM;
+      const { ytdLy: lyQty, ytdTy: tyQty } = qtyM;
+
+      const [yoyAmtTxt, yoyAmtCls] = _yoyTxt(tyAmt, lyAmt);
+      const [yoyQtyTxt, yoyQtyCls] = _yoyTxt(tyQty, lyQty);
+      const [budTxt, budCls]       = _budRateTxt(tyAmt, budAmt);
+
+      const tr = document.createElement("tr");
+      const canvasId = `spark-${d.entity_type}-${d.entity_id}`.replace(/[^a-z0-9-]/gi, "_");
+      tr.innerHTML = `
+        <td class="dash-entity-label">${d.entity_label}</td>
+        <td class="num">${lyAmt > 0 ? fmt0.format(lyAmt) : "—"}</td>
+        <td class="num">${tyAmt > 0 ? fmt0.format(tyAmt) : "—"}</td>
+        <td class="num ${budCls}">${budTxt}</td>
+        <td class="num ${yoyAmtCls}">${yoyAmtTxt}</td>
+        <td class="num ${yoyQtyCls}">${yoyQtyTxt}</td>
+        <td class="num ${ACLS[trendDir] || ""}">${ARROW[trendDir] || "→"}</td>
+        <td><canvas id="${canvasId}" class="dash-spark-canvas"></canvas></td>
+      `;
+      tbody.appendChild(tr);
+      requestAnimationFrame(() => {
+        const c = document.getElementById(canvasId);
+        AnalyticsRenderer.renderSparklineInCanvas(
+          c, d.ly_monthly, d.ty_monthly, TARGET_MONTH, d.last_actual_month
+        );
+      });
+    });
+  }
+
+  // Update section-sub labels to reflect confirmed actual month
+  if (total && total.last_actual_month > 0) {
+    const lbl = total.last_actual_month;
+    const custPeriod = document.getElementById("dash-customer-period");
+    const prodPeriod = document.getElementById("dash-product-period");
+    if (custPeriod) custPeriod.textContent = `YTD 1–${lbl}月 實績，金額`;
+    if (prodPeriod) prodPeriod.textContent = `YTD 1–${lbl}月 實績，金額`;
+  }
+
+  buildCustomerRows(CUSTOMERS, document.getElementById("dash-customer-tbody"));
+  buildProductRows(PRODUCTS,   document.getElementById("dash-product-tbody"));
+})();
+</script>
+{% endif %}
+
+<section class="panel workbench-panel" aria-label="高風險產品追蹤">
   <div class="section-header">
     <h3>高風險產品追蹤</h3>
-    <div style="display:flex;gap:8px;align-items:center;">
+    <div class="section-actions">
       <a class="link-btn" href="{{ url_for('product_monitor', year=year, month=month) }}">查看監控</a>
       <a class="link-btn" href="{{ url_for('forecast', year=year, month=month) }}">預估調整</a>
     </div>
   </div>
-  <div class="table-wrap compact-table">
+  <div class="table-wrap compact-table workbench-table-shell">
     <table>
       <thead>
         <tr>
@@ -162,8 +377,9 @@
           <td>{{ row.product_name }}</td>
           <td class="num">{{ "{:,.0f}".format(row.last_year_quantity) }}</td>
           <td class="num">{{ "{:,.0f}".format(row.forecast_quantity) }}</td>
-          <td class="num"><span class="gap-value {% if row.diff_quantity < 0 %}negative{% elif row.diff_quantity > 0 %}positive{% endif %}">{{ "{:+,.0f}".format(row.diff_quantity) }}</span></td>
-          <td class="num"><span class="gap-value {% if row.amount_impact < 0 %}negative{% elif row.amount_impact > 0 %}positive{% endif %}">{{ "{:+,.0f}".format(row.amount_impact) }}</span></td>
+          {# 台灣慣例：漲(>0)=rising(紅)、跌(<0)=falling(綠) #}
+          <td class="num"><span class="gap-value {% if row.diff_quantity < 0 %}falling{% elif row.diff_quantity > 0 %}rising{% endif %}">{{ "{:+,.0f}".format(row.diff_quantity) }}</span></td>
+          <td class="num"><span class="gap-value {% if row.amount_impact < 0 %}falling{% elif row.amount_impact > 0 %}rising{% endif %}">{{ "{:+,.0f}".format(row.amount_impact) }}</span></td>
           <td><span class="badge status-{{ row.status_key }}">{{ row.status }}</span></td>
           <td><a class="jump-link" href="{{ url_for('forecast', year=year, month=month) }}#row-{{ row.customer }}__{{ row.product_code }}" title="前往調整">調整</a></td>
         </tr>

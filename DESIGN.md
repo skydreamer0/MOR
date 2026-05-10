@@ -17,27 +17,57 @@ The best visual direction is a structured data workspace inspired more by Airtab
 
 ## 2. Color Palette & Roles
 
-Current tokens:
+All tokens are defined in `static/css/mor.css` `:root`. Edit values there; this table is the reference.
+
+**Neutral**
 
 | Token | Hex | Role |
 | --- | --- | --- |
-| `--ink` | `#16202a` | Primary text |
-| `--muted` | `#667085` | Secondary labels and metadata |
-| `--line` | `#d9e0e7` | Borders and table dividers |
+| `--ink` | `#0f172a` | Primary text |
+| `--ink-secondary` | `#1e293b` | Secondary headings |
+| `--muted` | `#64748b` | Labels and metadata |
+| `--muted-light` | `#94a3b8` | Placeholder, disabled text |
+| `--line` | `#e2e8f0` | Borders and table dividers |
+| `--line-subtle` | `#f1f5f9` | Subtle dividers |
 | `--panel` | `#ffffff` | Cards, table surfaces, fixed bars |
-| `--bg` | `#f3f6f8` | Page background |
-| `--accent` | `#0f766e` | Primary actions, totals, active status |
-| `--accent-2` | `#b45309` | Warning / not-due status |
+| `--bg` | `#f8fafc` | Page background |
+| `--surface-subtle` | `#f1f5f9` | Hover rows, grouped controls |
+| `--surface-elevated` | `#ffffff` | Elevated panels |
 
-Recommended additions:
+**Brand — Teal**
 
 | Token | Hex | Role |
 | --- | --- | --- |
-| `--success-bg` | `#e7f5ef` | Forecast-in-month badge background |
-| `--warning-bg` | `#fff4df` | Not-due badge background |
-| `--danger` | `#b42318` | Validation and export errors |
-| `--focus` | `#2563eb` | Keyboard focus ring |
-| `--surface-subtle` | `#f8fafc` | Hover rows and grouped controls |
+| `--accent` | `#0d9488` | Primary actions, active state |
+| `--accent-hover` | `#0f766e` | Button hover |
+| `--accent-active` | `#115e59` | Button active / pressed |
+| `--accent-subtle` | `rgba(13,148,136,0.08)` | Tint backgrounds, nav hover |
+| `--accent-ring` | `rgba(13,148,136,0.25)` | Focus ring glow |
+| `--accent-2` | `#d97706` | Warning / not-due status |
+
+**Semantic**
+
+| Token | Hex | Role |
+| --- | --- | --- |
+| `--danger` | `#dc2626` | Errors, destructive actions |
+| `--danger-hover` | `#b91c1c` | Danger button hover |
+| `--danger-bg` | `#fef2f2` | Error backgrounds |
+| `--danger-border` | `#fca5a5` | Error borders |
+| `--success-bg` | `#ecfdf5` | Success backgrounds, badge bg |
+| `--success-text` | `#047857` | Success text, positive values |
+| `--success-border` | `#a7f3d0` | Success borders |
+| `--warning-bg` | `#fffbeb` | Warning backgrounds |
+| `--warning-text` | `#92400e` | Warning text |
+| `--warning-border` | `#fde68a` | Warning borders |
+| `--focus` | `#38bdf8` | Keyboard focus ring color |
+| `--focus-ring` | `rgba(56,189,248,0.25)` | Focus ring glow |
+
+**Interactive Row States**
+
+| Token | Hex | Role |
+| --- | --- | --- |
+| `--row-hover` | `#eef6ff` | Table row hover background |
+| `--row-active` | `#e0f0ff` | Row with detail panel open |
 
 ## 3. Typography Rules
 
@@ -54,15 +84,39 @@ Use `"Microsoft JhengHei", "Segoe UI", Arial, sans-serif`.
 Rules:
 
 - Do not scale fonts with viewport width.
+- Do not load external web fonts for the main UI; use the local/system stack above.
 - Keep letter spacing at `0`.
 - Prefer tabular numeric alignment where available.
 - Keep headings compact inside operational screens.
+
+## 3.1 Control Size Rules
+
+Control size tokens live in `static/css/mor.css` and should be reused instead of one-off heights.
+
+| Token | Size | Role |
+| --- | --- | --- |
+| `--control-h` | `32px` | Normal inputs, selects, and primary buttons |
+| `--control-compact-h` | `28px` | Toolbar buttons, segmented controls, and compact tags |
+| `--control-nav-h` | `28px` | Header navigation action button |
+| `--control-icon-size` | `28px` | Icon-only and short inline action buttons |
 
 ## 4. Component Stylings
 
 ### Header
 
 Sticky top bar with title on the left and period controls on the right. It should remain compact and preserve vertical space for the table. Primary tabs should stay limited to 工作台 and 品項管理; product exclusion is configured inside 品項管理 rather than a separate page.
+
+### Page Toolbars
+
+Forecast, monitor, and settings workbars should use the shared `workbench-toolbar` structure with `toolbar-title`, `toolbar-controls`, and `toolbar-actions` regions. Page-specific classes may remain for width or behavior hooks, but the layout rhythm and control spacing should come from the shared toolbar rules.
+
+### Panels And Table Containers
+
+Dashboard panels, forecast table shells, monitor workspace, and settings workspace should use shared `workbench-panel` or `workbench-table-shell` classes for border, radius, surface, and elevation. Page-specific classes may still own height, padding, sticky columns, and overflow details.
+
+### Template Structure
+
+Page templates should include shared CSS and HTMX assets through `_head_assets.html`. Static layout or color styles belong in `static/css/mor.css`; inline styles are reserved for dynamic values such as server-calculated progress widths.
 
 ### Dashboard Layout
 
@@ -95,6 +149,8 @@ Numeric quantity fields should be compact, right-aligned, and stable width. Inva
 ### Buttons
 
 Primary actions use `--accent`, white text, 6px radius, and strong weight. Avoid oversized buttons; this is a work tool.
+
+Use 700 weight for button labels. Toolbar actions should use the compact control token instead of page-specific `!important` overrides. Icon buttons should keep a stable square footprint so restore/delete/close controls do not shift table or drawer layout.
 
 ### Status Badges
 

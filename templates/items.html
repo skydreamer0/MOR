@@ -4,13 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>品項管理 - MOR</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/mor.css') }}">
-  <script src="https://unpkg.com/htmx.org@1.9.10"
-          integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5ViYgSibmK"
-          crossorigin="anonymous"></script>
+  {% include "_head_assets.html" %}
 </head>
 <body>
   {% set page_title = "品項管理" %}
@@ -44,7 +38,7 @@
             <tr>
               <td>
                 <strong>{{ item.product_name }}</strong><br>
-                <small style="color: var(--muted);">ID: {{ item.product_code }}</small>
+                <small class="item-code">ID: {{ item.product_code }}</small>
                 <input type="hidden" name="product_codes" value="{{ item.product_code }}">
               </td>
               <td>

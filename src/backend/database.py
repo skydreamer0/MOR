@@ -23,11 +23,16 @@ class MORDatabase:
                     product_code TEXT NOT NULL,
                     product_name TEXT,
                     quantity REAL DEFAULT 0,
-                    unit_price REAL DEFAULT 0
+                    unit_price REAL DEFAULT 0,
+                    amount REAL DEFAULT 0
                 )
             """)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_sales_date ON sales_records(order_date)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_sales_product ON sales_records(product_code)")
+            # Migration: add amount column if upgrading from older DB
+            sales_cols = [col[1] for col in conn.execute("PRAGMA table_info(sales_records)").fetchall()]
+            if "amount" not in sales_cols:
+                conn.execute("ALTER TABLE sales_records ADD COLUMN amount REAL DEFAULT 0")
 
             # Item Configs (Global management)
             conn.execute("""
@@ -130,6 +135,84 @@ class MORDatabase:
                 conn.execute("ALTER TABLE budget_targets ADD COLUMN target_amount REAL DEFAULT 0")
             if 'base_target_quantity' not in budget_cols:
                 conn.execute("ALTER TABLE budget_targets ADD COLUMN base_target_quantity REAL DEFAULT 0")
+
+            # Workday Calendar (Phase 2: Taiwan official office-day data)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS workday_calendar (
+                    date TEXT PRIMARY KEY,
+                    is_workday INTEGER NOT NULL DEFAULT 1,
+                    holiday_name TEXT,
+                    source TEXT,
+                    note TEXT
+                )
+            """)
+
+            # Month Close Records (Phase 6: lock a closed month's actuals)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS month_close_records (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    year INTEGER NOT NULL,
+                    month INTEGER NOT NULL,
+                    closed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    source_batch_id INTEGER,
+                    actual_row_count INTEGER DEFAULT 0,
+                    actual_quantity_total REAL DEFAULT 0,
+                    actual_amount_total REAL DEFAULT 0,
+                    note TEXT,
+                    final_snapshot_id INTEGER,
+                    UNIQUE (year, month)
+                )
+            """)
+            # Migration: add final_snapshot_id if upgrading from earlier Phase 6 DB
+            mcr_cols = [col[1] for col in conn.execute("PRAGMA table_info(month_close_records)").fetchall()]
+            if "final_snapshot_id" not in mcr_cols:
+                conn.execute("ALTER TABLE month_close_records ADD COLUMN final_snapshot_id INTEGER")
+
+            # Daily Sales Import (Phase 1: current-month actuals)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS daily_import_batches (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    source_filename TEXT NOT NULL,
+                    source_hash TEXT NOT NULL,
+                    sales_year INTEGER NOT NULL,
+                    sales_month INTEGER NOT NULL,
+                    imported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    row_count INTEGER DEFAULT 0,
+                    date_start DATE,
+                    date_end DATE,
+                    quantity_total REAL DEFAULT 0,
+                    taxed_amount_total REAL DEFAULT 0,
+                    status TEXT DEFAULT 'success',
+                    message TEXT
+                )
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS daily_sales_actuals (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    sales_year INTEGER NOT NULL,
+                    sales_month INTEGER NOT NULL,
+                    sales_date DATE NOT NULL,
+                    customer_code TEXT,
+                    customer_name TEXT NOT NULL,
+                    product_code TEXT NOT NULL,
+                    product_name TEXT,
+                    sales_quantity REAL DEFAULT 0,
+                    gift_quantity REAL DEFAULT 0,
+                    actual_quantity REAL DEFAULT 0,
+                    net_unit_price REAL DEFAULT 0,
+                    taxed_amount REAL DEFAULT 0,
+                    bonus_basis_amount REAL DEFAULT 0,
+                    invoice_number TEXT,
+                    shipment_number TEXT,
+                    order_type TEXT,
+                    performance_type TEXT,
+                    import_batch_id INTEGER,
+                    FOREIGN KEY (import_batch_id) REFERENCES daily_import_batches(id)
+                )
+            """)
+            # Composite index for month-range scans; row-level index for customer+product aggregation
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_daily_actuals_month ON daily_sales_actuals(sales_year, sales_month)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_daily_actuals_row ON daily_sales_actuals(customer_name, product_code)")
 
             conn.commit()
 

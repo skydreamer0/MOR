@@ -1,5 +1,9 @@
 const formatter = new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 0 });
-const precisionFormatter = new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 2 });
+const precisionFormatter = formatter;
+
+const _fp   = (n) => precisionFormatter.format(n);
+const _pct  = (n) => n.toFixed(1) + "%";
+const _sign = (n) => (n > 0 ? "+" : "") + _fp(n);
 
 /* ── Sparkline Renderer ─────────────────────────────────────────── */
 
@@ -34,19 +38,20 @@ function drawSparkline(canvas, data) {
     y: pad + plotH - ((v - min) / range) * plotH,
   }));
 
-  // Determine trend colour: compare last vs first non-zero
+  // Determine trend colour: compare last vs first non-zero.
+  // Taiwan convention: 漲=紅 (#dc2626)，跌=綠 (#047857)
   const first = data.find((v) => v > 0) ?? 0;
   const last = data[data.length - 1];
   const trendUp = last >= first;
   const lineColor = trendUp
-    ? "rgba(4, 120, 87, 0.7)"   // success-text
-    : "rgba(220, 38, 38, 0.7)"; // danger
+    ? "rgba(220, 38, 38, 0.7)"  // danger  — 漲
+    : "rgba(4, 120, 87, 0.7)";  // success — 跌
   const dotColor = trendUp
-    ? "rgb(4, 120, 87)"
-    : "rgb(220, 38, 38)";
+    ? "rgb(220, 38, 38)"
+    : "rgb(4, 120, 87)";
   const fillColor = trendUp
-    ? "rgba(4, 120, 87, 0.06)"
-    : "rgba(220, 38, 38, 0.06)";
+    ? "rgba(220, 38, 38, 0.06)"
+    : "rgba(4, 120, 87, 0.06)";
 
   // Area fill
   ctx.beginPath();
@@ -128,8 +133,9 @@ function updateGapElement(el, gapValue) {
   const isNegative = gapValue < 0;
   const sign = isPositive ? "+" : "";
   el.textContent = sign + formatter.format(gapValue);
-  el.classList.toggle("positive", isPositive);
-  el.classList.toggle("negative", isNegative);
+  // 方向性指標使用台灣慣例：漲=紅(.rising)、跌=綠(.falling)
+  el.classList.toggle("rising",  isPositive);
+  el.classList.toggle("falling", isNegative);
 }
 
 function finalForecastQuantity(state) {
@@ -149,17 +155,19 @@ function hasInvalidManualQuantity(state) {
   return state.manualValue !== "" && (Number.isNaN(Number(state.manualValue)) || Number(state.manualValue) < 0);
 }
 
+// Single source of truth for row visibility. All four filter axes must pass for a row to show.
+// Reads _customerFilter and _viewMode from module state (set at top of recalculate()).
 function matchesFilters(state, searchValue, statusValue) {
   const matchesSearch = searchValue === "" || state.searchText.includes(searchValue);
   let matchesStatus = true;
-
   if (statusValue === "auto" || statusValue === "not_due") {
     matchesStatus = state.status === statusValue;
   } else if (statusValue === "edited") {
     matchesStatus = isEdited(state);
   }
-
-  return matchesSearch && matchesStatus;
+  const matchesCustomer = _customerFilter === "" || state.row.dataset.customer === _customerFilter;
+  const matchesView = _viewMode !== "anomaly" || state.row.dataset.risk === "high";
+  return matchesSearch && matchesStatus && matchesCustomer && matchesView;
 }
 
 function renderRow(state, amount, visible) {
@@ -193,6 +201,8 @@ function recalculate() {
   const unrenderedTotalInput = document.querySelector("[data-unrendered-total]");
   const searchValue = (searchInput?.value || "").trim().toLowerCase();
   const statusValue = statusInput?.value || "all";
+  // Sync module state from DOM before the visibility pass; [data-filter-customer] is on the customer <select> in forecast.html
+  _customerFilter = document.querySelector("[data-filter-customer]")?.value || "";
   let total = Number(unrenderedTotalInput?.value || 0);
   let visibleCount = 0;
   let editedCount = 0;
@@ -303,31 +313,27 @@ function openDetailPanel(row) {
 
   _detailRowId = row.dataset.rowId;
 
-  const state    = readRowState(row);
-  const f        = (n) => formatter.format(n);
-  const fp       = (n) => precisionFormatter.format(n);
-  const sign     = (n) => (n > 0 ? "+" : "") + fp(n);
-  const pct      = (n) => n.toFixed(1) + "%";
+  const state = readRowState(row);
 
   // Header
   document.getElementById("rd-customer").textContent = row.dataset.customer || "";
   document.getElementById("rd-product").textContent  = row.dataset.productName || "";
 
-  // 上月表現
+  // 上月表現 — 兩者都是 0 時整個 section 無意義，直接隱藏
   const lmActual = state.lmActual;
   const lmBudget = state.lmBudget;
-  const lmRate   = lmBudget > 0 ? (lmActual / lmBudget) * 100 : 0;
-  const lmGap    = lmActual - lmBudget;
-  document.getElementById("rd-lm-actual").textContent = fp(lmActual);
-  document.getElementById("rd-lm-budget").textContent = fp(lmBudget);
-  setDetailVal("rd-lm-rate", pct(lmRate), lmRate >= 100 ? "high" : lmRate < 80 ? "low" : "");
-  setDetailVal("rd-lm-gap",  sign(lmGap), lmGap >= 0 ? "positive" : "negative");
+  const lmSection = document.getElementById("rd-lm-section");
+  if (lmSection) lmSection.hidden = lmActual === 0 && lmBudget === 0;
 
-  // 年度比較
-  const lastYear = Number(row.dataset.lastYearQty || 0);
-  const thisYear = Number(row.dataset.actualQty   || 0);
-  document.getElementById("rd-last-year").textContent = fp(lastYear);
-  document.getElementById("rd-this-year").textContent = fp(thisYear);
+  const lmRate = lmBudget > 0 ? (lmActual / lmBudget) * 100 : 0;
+  const lmGap  = lmActual - lmBudget;
+  document.getElementById("rd-lm-actual").textContent = _fp(lmActual);
+  document.getElementById("rd-lm-budget").textContent = _fp(lmBudget);
+  setDetailVal("rd-lm-rate", _pct(lmRate), lmRate >= 100 ? "high" : lmRate < 80 ? "low" : "");
+  setDetailVal("rd-lm-gap",  _sign(lmGap), lmGap >= 0 ? "rising" : "falling");
+
+  // 年度業績比較：趨勢圖 + 月份表格 + YTD + 評估
+  renderAnalytics(row);
 
   // 預算達成 (動態，跟著人工調整更新)
   refreshDetailBudget(state);
@@ -345,23 +351,27 @@ function openDetailPanel(row) {
 }
 
 function refreshDetailBudget(state) {
-  const fp      = (n) => precisionFormatter.format(n);
-  const pct     = (n) => n.toFixed(1) + "%";
-  const sign    = (n) => (n > 0 ? "+" : "") + fp(n);
-
   const budget   = state.budgetQuantity;
   const finalQty = finalForecastQuantity(state);
   const diff     = finalQty - budget;
   const rate     = budget > 0 ? (finalQty / budget) * 100 : 0;
   const amount   = calculateAmount(state);
-  const included = state.excluded ? "排除" : (budget <= 0 ? "缺預算" : "納入");
 
-  document.getElementById("rd-budget").textContent = fp(budget);
-  document.getElementById("rd-final").textContent  = fp(finalQty);
-  setDetailVal("rd-achieve-rate", pct(rate), rate >= 100 ? "high" : rate < 80 ? "low" : "");
-  setDetailVal("rd-diff",         sign(diff), diff >= 0 ? "positive" : "negative");
-  document.getElementById("rd-amount").textContent   = formatter.format(amount);
-  document.getElementById("rd-included").textContent = included;
+  document.getElementById("rd-budget").textContent = _fp(budget);
+  document.getElementById("rd-final").textContent  = _fp(finalQty);
+  setDetailVal("rd-achieve-rate", _pct(rate), rate >= 100 ? "high" : rate < 80 ? "low" : "");
+  setDetailVal("rd-diff",         _sign(diff), diff >= 0 ? "rising" : "falling");
+  document.getElementById("rd-amount").textContent = formatter.format(amount);
+
+  // 計算狀態 badge（放在 section header 旁）
+  const badge = document.getElementById("rd-included-badge");
+  if (badge) {
+    const isExcluded = state.excluded;
+    const noBudget   = budget <= 0;
+    badge.textContent = isExcluded ? "排除" : (noBudget ? "缺預算" : "納入");
+    badge.className   = "badge" + (isExcluded || noBudget ? " off" : "");
+    badge.hidden      = false;
+  }
 }
 
 function setDetailVal(id, text, cls) {
@@ -369,6 +379,69 @@ function setDetailVal(id, text, cls) {
   if (!el) return;
   el.textContent = text;
   el.className = "detail-val" + (cls ? " " + cls : "");
+}
+
+function renderAnalytics(row) {
+  const panel = document.getElementById("row-detail");
+  const targetMonth = Number(panel?.dataset.forecastMonth || 0);
+
+  const lyMonthly     = JSON.parse(row.dataset.lyMonthly     || "[]");
+  const tyMonthly     = JSON.parse(row.dataset.tyMonthly     || "[]");
+  const budgetMonthly = JSON.parse(row.dataset.budgetMonthly || "[]");
+  const lyPrice       = Number(row.dataset.lyPrice || 0);
+  const tyPrice       = Number(row.dataset.price   || 0);
+
+  const data = { lyMonthly, tyMonthly, budgetMonthly, targetMonth };
+
+  // Trend chart
+  AnalyticsRenderer.renderTrendChart(
+    document.getElementById("rd-trend-canvas"),
+    data,
+  );
+
+  // Monthly table (6-column)
+  AnalyticsRenderer.renderMonthlyTable(
+    document.getElementById("rd-monthly-tbody"),
+    data,
+    {
+      lyTotalId:         "rd-ly-total",
+      budgetTotalId:     "rd-budget-total",
+      tyTotalId:         "rd-ty-total",
+      budgetRateTotalId: "rd-budget-rate-total",
+      yoyTotalId:        "rd-yoy-total",
+    },
+  );
+
+  // Compute shared metrics for YTD + assessment
+  const metrics = AnalyticsRenderer.computeMetrics(lyMonthly, tyMonthly, budgetMonthly, targetMonth);
+
+  // YTD cumulative
+  AnalyticsRenderer.renderYtd(
+    document.getElementById("rd-ytd-container"),
+    metrics,
+    targetMonth,
+  );
+
+  // Assessment: MA3, MA6, trend
+  AnalyticsRenderer.renderAssessment(
+    document.getElementById("rd-assessment-container"),
+    metrics,
+  );
+
+  // Price section
+  const moneyFmt = (n) => n > 0 ? formatter.format(n) : "—";
+  document.getElementById("rd-ly-price").textContent = moneyFmt(lyPrice);
+  document.getElementById("rd-ty-price").textContent = moneyFmt(tyPrice);
+
+  const priceChangeRow = document.getElementById("rd-price-change-row");
+  if (priceChangeRow && lyPrice > 0 && tyPrice > 0 && Math.abs(tyPrice - lyPrice) > 0.01) {
+    const pct = (tyPrice - lyPrice) / lyPrice * 100;
+    setDetailVal("rd-price-change", (pct > 0 ? "+" : "") + pct.toFixed(1) + "%",
+      pct > 0 ? "rising" : "falling");   // 漲價=紅、跌價=綠（台灣慣例）
+    priceChangeRow.hidden = false;
+  } else if (priceChangeRow) {
+    priceChangeRow.hidden = true;
+  }
 }
 
 function closeDetailPanel() {
@@ -389,34 +462,25 @@ function closeDetailPanel() {
 
 /* ── View Toggle (只看異常 / 全部明細) ──────────────────────────── */
 
-let _viewMode = "anomaly"; // default: only high risk
+// All row visibility goes through recalculate() — do not manipulate row.hidden or style.display elsewhere.
+// _viewMode and _customerFilter are read inside matchesFilters(); update them before calling recalculate().
+let _viewMode = "anomaly";
+let _customerFilter = "";
 
 function applyViewMode(mode) {
+  // Previously used forEach + classList.toggle("forecast-table__row--collapsed"); now delegates to recalculate()
+  // so view mode, customer filter, search, and status all go through one visibility pass.
   _viewMode = mode;
-  const rows = document.querySelectorAll("tr[data-risk]");
-
-  rows.forEach((tr) => {
-    if (mode === "anomaly") {
-      if (tr.dataset.risk !== "high") {
-        tr.classList.add("forecast-table__row--collapsed");
-      } else {
-        tr.classList.remove("forecast-table__row--collapsed");
-      }
-    } else {
-      tr.classList.remove("forecast-table__row--collapsed");
-    }
-  });
-
   document.getElementById("btn-anomaly-only")?.classList.toggle("active", mode === "anomaly");
   document.getElementById("btn-show-all")?.classList.toggle("active", mode === "all");
-
   recalculate();
 }
 
 /* ── Main bind ───────────────────────────────────────────────────── */
 
 function bindForecastTable() {
-  document.querySelectorAll("[data-manual], [data-reason], [data-filter-search], [data-filter-status]").forEach((input) => {
+  // [data-filter-customer] replaces the old onchange="filterRows()" on the customer <select>
+  document.querySelectorAll("[data-manual], [data-reason], [data-filter-search], [data-filter-status], [data-filter-customer]").forEach((input) => {
     input.addEventListener("input", (e) => {
       recalculate();
       if (e.target.hasAttribute("data-manual") || e.target.hasAttribute("data-reason")) {

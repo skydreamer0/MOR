@@ -1,3 +1,4 @@
+from io import BytesIO
 from pathlib import Path
 import re
 import shutil
@@ -32,8 +33,10 @@ def test_homepage_loads_dashboard():
 
     assert response.status_code == 200
     assert "<title>MOR" in html
-    assert "<h1>MOR " in html
+    assert "<h1>MOR</h1>" in html
+    assert '<h1>MOR <span class="app-subtitle">' not in html
     assert "業績總覽" in html
+    assert '<a href="/" aria-current="page">業績總覽</a>' in html
     assert "預算目標" in html
     assert "預估達成" in html
     assert "預估業績金額" in html
@@ -81,15 +84,35 @@ def test_forecast_reuses_dashboard_context_cache(monkeypatch):
     assert calls["count"] == 1
 
 
-def test_homepage_data_health_alert_appears_before_progress_hero():
-    client = _client()
+def test_homepage_data_health_alert_appears_before_progress_hero(monkeypatch):
+    db_base_path = _isolated_db_base()
+    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
+    columns = config.required_columns
+    data = pd.DataFrame(
+        [
+            {
+                columns[0]: 2026,
+                columns[1]: 4,
+                columns[2]: 10,
+                columns[3]: "Hospital A",
+                columns[4]: "P1",
+                columns[5]: "Product One",
+                columns[6]: 3,
+                columns[7]: 0,
+                columns[8]: 0,
+            }
+        ]
+    )
+    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config: data)
+    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
 
     response = client.get("/")
     html = response.get_data(as_text=True)
 
     assert response.status_code == 200
     assert 'class="alert alert-info' in html
-    assert html.index('class="alert alert-info') < html.index('class="hero__container"')
+    assert html.index('class="alert alert-info') < html.index('class="hero__container workbench-panel"')
 
 
 def test_forecast_page_renders_forecast_review_assets_and_tools():
@@ -101,7 +124,7 @@ def test_forecast_page_renders_forecast_review_assets_and_tools():
     assert response.status_code == 200
     assert 'href="/static/css/mor.css"' in html
     assert 'src="/static/js/forecast-table.js"' in html
-    assert 'class="forecast-tools"' in html
+    assert 'class="forecast-tools workbench-toolbar"' in html
     assert "搜尋客戶或品項" in html
     assert "狀態篩選" in html
     assert "data-filter-search" in html
@@ -122,6 +145,22 @@ def test_frontend_pages_load_htmx_assets():
     assert "https://unpkg.com/htmx.org@1.9.10" in forecast
 
 
+def test_frontend_pages_do_not_load_google_inter_font():
+    client = _client()
+
+    pages = [
+        client.get("/").get_data(as_text=True),
+        client.get("/forecast").get_data(as_text=True),
+        client.get("/monitor/products").get_data(as_text=True),
+        client.get("/settings").get_data(as_text=True),
+    ]
+    rendered = "\n".join(pages)
+
+    assert "fonts.googleapis.com" not in rendered
+    assert "fonts.gstatic.com" not in rendered
+    assert "Inter:wght" not in rendered
+
+
 def test_dashboard_metrics_partial_renders_fragment_only():
     client = _client()
 
@@ -130,7 +169,7 @@ def test_dashboard_metrics_partial_renders_fragment_only():
 
     assert response.status_code == 200
     assert "<html" not in html
-    assert 'class="hero__container"' in html
+    assert 'class="hero__container workbench-panel"' in html
     assert "業績總覽" in html
 
 
@@ -175,7 +214,7 @@ def test_rendered_pages_do_not_show_mojibake():
     assert "還原系統預估" in rendered
     assert "原因..." in rendered
     assert "排除" in rendered
-    assert "缺預算" in rendered
+    assert "本月預算為 0" in rendered
     assert "納入" in rendered
     for broken in ("??/", "?祆", "?芸", "?", "?", "頝喳", "蝯梢", ""):
         assert broken not in rendered
@@ -207,7 +246,7 @@ def test_patch_forecast_row_updates_adjustment_and_returns_row_fragment():
     assert response.status_code == 200
     assert html.lstrip().startswith("<tr")
     assert f'id="row-{row_id}"' in html
-    assert 'value="7.5"' in html
+    assert 'value="7"' in html
     assert 'value="reviewed"' in html
 
 
@@ -219,7 +258,9 @@ def test_forecast_page_exposes_customer_filter_and_row_metadata():
 
     assert response.status_code == 200
     assert 'id="customer-filter"' in html
-    assert "filterRows(this.value)" in html
+    # customer filter now uses data-filter-customer (picked up by bindForecastTable in forecast-table.js)
+    # instead of the old onchange="filterRows(this.value)" inline handler
+    assert 'data-filter-customer' in html
     assert 'data-customer="' in html
     assert 'data-risk="' in html
 
@@ -255,6 +296,7 @@ def test_header_navigation_is_consistent_across_frontend_pages(monkeypatch):
                 columns[5]: "Product One",
                 columns[6]: 3,
                 columns[7]: 100,
+                columns[8]: 0,
             }
         ]
     )
@@ -282,6 +324,94 @@ def test_header_navigation_is_consistent_across_frontend_pages(monkeypatch):
         assert "同步資料" in html
 
 
+def test_workbench_toolbars_use_shared_structure_classes():
+    client = _client()
+
+    pages = {
+        "/forecast": client.get("/forecast").get_data(as_text=True),
+        "/monitor/products": client.get("/monitor/products").get_data(as_text=True),
+        "/settings": client.get("/settings").get_data(as_text=True),
+    }
+    css = Path("static/css/mor.css").read_text(encoding="utf-8")
+
+    for html in pages.values():
+        assert "workbench-toolbar" in html
+        assert "toolbar-title" in html
+        assert "toolbar-controls" in html
+
+    assert "toolbar-actions" in pages["/forecast"]
+    assert "toolbar-actions" in pages["/settings"]
+    assert "data-filter-search" in pages["/forecast"]
+    assert "data-monitor-search" in pages["/monitor/products"]
+    assert "data-item-search" in pages["/settings"]
+    assert ".workbench-toolbar" in css
+    assert ".toolbar-title" in css
+    assert ".toolbar-controls" in css
+    assert ".toolbar-actions" in css
+
+
+def test_workbench_panels_and_tables_use_shared_container_classes():
+    client = _client()
+
+    dashboard = client.get("/").get_data(as_text=True)
+    forecast = client.get("/forecast").get_data(as_text=True)
+    monitor = client.get("/monitor/products").get_data(as_text=True)
+    settings = client.get("/settings").get_data(as_text=True)
+    css = Path("static/css/mor.css").read_text(encoding="utf-8")
+
+    assert 'class="hero__container workbench-panel' in dashboard
+    assert "risk-panel__summary panel workbench-panel" in dashboard
+    assert "risk-panel__customer-rank panel workbench-panel" in dashboard
+    assert 'class="panel workbench-panel"' in dashboard
+    assert "table-wrap compact-table workbench-table-shell" in dashboard
+
+    assert "table-wrap forecast-table-shell workbench-table-shell" in forecast
+    assert "monitor-workspace workbench-panel" in monitor
+    assert "table-wrap monitor-table-wrap workbench-table-shell" in monitor
+    assert "settings-workspace workbench-panel" in settings
+    assert "table-wrap settings-table-wrap workbench-table-shell" in settings
+
+    assert ".workbench-panel" in css
+    assert ".workbench-table-shell" in css
+
+
+def test_templates_use_shared_head_assets_and_no_static_inline_layout():
+    page_templates = [
+        Path("templates/index.html"),
+        Path("templates/forecast.html"),
+        Path("templates/product_monitor.html"),
+        Path("templates/monthly_review.html"),
+        Path("templates/settings.html"),
+        Path("templates/items.html"),
+    ]
+    for template_path in page_templates:
+        html = template_path.read_text(encoding="utf-8")
+        assert '{% include "_head_assets.html" %}' in html
+        assert "https://unpkg.com/htmx.org" not in html
+        assert "css/mor.css" not in html
+
+    dashboard_partial = Path("templates/_dashboard_metrics.html").read_text(encoding="utf-8")
+    head_assets = Path("templates/_head_assets.html").read_text(encoding="utf-8")
+    items_template = Path("templates/items.html").read_text(encoding="utf-8")
+    css = Path("static/css/mor.css").read_text(encoding="utf-8")
+
+    assert "https://unpkg.com/htmx.org@1.9.10/dist/htmx.min.js" in head_assets
+    assert "D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5xLSi8nO7UC" in head_assets
+    assert 'style="color:var(--accent-2)"' not in dashboard_partial
+    assert 'style="margin:var(--sp-4) 0 0;"' not in dashboard_partial
+    assert 'style="display:flex;gap:8px;align-items:center;"' not in dashboard_partial
+    assert 'style="color: var(--muted);"' not in items_template
+
+    assert "dist-count--caution" in dashboard_partial
+    assert "empty-note" in dashboard_partial
+    assert "section-actions" in dashboard_partial
+    assert "item-code" in items_template
+    assert ".dist-count--caution" in css
+    assert ".empty-note" in css
+    assert ".section-actions" in css
+    assert ".item-code" in css
+
+
 def test_old_exclusions_page_redirects_to_item_management(monkeypatch):
     db_base_path = _isolated_db_base()
     config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
@@ -297,6 +427,7 @@ def test_old_exclusions_page_redirects_to_item_management(monkeypatch):
                 columns[5]: "Product One",
                 columns[6]: 3,
                 columns[7]: 100,
+                columns[8]: 0,
             },
             {
                 columns[0]: 2026,
@@ -307,6 +438,7 @@ def test_old_exclusions_page_redirects_to_item_management(monkeypatch):
                 columns[5]: "Product Two",
                 columns[6]: 5,
                 columns[7]: 200,
+                columns[8]: 0,
             },
         ]
     )
@@ -335,6 +467,7 @@ def test_item_management_exclusion_is_reflected_on_workbench(monkeypatch):
                 columns[5]: "Product One",
                 columns[6]: 3,
                 columns[7]: 100,
+                columns[8]: 0,
             },
             {
                 columns[0]: 2026,
@@ -345,6 +478,7 @@ def test_item_management_exclusion_is_reflected_on_workbench(monkeypatch):
                 columns[5]: "Product Two",
                 columns[6]: 5,
                 columns[7]: 200,
+                columns[8]: 0,
             },
         ]
     )
@@ -384,6 +518,7 @@ def test_forecast_page_layers_discontinued_items_below_active_rows(monkeypatch):
                 columns[5]: product_name,
                 columns[6]: quantity,
                 columns[7]: price,
+                columns[8]: 0,
             }
             for year, month, customer, product_code, product_name, quantity, price in (
                 (2026, 2, "Hospital A", "P1", "Product Active", 10, 100),
@@ -436,6 +571,7 @@ def test_settings_page_uses_item_status_without_auxiliary_labels(monkeypatch):
                 columns[5]: "Product One",
                 columns[6]: 3,
                 columns[7]: 100,
+                columns[8]: 0,
             }
         ]
     )
@@ -468,6 +604,7 @@ def test_item_settings_save_price_quantity_and_forecast_uses_it(monkeypatch):
                 columns[5]: "Product One",
                 columns[6]: 300,
                 columns[7]: 3200,
+                columns[8]: 0,
             }
             for month in (1, 2, 3)
         ]
@@ -500,6 +637,9 @@ def test_item_settings_save_price_quantity_and_forecast_uses_it(monkeypatch):
     forecast = client.get("/forecast?year=2026&month=4").get_data(as_text=True)
 
     assert response.status_code == 200
+    saved_settings = response.get_data(as_text=True)
+    assert 'name="price_quantity_P1" type="number" min="0" step="1" value="100"' in saved_settings
+    assert 'value="100.0"' not in saved_settings
     with sqlite3.connect(db_base_path / "mor_workbench.db") as conn:
         columns = [row[1] for row in conn.execute("PRAGMA table_info(item_configs)")]
         saved = conn.execute("SELECT price_quantity FROM item_configs WHERE product_code = 'P1'").fetchone()
@@ -508,6 +648,91 @@ def test_item_settings_save_price_quantity_and_forecast_uses_it(monkeypatch):
     assert 'data-price-quantity="100' in forecast
     # Estimated amount is now computed client-side from data attributes
     assert 'data-price=' in forecast
+
+
+def test_item_settings_save_clears_forecast_context_cache(monkeypatch):
+    db_base_path = _isolated_db_base()
+    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
+    columns = config.required_columns
+    data = pd.DataFrame(
+        [
+            {
+                columns[0]: 2026,
+                columns[1]: month,
+                columns[2]: 10,
+                columns[3]: "Hospital A",
+                columns[4]: "P1",
+                columns[5]: "Product One",
+                columns[6]: 100,
+                columns[7]: 1000,
+                columns[8]: 0,
+            }
+            for month in (1, 2, 3)
+        ]
+    )
+    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config: data)
+    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
+
+    first_forecast = client.get("/forecast?year=2026&month=4").get_data(as_text=True)
+    response = client.post(
+        "/items/save",
+        data={
+            "product_codes": ["P1"],
+            "is_budgeted_P1": "1",
+        },
+    )
+    second_forecast = client.get("/forecast?year=2026&month=4").get_data(as_text=True)
+
+    assert "Product One" in first_forecast
+    assert response.status_code == 200
+    assert "Product One" not in second_forecast
+
+
+def test_unbudgeted_item_has_no_budget_target_on_forecast_page(monkeypatch):
+    db_base_path = _isolated_db_base()
+    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
+    columns = config.required_columns
+    data = pd.DataFrame(
+        [
+            {
+                columns[0]: 2026,
+                columns[1]: month,
+                columns[2]: 10,
+                columns[3]: "Hospital A",
+                columns[4]: "P1",
+                columns[5]: "Product One",
+                columns[6]: 100,
+                columns[7]: 1000,
+                columns[8]: 0,
+            }
+            for month in (1, 2, 3)
+        ]
+    )
+    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config: data)
+    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
+    with sqlite3.connect(db_base_path / "mor_workbench.db") as conn:
+        conn.execute(
+            """
+            INSERT INTO budget_targets
+            (year, month, customer_name, product_code, target_quantity, target_amount, base_target_quantity)
+            VALUES (2026, 4, 'Hospital A', 'P1', 300, 3000, 1)
+            """
+        )
+        conn.commit()
+
+    response = client.post(
+        "/items/save",
+        data={
+            "product_codes": ["P1"],
+            "is_visible_P1": "1",
+        },
+    )
+    forecast = client.get("/forecast?year=2026&month=4").get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert 'data-budget="0.0"' in forecast
 
 
 def test_adjustment_save_migrates_old_database_without_updated_by():
@@ -565,8 +790,37 @@ def test_forecast_page_renders_review_validation_and_accessibility_hooks():
 
     assert response.status_code == 200
     assert 'aria-label="人工調整數量"' in html
+    assert re.search(r'name="manual_adjustment__[^"]+" type="number" min="0" step="1"', html)
+    assert 'step="0.01"' not in html
     assert 'data-validation-message' in html
     assert "人工數量必須是 0 以上的數字" in html
+
+
+def test_adjustment_save_manual_quantity_as_integer():
+    db_base_path = _isolated_db_base()
+    client = _client({"DB_BASE_PATH": db_base_path})
+
+    response = client.post(
+        "/adjustments/save",
+        data={
+            "row_id": "Hospital A__P1",
+            "manual_adjustment": "12.7",
+            "reason": "Review",
+            "year": "2026",
+            "month": "5",
+        },
+    )
+
+    assert response.status_code == 200
+    with sqlite3.connect(db_base_path / "mor_workbench.db") as conn:
+        saved = conn.execute(
+            """
+            SELECT manual_quantity
+            FROM forecast_adjustments
+            WHERE year = 2026 AND month = 5 AND customer_name = 'Hospital A' AND product_code = 'P1'
+            """
+        ).fetchone()
+    assert saved == (12,)
 
 
 def test_forecast_rows_expose_dashboard_jump_anchor():
@@ -590,6 +844,14 @@ def test_static_assets_define_invalid_row_validation_behavior():
     assert "data-unrendered-total" in js
 
 
+def test_forecast_row_keeps_three_char_abbreviation_except_eli_dose():
+    row_template = Path("templates/_forecast_row.html").read_text(encoding="utf-8")
+    css = Path("static/css/mor.css").read_text(encoding="utf-8")
+
+    assert "product_display_name" in row_template
+    assert "min-width: 96px;" in css
+
+
 def test_forecast_table_compares_live_gap_to_budget():
     js = Path("static/js/forecast-table.js").read_text(encoding="utf-8")
 
@@ -606,6 +868,13 @@ def test_forecast_table_totals_only_include_budgeted_rows():
     assert "(finalForecastQuantity(state) / priceQuantity) * state.price" in js
     assert "state.budgetQuantity <= 0" in js
     assert "data-price-quantity=" in row_template
+
+
+def test_forecast_detail_uses_neutral_zero_budget_status():
+    js = Path("static/js/forecast-table.js").read_text(encoding="utf-8")
+
+    assert "缺預算" in js
+    assert "預算為 0" not in js
 
 
 def test_css_keeps_letter_spacing_neutral_for_dense_operational_ui():
@@ -670,6 +939,7 @@ def test_homepage_exposes_unrendered_total_when_rows_are_limited(monkeypatch):
                     columns[5]: f"Product {product_code}",
                     columns[6]: 10,
                     columns[7]: 100,
+                columns[8]: 0,
                 }
             )
     monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: pd.DataFrame(rows))
@@ -705,9 +975,10 @@ def test_product_monitor_page_renders_drop_table(monkeypatch):
                 columns[2]: 10,
                 columns[3]: "Hospital A",
                 columns[4]: "P1",
-                columns[5]: "Product One",
+                columns[5]: "ELI 22.5癌立佳",
                 columns[6]: 100,
                 columns[7]: 100,
+                columns[8]: 0,
             },
             {
                 columns[0]: 2026,
@@ -715,9 +986,10 @@ def test_product_monitor_page_renders_drop_table(monkeypatch):
                 columns[2]: 10,
                 columns[3]: "Hospital A",
                 columns[4]: "P1",
-                columns[5]: "Product One",
+                columns[5]: "ELI 22.5癌立佳",
                 columns[6]: 40,
                 columns[7]: 100,
+                columns[8]: 0,
             },
         ]
     )
@@ -730,9 +1002,15 @@ def test_product_monitor_page_renders_drop_table(monkeypatch):
 
     assert response.status_code == 200
     assert "產品跳單監控" in html
-    assert "去年同期數量" in html
-    assert "跳單狀態" in html
+    assert "狀態" in html
+    assert "去年成長率" in html
+    assert "預算達成率" in html
+    assert "週期狀態" in html
     assert "高風險" in html
+    assert html.index("monitor-sticky--status") < html.index("monitor-sticky--customer")
+    assert html.index("monitor-sticky--customer") < html.index("monitor-sticky--product")
+    assert 'title="ELI 22.5癌立佳">ELI 22.5</td>' in html
+    assert "ID: P1" not in html
     assert "data-monitor-search" in html
 
 
@@ -751,6 +1029,7 @@ def test_settings_page_renders_item_config_and_data_checks(monkeypatch):
                 columns[5]: "Product One",
                 columns[6]: 3,
                 columns[7]: 0,
+                columns[8]: 0,
             }
         ]
     )
@@ -766,11 +1045,13 @@ def test_settings_page_renders_item_config_and_data_checks(monkeypatch):
     assert "排除預估" in html
     assert "預算資料檢查" in html
     assert "訂單資料檢查" in html
-    assert "品項合併設定" in html
-    assert "待建" in html
+    assert "品項設定" in html
+    assert "settings-workspace" in html
+    assert "settings-health-panel" in html
+    assert "儲存設定" in html
 
 
-def test_dashboard_and_settings_share_data_issue_messages(monkeypatch):
+def test_dashboard_omits_zero_budget_notice_but_keeps_price_warning(monkeypatch):
     db_base_path = _isolated_db_base()
     config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
     columns = config.required_columns
@@ -785,6 +1066,7 @@ def test_dashboard_and_settings_share_data_issue_messages(monkeypatch):
                 columns[5]: "Product One",
                 columns[6]: 3,
                 columns[7]: 0,
+                columns[8]: 0,
             }
         ]
     )
@@ -795,10 +1077,10 @@ def test_dashboard_and_settings_share_data_issue_messages(monkeypatch):
     dashboard = client.get("/").get_data(as_text=True)
     settings = client.get("/settings").get_data(as_text=True)
 
-    assert "有 1 筆缺少預算目標" in dashboard
-    assert "有 1 筆缺少預算目標" in settings
+    assert "有 1 筆缺少預算目標" not in dashboard
     assert "有 1 筆單價為 0" in dashboard
-    assert "有 1 筆單價為 0" in settings
+    assert "有 1 筆缺少預算目標" not in settings
+    assert "有 1 筆單價為 0" not in settings
 
 
 def test_items_route_redirects_to_settings():
@@ -825,6 +1107,7 @@ def test_settings_page_exposes_item_search_tools(monkeypatch):
                 columns[5]: "Product One",
                 columns[6]: 3,
                 columns[7]: 100,
+                columns[8]: 0,
             }
         ]
     )
@@ -889,6 +1172,7 @@ def test_export_rejects_stale_forecast_signature(monkeypatch):
                         columns[5]: f"Product {product_code}",
                         columns[6]: quantity,
                         columns[7]: 100,
+                columns[8]: 0,
                     }
                 )
         return pd.DataFrame(rows)
@@ -921,3 +1205,195 @@ def test_export_rejects_invalid_manual_quantity_without_500():
 
     assert response.status_code == 400
     assert "人工數量" in response.get_data(as_text=True)
+
+
+# ---------------------------------------------------------------------------
+# Daily sales import route and upload UI
+# ---------------------------------------------------------------------------
+
+def _daily_import_workbook() -> BytesIO:
+    stream = BytesIO()
+    pd.DataFrame(
+        [
+            {
+                "出貨日期": "2026-05-04",
+                "客戶代號": "C001",
+                "客戶簡稱": "Hospital A",
+                "產品": "P1",
+                "產品簡稱": "Product One",
+                "銷售數量": 5,
+                "贈品數量": 1,
+                "銷貨淨價": 100,
+                "含稅淨額": 600,
+                "折後業績": 0,
+                "發票編號": "INV",
+                "出貨單號": "SHIP",
+                "單別": "正常銷",
+                "業績屬性": "處方",
+            }
+        ]
+    ).to_excel(stream, index=False)
+    stream.seek(0)
+    return stream
+
+
+def test_product_monitor_import_route_stores_daily_actuals(monkeypatch):
+    db_base_path = _isolated_db_base()
+    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
+    columns = config.required_columns
+    data = pd.DataFrame(
+        [
+            {
+                columns[0]: 2025,
+                columns[1]: 5,
+                columns[2]: 10,
+                columns[3]: "Hospital A",
+                columns[4]: "P1",
+                columns[5]: "Product One",
+                columns[6]: 10,
+                columns[7]: 100,
+                columns[8]: 0,
+            },
+            {
+                columns[0]: 2026,
+                columns[1]: 4,
+                columns[2]: 10,
+                columns[3]: "Hospital A",
+                columns[4]: "P1",
+                columns[5]: "Product One",
+                columns[6]: 3,
+                columns[7]: 100,
+                columns[8]: 0,
+            },
+        ]
+    )
+    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config: data)
+    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
+
+    response = client.post(
+        "/monitor/products/import",
+        data={"daily_sales_file": (_daily_import_workbook(), "daily.xlsx")},
+        content_type="multipart/form-data",
+        follow_redirects=True,
+    )
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "匯入完成" in html
+    assert "6" in html
+
+
+def test_product_monitor_page_exposes_daily_sales_import_form():
+    client = _client()
+
+    html = client.get("/monitor/products").get_data(as_text=True)
+
+    assert 'action="/monitor/products/import"' in html
+    assert 'name="daily_sales_file"' in html
+    assert "選擇當月累積業績檔" in html
+    assert "系統將依欄位格式判斷資料，不限制檔名。" in html
+
+
+def test_close_month_route_creates_record_and_blocks_reimport(monkeypatch):
+    db_base_path = _isolated_db_base()
+    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
+    columns = config.required_columns
+    data = pd.DataFrame([{
+        columns[0]: 2025, columns[1]: 5, columns[2]: 10,
+        columns[3]: "Hospital A", columns[4]: "P1", columns[5]: "Product One",
+        columns[6]: 10, columns[7]: 100, columns[8]: 0,
+    }])
+    monkeypatch.setattr(app, "load_sales_detail", lambda *_: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda *_: data)
+    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
+
+    # Import May 2026 data
+    client.post(
+        "/monitor/products/import",
+        data={"daily_sales_file": (_daily_import_workbook(), "may.xlsx")},
+        content_type="multipart/form-data",
+    )
+    # Close May 2026
+    close_resp = client.post(
+        "/monitor/products/close-month",
+        data={"year": "2026", "month": "5"},
+        follow_redirects=True,
+    )
+    assert "結月完成" in close_resp.get_data(as_text=True)
+
+    # Reimport should be blocked
+    blocked = client.post(
+        "/monitor/products/import",
+        data={"daily_sales_file": (_daily_import_workbook(), "may_v2.xlsx")},
+        content_type="multipart/form-data",
+        follow_redirects=True,
+    )
+    assert "已結月" in blocked.get_data(as_text=True)
+
+
+def test_monthly_review_page_loads_without_data():
+    client = _client()
+    response = client.get("/monthly-review")
+    html = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert "月底檢討" in html
+    assert "尚無結月資料" in html
+
+
+def test_close_month_auto_saves_forecast_snapshot(monkeypatch):
+    """結月路由應自動儲存最終預估快照，供 Phase 7 月底檢討頁使用。"""
+    db_base_path = _isolated_db_base()
+    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
+    columns = config.required_columns
+    data = pd.DataFrame([{
+        columns[0]: 2025, columns[1]: 5, columns[2]: 10,
+        columns[3]: "Hospital A", columns[4]: "P1", columns[5]: "Product One",
+        columns[6]: 10, columns[7]: 100, columns[8]: 0,
+    }])
+    monkeypatch.setattr(app, "load_sales_detail", lambda *_: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda *_: data)
+    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
+
+    client.post(
+        "/monitor/products/import",
+        data={"daily_sales_file": (_daily_import_workbook(), "may.xlsx")},
+        content_type="multipart/form-data",
+    )
+    client.post("/monitor/products/close-month", data={"year": "2026", "month": "5"})
+
+    from src.backend.daily_sales_importer import get_close_record
+    from src.backend.database import get_db
+    db = get_db(db_base_path)
+    rec = get_close_record(db, 2026, 5)
+
+    assert rec is not None
+    assert rec["final_snapshot_id"] is not None
+
+    from src.backend.snapshot_service import load_snapshot_items
+    items = load_snapshot_items(db, rec["final_snapshot_id"])
+    assert len(items) >= 1  # at least one forecast row saved
+
+
+def test_product_monitor_shows_close_button_after_import(monkeypatch):
+    db_base_path = _isolated_db_base()
+    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
+    columns = config.required_columns
+    data = pd.DataFrame([{
+        columns[0]: 2025, columns[1]: 5, columns[2]: 10,
+        columns[3]: "Hospital A", columns[4]: "P1", columns[5]: "Product One",
+        columns[6]: 10, columns[7]: 100, columns[8]: 0,
+    }])
+    monkeypatch.setattr(app, "load_sales_detail", lambda *_: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda *_: data)
+    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
+
+    client.post(
+        "/monitor/products/import",
+        data={"daily_sales_file": (_daily_import_workbook(), "may.xlsx")},
+        content_type="multipart/form-data",
+    )
+    html = client.get("/monitor/products?year=2026&month=5").get_data(as_text=True)
+
+    assert 'action="/monitor/products/close-month"' in html
+    assert "結月" in html

@@ -18,6 +18,7 @@ SALES_COLUMNS = {
     "product_name": "商品簡稱",
     "quantity": "銷+贈S量",
     "unit_price": "單價NT(淨)",
+    "amount": "含稅總額(淨)",
 }
 
 BUDGET_FILE_PATTERN = "2026預算報表*.xlsx"
@@ -109,6 +110,7 @@ def normalize_sales_records(df_sales: pd.DataFrame) -> pd.DataFrame:
             "product_name": df_sales[SALES_COLUMNS["product_name"]],
             "quantity": pd.to_numeric(df_sales[SALES_COLUMNS["quantity"]], errors="coerce").fillna(0),
             "unit_price": pd.to_numeric(df_sales[SALES_COLUMNS["unit_price"]], errors="coerce").fillna(0),
+            "amount": pd.to_numeric(df_sales[SALES_COLUMNS["amount"]], errors="coerce").fillna(0),
         }
     )
     return normalized.dropna(subset=["order_date", "customer_name", "product_code"])

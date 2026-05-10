@@ -4,13 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>預估調整 - MOR</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/mor.css') }}">
-  <script src="https://unpkg.com/htmx.org@1.9.10"
-          integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5ViYgSibmK"
-          crossorigin="anonymous"></script>
+  {% include "_head_assets.html" %}
 </head>
 <body>
   {% set page_title = "預估調整" %}
@@ -72,25 +66,29 @@
       <input type="hidden" name="forecast_signature" value="{{ forecast_signature }}">
       <input type="hidden" data-unrendered-total value="{{ unrendered_total }}">
 
-      <div class="forecast-tools" aria-label="篩選工具">
-        <div class="view-toggle" role="group" aria-label="檢視模式">
-          <button type="button" class="view-toggle-btn active" id="btn-anomaly-only">只看異常</button>
-          <button type="button" class="view-toggle-btn" id="btn-show-all">全部明細</button>
+      <div class="forecast-tools workbench-toolbar" aria-label="篩選工具">
+        <div class="toolbar-title toolbar-title--hidden" aria-hidden="true">篩選工具</div>
+        <div class="toolbar-controls">
+          <div class="view-toggle" role="group" aria-label="檢視模式">
+            <button type="button" class="view-toggle-btn active" id="btn-anomaly-only">只看異常</button>
+            <button type="button" class="view-toggle-btn" id="btn-show-all">全部明細</button>
+          </div>
+          {# data-filter-customer: picked up by bindForecastTable() in forecast-table.js; replaces the old onchange="filterRows()" #}
+          <select id="customer-filter" data-filter-customer aria-label="篩選客戶">
+            <option value="">全部客戶</option>
+            {% for customer in customers %}
+              <option value="{{ customer }}">{{ customer }}</option>
+            {% endfor %}
+          </select>
+          <input type="search" data-filter-search aria-label="搜尋客戶或品項" placeholder="搜尋客戶、產品或代號…">
+          <select data-filter-status aria-label="狀態篩選">
+            <option value="all">全部狀態</option>
+            <option value="auto">自動預估</option>
+            <option value="not_due">未到期</option>
+            <option value="edited">已手動調整</option>
+          </select>
         </div>
-        <select id="customer-filter" aria-label="篩選客戶" onchange="filterRows(this.value)">
-          <option value="">全部客戶</option>
-          {% for customer in customers %}
-            <option value="{{ customer }}">{{ customer }}</option>
-          {% endfor %}
-        </select>
-        <input type="search" data-filter-search aria-label="搜尋客戶或品項" placeholder="搜尋客戶、產品或代號…">
-        <select data-filter-status aria-label="狀態篩選">
-          <option value="all">全部狀態</option>
-          <option value="auto">自動預估</option>
-          <option value="not_due">未到期</option>
-          <option value="edited">已手動調整</option>
-        </select>
-        <div class="filter-group">
+        <div class="filter-group toolbar-actions">
           <span>顯示 <strong data-visible-count>0</strong> / {{ row_count }}</span>
           <span id="edited-badge" hidden>已調整 <strong data-edited-count>0</strong></span>
           <span id="save-status"></span>
@@ -106,23 +104,9 @@
         人工數量必須是 0 以上的數字。
       </div>
 
-      <div class="table-wrap">
+      <div class="table-wrap forecast-table-shell workbench-table-shell">
         <table class="forecast-table">
-          <thead>
-            <tr>
-              <th>狀態</th>
-              <th>客戶</th>
-              <th>品項</th>
-              <th>趨勢</th>
-              <th class="num">上月表現</th>
-              <th class="num col-group-start">去年同期</th>
-              <th class="num">系統預估</th>
-              <th class="num">人工調整</th>
-              <th class="num">最後預估</th>
-              <th class="num col-group-end">差異</th>
-              <th>調整原因</th>
-            </tr>
-          </thead>
+          {% include "_forecast_thead.html" %}
           <tbody>
             {% for row in rows %}
             {% include "_forecast_row.html" %}
@@ -136,23 +120,9 @@
           <summary class="discontinued-toggle">
             已停用品項（共 {{ discontinued_rows|length }} 項，去年業績合計：{{ "{:,.0f}".format(discontinued_last_year_total) }}）
           </summary>
-          <div class="table-wrap">
+          <div class="table-wrap forecast-table-shell workbench-table-shell">
             <table class="forecast-table">
-              <thead>
-                <tr>
-                  <th>狀態</th>
-                  <th>客戶</th>
-                  <th>品項</th>
-                  <th>趨勢</th>
-                  <th class="num">上月表現</th>
-                  <th class="num col-group-start">去年同期</th>
-                  <th class="num">系統預估</th>
-                  <th class="num">人工調整</th>
-                  <th class="num">最後預估</th>
-                  <th class="num col-group-end">差異</th>
-                  <th>調整原因</th>
-                </tr>
-              </thead>
+              {% include "_forecast_thead.html" %}
               <tbody>
                 {% for row in discontinued_rows %}
                 {% include "_forecast_row.html" %}
@@ -167,7 +137,7 @@
 
     <!-- Row detail drawer -->
     <div class="row-detail-backdrop" id="row-detail-backdrop" hidden aria-hidden="true"></div>
-    <aside class="row-detail" id="row-detail" hidden role="complementary" aria-label="列詳細資料">
+    <aside class="row-detail" id="row-detail" data-forecast-year="{{ year }}" data-forecast-month="{{ month }}" hidden role="complementary" aria-label="列詳細資料">
       <div class="row-detail__header">
         <div>
           <p class="row-detail__customer" id="rd-customer"></p>
@@ -176,29 +146,83 @@
         <button type="button" class="icon-btn rd-close-btn" id="rd-close" title="關閉">✕</button>
       </div>
       <div class="row-detail__body">
-        <div class="detail-section">
+        <div class="detail-section" id="rd-lm-section">
           <h4>上月表現</h4>
           <div class="detail-row"><span>實績</span><span class="detail-val" id="rd-lm-actual">—</span></div>
           <div class="detail-row"><span>預算</span><span class="detail-val" id="rd-lm-budget">—</span></div>
           <div class="detail-row"><span>達成率</span><span class="detail-val" id="rd-lm-rate">—</span></div>
           <div class="detail-row"><span>GAP</span><span class="detail-val" id="rd-lm-gap">—</span></div>
         </div>
+
         <div class="detail-section">
-          <h4>年度比較</h4>
-          <div class="detail-row"><span>去年同期</span><span class="detail-val" id="rd-last-year">—</span></div>
-          <div class="detail-row"><span>今年同期</span><span class="detail-val" id="rd-this-year">—</span></div>
+          <h4>年度業績比較（數量）</h4>
+
+          <!-- Trend chart -->
+          <canvas id="rd-trend-canvas" class="detail-trend-canvas"></canvas>
+          <div class="detail-chart-legend">
+            <span class="legend-ly">去年</span>
+            <span class="legend-budget">預算</span>
+            <span class="legend-ty">今年</span>
+            <span class="legend-ma3">MA3</span>
+            <span class="legend-ma6">MA6</span>
+          </div>
+
+          <!-- 6-column monthly table: 月 去年 預算 今年 達成% YoY% -->
+          <table class="detail-monthly-table">
+            <thead>
+              <tr>
+                <th>月</th>
+                <th>去年</th>
+                <th>預算</th>
+                <th>今年</th>
+                <th>達成</th>
+                <th>YoY</th>
+              </tr>
+            </thead>
+            <tbody id="rd-monthly-tbody"></tbody>
+            <tfoot>
+              <tr class="detail-monthly-total">
+                <th>合計</th>
+                <td id="rd-ly-total">—</td>
+                <td id="rd-budget-total">—</td>
+                <td id="rd-ty-total">—</td>
+                <td id="rd-budget-rate-total">—</td>
+                <td id="rd-yoy-total">—</td>
+              </tr>
+            </tfoot>
+          </table>
         </div>
+
+        <!-- YTD cumulative comparison -->
         <div class="detail-section">
-          <h4>預算達成</h4>
+          <h4>累計比較（YTD）</h4>
+          <div id="rd-ytd-container"></div>
+        </div>
+
+        <!-- Price -->
+        <div class="detail-section">
+          <h4>單價</h4>
+          <div class="detail-row"><span>去年同月</span><span class="detail-val" id="rd-ly-price">—</span></div>
+          <div class="detail-row"><span>今年最新</span><span class="detail-val" id="rd-ty-price">—</span></div>
+          <div class="detail-row" id="rd-price-change-row" hidden>
+            <span>漲跌幅</span><span class="detail-val" id="rd-price-change">—</span>
+          </div>
+        </div>
+
+        <!-- Assessment: MA3, MA6, trend -->
+        <div class="detail-section">
+          <h4>評估指標</h4>
+          <div id="rd-assessment-container"></div>
+        </div>
+
+        <!-- Budget & forecast (dynamic, updates on manual adjustment) -->
+        <div class="detail-section">
+          <h4>預算 &amp; 預估<span class="badge off" id="rd-included-badge" hidden></span></h4>
           <div class="detail-row"><span>預算目標</span><span class="detail-val" id="rd-budget">—</span></div>
           <div class="detail-row"><span>最後預估</span><span class="detail-val" id="rd-final">—</span></div>
           <div class="detail-row"><span>達成率</span><span class="detail-val" id="rd-achieve-rate">—</span></div>
           <div class="detail-row"><span>差異</span><span class="detail-val" id="rd-diff">—</span></div>
-        </div>
-        <div class="detail-section">
-          <h4>金額</h4>
           <div class="detail-row"><span>預估金額</span><span class="detail-val" id="rd-amount">—</span></div>
-          <div class="detail-row"><span>計算狀態</span><span class="detail-val" id="rd-included">—</span></div>
         </div>
       </div>
     </aside>
@@ -206,12 +230,6 @@
 
   <script src="{{ url_for('static', filename='js/forecast-table.js') }}"></script>
   <script>
-    function filterRows(customer) {
-      document.querySelectorAll('tr[data-customer]').forEach((tr) => {
-        tr.style.display = (!customer || tr.dataset.customer === customer) ? '' : 'none';
-      });
-    }
-
     // 填滿視窗高度（扣掉 sticky header）
     (function () {
       const header = document.querySelector('header');

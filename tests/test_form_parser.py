@@ -32,6 +32,9 @@ def test_parse_manual_quantities_rejects_text_and_negative_numbers():
     with pytest.raises(FormValidationError, match="人工數量"):
         parse_manual_quantities({"manual_quantity__A__P1": "-1"})
 
+    with pytest.raises(FormValidationError, match="人工數量"):
+        parse_manual_quantities({"manual_quantity__A__P1": "-1"}, type_cast=int)
+
 
 def test_parse_excluded_ids_returns_checkbox_ids():
     assert parse_excluded_ids({"exclude__A__P1": "on", "manual_quantity__A__P1": "3"}) == {"A__P1"}
