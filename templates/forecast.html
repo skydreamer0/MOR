@@ -242,17 +242,22 @@
       window.addEventListener('resize', resize);
     })();
 
-    // 捲動 table-wrap 時收合 summary（單向鎖定，無中間態）
+    // 捲動 table-wrap 時收合 summary
+    // wheel 偵測向下方向（不依賴 scrollTop，列數不足時也能正確觸發）
+    // scroll 偵測回到頂部才展開
     (function () {
       const summary   = document.querySelector('.summary');
       const tableWrap = document.querySelector('.table-wrap');
       if (!summary || !tableWrap) return;
       let isCollapsed = false;
-      tableWrap.addEventListener('scroll', () => {
-        if (!isCollapsed && tableWrap.scrollTop > 10) {
+      tableWrap.addEventListener('wheel', (e) => {
+        if (e.deltaY > 0 && !isCollapsed) {
           isCollapsed = true;
           summary.classList.add('summary--collapsed');
-        } else if (isCollapsed && tableWrap.scrollTop === 0) {
+        }
+      }, { passive: true });
+      tableWrap.addEventListener('scroll', () => {
+        if (isCollapsed && tableWrap.scrollTop < 8) {
           isCollapsed = false;
           summary.classList.remove('summary--collapsed');
         }
