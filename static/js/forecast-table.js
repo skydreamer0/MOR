@@ -478,60 +478,129 @@ function applyViewMode(mode) {
 
 /* ── Main bind ───────────────────────────────────────────────────── */
 
-function bindForecastTable() {
-  // [data-filter-customer] replaces the old onchange="filterRows()" on the customer <select>
-  document.querySelectorAll("[data-manual], [data-reason], [data-filter-search], [data-filter-status], [data-filter-customer]").forEach((input) => {
-    input.addEventListener("input", (e) => {
-      recalculate();
-      if (e.target.hasAttribute("data-manual") || e.target.hasAttribute("data-reason")) {
-        const row = e.target.closest("[data-row]");
-        const restoreBtn = row.querySelector("[data-restore]");
-        if (restoreBtn) restoreBtn.hidden = e.target.hasAttribute("data-manual") && e.target.value === "";
-        saveToServer(readRowState(row));
-        // refresh side panel if open for this row
-        if (_detailRowId && _detailRowId === row.dataset.rowId) {
-          refreshDetailBudget(readRowState(row));
-        }
-      }
-    });
+function markForecastBound(element, attribute = "data-forecast-bound") {
+  if (!element || element.hasAttribute(attribute)) return false;
+  element.setAttribute(attribute, "true");
+  return true;
+}
+
+function handleEditableInput(event) {
+  recalculate();
+  if (!event.target.hasAttribute("data-manual") && !event.target.hasAttribute("data-reason")) return;
+
+  const row = event.target.closest("[data-row]");
+  const restoreBtn = row.querySelector("[data-restore]");
+  if (restoreBtn) restoreBtn.hidden = event.target.hasAttribute("data-manual") && event.target.value === "";
+  saveToServer(readRowState(row));
+  // refresh side panel if open for this row
+  if (_detailRowId && _detailRowId === row.dataset.rowId) {
+    refreshDetailBudget(readRowState(row));
+  }
+}
+
+function bindForecastRow(row) {
+  row.querySelectorAll("[data-manual], [data-reason]").forEach((input) => {
+    if (!markForecastBound(input)) return;
+    input.addEventListener("input", handleEditableInput);
     input.addEventListener("change", recalculate);
   });
 
-  document.querySelectorAll("[data-restore]").forEach((btn) => {
+  row.querySelectorAll("[data-restore]").forEach((btn) => {
+    if (!markForecastBound(btn)) return;
     btn.addEventListener("click", () => {
-      const row = btn.closest("[data-row]");
-      const manualInput = row.querySelector("[data-manual]");
+      const currentRow = btn.closest("[data-row]");
+      const manualInput = currentRow.querySelector("[data-manual]");
       manualInput.value = "";
       btn.hidden = true;
       recalculate();
-      saveToServer(readRowState(row));
-      if (_detailRowId && _detailRowId === row.dataset.rowId) {
-        refreshDetailBudget(readRowState(row));
+      saveToServer(readRowState(currentRow));
+      if (_detailRowId && _detailRowId === currentRow.dataset.rowId) {
+        refreshDetailBudget(readRowState(currentRow));
       }
     });
   });
 
-  document.querySelectorAll("[data-manual]").forEach((input) => {
-    input.addEventListener("focus", (e) => e.target.select());
+  row.querySelectorAll("[data-manual]").forEach((input) => {
+    if (!markForecastBound(input, "data-forecast-focus-bound")) return;
+    input.addEventListener("focus", (event) => event.target.select());
   });
 
-  // Row click → open detail panel
-  document.querySelectorAll("tr[data-row]").forEach((tr) => {
-    tr.addEventListener("click", (e) => {
-      if (e.target.closest("input, button, a, label")) return;
-      if (_detailRowId === tr.dataset.rowId) {
+  if (markForecastBound(row, "data-forecast-row-bound")) {
+    row.addEventListener("click", (event) => {
+      if (event.target.closest("input, button, a, label")) return;
+      if (_detailRowId === row.dataset.rowId) {
         closeDetailPanel();
       } else {
-        openDetailPanel(tr);
+        openDetailPanel(row);
       }
     });
+  }
+}
+
+function bindForecastControls() {
+  // [data-filter-customer] replaces the old onchange="filterRows()" on the customer <select>
+  document.querySelectorAll("[data-filter-search], [data-filter-status], [data-filter-customer]").forEach((input) => {
+    if (!markForecastBound(input)) return;
+    input.addEventListener("input", recalculate);
+    input.addEventListener("change", recalculate);
   });
 
-  // Detail panel close
-  document.getElementById("rd-close")?.addEventListener("click", closeDetailPanel);
-  document.getElementById("row-detail-backdrop")?.addEventListener("click", closeDetailPanel);
+  const closeButton = document.getElementById("rd-close");
+  if (closeButton && markForecastBound(closeButton)) {
+    closeButton.addEventListener("click", closeDetailPanel);
+  }
+  const backdrop = document.getElementById("row-detail-backdrop");
+  if (backdrop && markForecastBound(backdrop)) {
+    backdrop.addEventListener("click", closeDetailPanel);
+  }
 
-  // View toggle
+  const anomalyButton = document.getElementById("btn-anomaly-only");
+  if (anomalyButton && markForecastBound(anomalyButton)) {
+    anomalyButton.addEventListener("click", () => applyViewMode("anomaly"));
+  }
+  const showAllButton = document.getElementById("btn-show-all");
+  if (showAllButton && markForecastBound(showAllButton)) {
+    showAllButton.addEventListener("click", () => applyViewMode("all"));
+  }
+
+  const form = document.getElementById("forecast-form");
+  if (form && markForecastBound(form)) {
+    form.addEventListener("submit", validateBeforeSubmit);
+  }
+}
+
+function bindForecastRows(root = document) {
+  root.querySelectorAll("tr[data-row]").forEach(bindForecastRow);
+}
+
+function bindHtmxRowSwapHandler() {
+  if (!markForecastBound(document.body, "data-forecast-htmx-bound")) return;
+  document.body.addEventListener("htmx:afterSwap", (event) => {
+    const swapped = event.detail?.elt;
+    if (!swapped) return;
+
+    const rows = swapped.matches?.("tr[data-row]")
+      ? [swapped]
+      : Array.from(swapped.querySelectorAll?.("tr[data-row]") || []);
+    if (rows.length === 0) return;
+
+    rows.forEach(bindForecastRow);
+    renderAllSparklines();
+    recalculate();
+
+    const activeRow = rows.find((row) => row.dataset.rowId === _detailRowId);
+    if (activeRow) {
+      activeRow.classList.add("row-detail-active");
+      refreshDetailBudget(readRowState(activeRow));
+    }
+  });
+}
+
+function bindForecastTable() {
+  bindForecastControls();
+  bindForecastRows();
+  bindHtmxRowSwapHandler();
+
   const highRiskCount = document.querySelectorAll("tr[data-risk='high']").length;
   const totalRows     = document.querySelectorAll("tr[data-risk]").length;
 
@@ -542,11 +611,6 @@ function bindForecastTable() {
     applyViewMode("all");
     document.querySelector(".view-toggle")?.style.setProperty("display", "none");
   }
-
-  document.getElementById("btn-anomaly-only")?.addEventListener("click", () => applyViewMode("anomaly"));
-  document.getElementById("btn-show-all")?.addEventListener("click",     () => applyViewMode("all"));
-
-  document.getElementById("forecast-form").addEventListener("submit", validateBeforeSubmit);
 
   renderAllSparklines();
   recalculate();

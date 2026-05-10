@@ -12,10 +12,9 @@ Make MOR a compact multi-page operating tool:
 ## Small Task Queue
 
 1. Finish multi-page UI verification in browser.
-2. Add export readback tests for workbook tabs and totals.
-3. Improve data health checks for missing budget mappings.
-4. Add customer view page after monitor rules stabilize.
-5. Add product view page after customer view is useful.
+2. Improve data health checks for missing budget mappings.
+3. Add customer view page after monitor rules stabilize.
+4. Add product view page after customer view is useful.
 
 ---
 
@@ -74,11 +73,9 @@ Clean-up that makes future changes safer and faster.
   2. `_header.html` — `hx-get="/dashboard/metrics"` refreshes the metrics zone when the period selector changes.
   3. `_dashboard_metrics.html` — `htmx-indicator` shows a loading state during the metrics fetch.
 
-  ⚠️  Follow-up concern (not yet fixed): `hx-swap="outerHTML"` in `_forecast_row.html` replaces the
-  entire `<tr>` DOM node on `change`, which destroys JS event listeners bound by `bindForecastTable()`
-  (input recalculate, row-click detail panel, restore button). After a HTMX swap, those interactions
-  stop working for that row. Fix options: remove `hx-patch` (rely solely on `saveToServer`), or
-  rebind listeners via the `htmx:afterSwap` event.
+  Follow-up fixed on 2026-05-10: `forecast-table.js` now binds row events through an idempotent
+  `bindForecastRow()` path and rebinds swapped rows via `htmx:afterSwap`, so `hx-swap="outerHTML"`
+  keeps input recalculation, row detail, and restore interactions working after replacement.
 
 ## Working Rules
 

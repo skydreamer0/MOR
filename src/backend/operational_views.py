@@ -229,7 +229,7 @@ def last_year_amount_total(rows: Iterable[ForecastRow]) -> float:
 
 def recalculate_forecast_amounts(rows: Iterable[ForecastRow]) -> list[ForecastRow]:
     return [
-        replace(row, estimated_amount=0.0 if row.excluded else _dashboard_amount(row.final_forecast, row))
+        replace(row, estimated_amount=_dashboard_amount(row.final_forecast, row) if _is_amount_included(row) else 0.0)
         for row in rows
     ]
 

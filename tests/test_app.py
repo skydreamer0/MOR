@@ -6,6 +6,7 @@ import sqlite3
 import uuid
 
 import pandas as pd
+from openpyxl import load_workbook
 
 from src.backend import app, operational_views
 from src.backend.forecast_config import ForecastConfig
@@ -103,8 +104,8 @@ def test_homepage_data_health_alert_appears_before_progress_hero(monkeypatch):
             }
         ]
     )
-    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: data)
-    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config: data)
+    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
     client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
 
     response = client.get("/")
@@ -300,8 +301,8 @@ def test_header_navigation_is_consistent_across_frontend_pages(monkeypatch):
             }
         ]
     )
-    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: data)
-    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config: data)
+    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
     client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
 
     expectations = {
@@ -442,8 +443,8 @@ def test_old_exclusions_page_redirects_to_item_management(monkeypatch):
             },
         ]
     )
-    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: data)
-    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config: data)
+    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
     client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
 
     response = client.get("/exclusions")
@@ -482,8 +483,8 @@ def test_item_management_exclusion_is_reflected_on_workbench(monkeypatch):
             },
         ]
     )
-    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: data)
-    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config: data)
+    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
     client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
 
     response = client.post(
@@ -528,8 +529,8 @@ def test_forecast_page_layers_discontinued_items_below_active_rows(monkeypatch):
             )
         ]
     )
-    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: data)
-    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config: data)
+    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
     client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
 
     response = client.post(
@@ -575,8 +576,8 @@ def test_settings_page_uses_item_status_without_auxiliary_labels(monkeypatch):
             }
         ]
     )
-    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: data)
-    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config: data)
+    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
     client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
 
     settings = client.get("/settings").get_data(as_text=True)
@@ -609,8 +610,8 @@ def test_item_settings_save_price_quantity_and_forecast_uses_it(monkeypatch):
             for month in (1, 2, 3)
         ]
     )
-    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: data)
-    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config: data)
+    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
     client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
     with sqlite3.connect(db_base_path / "mor_workbench.db") as conn:
         conn.execute(
@@ -670,8 +671,8 @@ def test_item_settings_save_clears_forecast_context_cache(monkeypatch):
             for month in (1, 2, 3)
         ]
     )
-    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: data)
-    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config: data)
+    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
     client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
 
     first_forecast = client.get("/forecast?year=2026&month=4").get_data(as_text=True)
@@ -709,8 +710,8 @@ def test_unbudgeted_item_has_no_budget_target_on_forecast_page(monkeypatch):
             for month in (1, 2, 3)
         ]
     )
-    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: data)
-    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config: data)
+    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
     client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
     with sqlite3.connect(db_base_path / "mor_workbench.db") as conn:
         conn.execute(
@@ -942,8 +943,8 @@ def test_homepage_exposes_unrendered_total_when_rows_are_limited(monkeypatch):
                 columns[8]: 0,
                 }
             )
-    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: pd.DataFrame(rows))
-    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config: pd.DataFrame(rows))
+    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config, db=None: pd.DataFrame(rows))
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config, db=None: pd.DataFrame(rows))
     client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
     with sqlite3.connect(db_base_path / "mor_workbench.db") as conn:
         conn.execute(
@@ -993,8 +994,8 @@ def test_product_monitor_page_renders_drop_table(monkeypatch):
             },
         ]
     )
-    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: data)
-    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config: data)
+    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
     client = _client({"FORECAST_CONFIG": config})
 
     response = client.get("/monitor/products?year=2026&month=5")
@@ -1033,8 +1034,8 @@ def test_settings_page_renders_item_config_and_data_checks(monkeypatch):
             }
         ]
     )
-    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: data)
-    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config: data)
+    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
     client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
 
     response = client.get("/settings")
@@ -1070,8 +1071,8 @@ def test_dashboard_omits_zero_budget_notice_but_keeps_price_warning(monkeypatch)
             }
         ]
     )
-    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: data)
-    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config: data)
+    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
     client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
 
     dashboard = client.get("/").get_data(as_text=True)
@@ -1111,8 +1112,8 @@ def test_settings_page_exposes_item_search_tools(monkeypatch):
             }
         ]
     )
-    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: data)
-    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config: data)
+    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
     client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
 
     response = client.get("/settings")
@@ -1154,6 +1155,42 @@ def test_export_accepts_current_forecast_signature():
     assert export_response.mimetype == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
+def test_export_workbook_readback_has_expected_tabs_and_totals():
+    client = _client()
+    review_response = client.get("/forecast?year=2026&month=5")
+    signature = re.search(
+        r'name="forecast_signature" value="([^"]+)"',
+        review_response.get_data(as_text=True),
+    ).group(1)
+
+    export_response = client.post(
+        "/export",
+        data={"year": "2026", "month": "5", "forecast_signature": signature},
+    )
+
+    assert export_response.status_code == 200
+    workbook = load_workbook(BytesIO(export_response.data), data_only=True)
+    assert workbook.sheetnames == ["預估總覽", "預估明細", "排除明細"]
+
+    summary_sheet = workbook["預估總覽"]
+    summary_values = {
+        summary_sheet.cell(row=row_idx, column=1).value: summary_sheet.cell(row=row_idx, column=2).value
+        for row_idx in range(2, summary_sheet.max_row + 1)
+    }
+    detail_sheet = workbook["預估明細"]
+    headers = [cell.value for cell in detail_sheet[1]]
+    amount_index = headers.index("預估金額")
+    excluded_index = headers.index("是否排除")
+    detail_rows = list(detail_sheet.iter_rows(min_row=2, values_only=True))
+    included_rows = [row for row in detail_rows if row[excluded_index] != "是"]
+    excluded_rows = [row for row in detail_rows if row[excluded_index] == "是"]
+
+    assert summary_values["預估月份"] == "2026/05"
+    assert summary_values["預估總金額"] == sum((row[amount_index] or 0) for row in included_rows)
+    assert summary_values["列入預估品項數"] == len(included_rows)
+    assert summary_values["排除品項數"] == len(excluded_rows)
+
+
 def test_export_rejects_stale_forecast_signature(monkeypatch):
     config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales", visible_row_limit=1)
     columns = config.required_columns
@@ -1178,8 +1215,8 @@ def test_export_rejects_stale_forecast_signature(monkeypatch):
         return pd.DataFrame(rows)
 
     loaded_data = [make_rows(10)]
-    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: loaded_data[-1])
-    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config: loaded_data[-1])
+    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config, db=None: loaded_data[-1])
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config, db=None: loaded_data[-1])
     client = _client({"FORECAST_CONFIG": config})
 
     review_response = client.get("/forecast")
@@ -1205,6 +1242,14 @@ def test_export_rejects_invalid_manual_quantity_without_500():
 
     assert response.status_code == 400
     assert "人工數量" in response.get_data(as_text=True)
+
+
+def test_forecast_table_rebinds_row_events_after_htmx_swap():
+    script = Path("static/js/forecast-table.js").read_text(encoding="utf-8")
+
+    assert "htmx:afterSwap" in script
+    assert "bindForecastRow" in script
+    assert "data-forecast-bound" in script
 
 
 # ---------------------------------------------------------------------------
@@ -1267,8 +1312,8 @@ def test_product_monitor_import_route_stores_daily_actuals(monkeypatch):
             },
         ]
     )
-    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config: data)
-    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config: data)
+    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
+    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
     client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
 
     response = client.post(
