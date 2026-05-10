@@ -646,3 +646,44 @@ def test_monitor_row_cycle_delay_forces_high_risk():
     assert monitor_row.status_key == "high"
     assert monitor_row.days_since_last_shipment_workdays is not None
     assert monitor_row.days_since_last_shipment_workdays > 48
+
+
+# ---------------------------------------------------------------------------
+# build_forecast_page_context — DB-first (Phase 2)
+# ---------------------------------------------------------------------------
+
+def _make_db_with_sales():
+    import tempfile
+    from pathlib import Path
+    from src.backend.database import MORDatabase
+
+    tmp = tempfile.mkstemp(suffix=".db")[1]
+    db = MORDatabase(Path(tmp))
+    with db.get_connection() as conn:
+        # Two months of historical data so forecast_engine can derive patterns
+        for month, day, qty in [(3, 10, 20), (3, 25, 20), (4, 12, 18), (4, 28, 18)]:
+            conn.execute(
+                "INSERT INTO sales_records "
+                "(order_date, customer_name, product_code, product_name, quantity, unit_price, amount) "
+                "VALUES (?, 'A客戶', 'P1', '商品A', ?, 100, ?)",
+                (f"2026-{month:02d}-{day:02d}", qty, qty * 100),
+            )
+        conn.commit()
+    return db
+
+
+def test_build_forecast_page_context_uses_db_not_excel(tmp_path):
+    """build_forecast_page_context must serve data from DB without any Excel file present."""
+    from src.backend.forecast_config import ForecastConfig
+    from src.backend.operational_views import build_forecast_page_context
+
+    db = _make_db_with_sales()
+    config = ForecastConfig()
+
+    # No Excel file exists in tmp_path — context must still build from DB
+    ctx = build_forecast_page_context(tmp_path, config, db, {"year": "2026", "month": "5"})
+
+    assert ctx.target.year == 2026
+    assert ctx.target.month == 5
+    # sales_data should contain the DB rows
+    assert len(ctx.sales_data) > 0
