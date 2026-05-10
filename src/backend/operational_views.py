@@ -9,7 +9,12 @@ import pandas as pd
 
 from src.backend.analytics import AnalyticsSlice
 from src.backend.daily_sales_importer import DailyActualAggregate, fetch_daily_actuals_by_row_id
-from src.backend.data_loader import default_target_from_data, load_sales_detail, normalize_product_code
+from src.backend.data_loader import (
+    default_target_from_data,
+    default_target_from_db,
+    load_sales_detail_from_db,
+    normalize_product_code,
+)
 from src.backend.forecast_config import ForecastConfig
 from src.backend.forecast_engine import ForecastOptions, apply_user_adjustments, build_forecast
 from src.backend.forecast_models import ForecastRow, ForecastSummary, ForecastTarget
@@ -127,8 +132,8 @@ def build_forecast_page_context(
     db,
     target_source: Mapping[str, object],
 ) -> ForecastPageContext:
-    data = load_sales_detail(data_base_path, forecast_config)
-    default_target = default_target_from_data(data, forecast_config)
+    data = load_sales_detail_from_db(db)
+    default_target = default_target_from_db(db)
     target = parse_target_period(target_source, default_target)
     item_configs = load_item_configs(db)
     excluded_item_ids = {pid for pid, cfg in item_configs.items() if cfg["is_excluded"]}
