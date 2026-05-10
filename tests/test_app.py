@@ -26,6 +26,46 @@ def _client(config: dict | None = None):
     return app.create_app(app_config).test_client()
 
 
+def _client_with_sales(config: dict | None = None):
+    """Create a test client pre-seeded with enough sales data to produce forecast rows."""
+    from src.backend.database import get_db
+    db_base = _isolated_db_base()
+    db = get_db(db_base)
+    with db.get_connection() as conn:
+        for m, d in [(3, 10), (3, 25), (4, 12), (4, 28)]:
+            conn.execute(
+                "INSERT INTO sales_records "
+                "(order_date, customer_name, product_code, product_name, quantity, unit_price, amount) "
+                "VALUES (?, 'A客戶', 'P1', '商品A', 20, 100.0, 2000.0)",
+                (f"2026-{m:02d}-{d:02d}",),
+            )
+        conn.commit()
+    app_config = {"TESTING": True, "DB_BASE_PATH": db_base}
+    app_config.update(config or {})
+    return app.create_app(app_config).test_client()
+
+
+def _seed_sales_from_legacy_df(db_base: Path, data: pd.DataFrame) -> None:
+    """Seed sales_records from a Chinese-column DataFrame (converts legacy test data to DB rows)."""
+    from src.backend.database import get_db
+    db = get_db(db_base)
+    with db.get_connection() as conn:
+        for _, row in data.iterrows():
+            year, month, day = int(row["年"]), int(row["月"]), int(row["日"])
+            conn.execute(
+                "INSERT INTO sales_records "
+                "(order_date, customer_name, product_code, product_name, quantity, unit_price, amount) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    f"{year:04d}-{month:02d}-{day:02d}",
+                    str(row["客戶簡稱"]), str(row["商品號"]),
+                    str(row.get("商品簡稱", "")),
+                    float(row["銷+贈S量"]), float(row["單價NT(淨)"]), float(row["含稅總額(淨)"]),
+                ),
+            )
+        conn.commit()
+
+
 def test_homepage_loads_dashboard():
     client = _client()
 
@@ -85,28 +125,15 @@ def test_forecast_reuses_dashboard_context_cache(monkeypatch):
     assert calls["count"] == 1
 
 
-def test_homepage_data_health_alert_appears_before_progress_hero(monkeypatch):
+def test_homepage_data_health_alert_appears_before_progress_hero():
     db_base_path = _isolated_db_base()
-    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
-    columns = config.required_columns
-    data = pd.DataFrame(
-        [
-            {
-                columns[0]: 2026,
-                columns[1]: 4,
-                columns[2]: 10,
-                columns[3]: "Hospital A",
-                columns[4]: "P1",
-                columns[5]: "Product One",
-                columns[6]: 3,
-                columns[7]: 0,
-                columns[8]: 0,
-            }
-        ]
-    )
-    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
-    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
-    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
+    data = pd.DataFrame([{
+        "年": 2026, "月": 4, "日": 10,
+        "客戶簡稱": "Hospital A", "商品號": "P1", "商品簡稱": "Product One",
+        "銷+贈S量": 3, "單價NT(淨)": 0, "含稅總額(淨)": 0,
+    }])
+    _seed_sales_from_legacy_df(db_base_path, data)
+    client = _client({"DB_BASE_PATH": db_base_path})
 
     response = client.get("/")
     html = response.get_data(as_text=True)
@@ -117,7 +144,7 @@ def test_homepage_data_health_alert_appears_before_progress_hero(monkeypatch):
 
 
 def test_forecast_page_renders_forecast_review_assets_and_tools():
-    client = _client()
+    client = _client_with_sales()
 
     response = client.get("/forecast")
     html = response.get_data(as_text=True)
@@ -197,7 +224,7 @@ def test_dashboard_copy_does_not_render_mojibake():
 
 
 def test_rendered_pages_do_not_show_mojibake():
-    client = _client()
+    client = _client_with_sales()
 
     forecast = client.get("/forecast").get_data(as_text=True)
     product_monitor = client.get("/monitor/products").get_data(as_text=True)
@@ -234,7 +261,7 @@ def test_dashboard_period_inputs_target_metrics_zone():
 
 
 def test_patch_forecast_row_updates_adjustment_and_returns_row_fragment():
-    client = _client()
+    client = _client_with_sales()
     page = client.get("/forecast").get_data(as_text=True)
     row_id = re.search(r'data-row-id="([^"]+)"', page).group(1)
 
@@ -252,7 +279,7 @@ def test_patch_forecast_row_updates_adjustment_and_returns_row_fragment():
 
 
 def test_forecast_page_exposes_customer_filter_and_row_metadata():
-    client = _client()
+    client = _client_with_sales()
 
     response = client.get("/forecast")
     html = response.get_data(as_text=True)
@@ -282,28 +309,15 @@ def test_forecast_page_exposes_view_toggle_for_risk_rows():
     assert ".forecast-table__row--collapsed" in css
 
 
-def test_header_navigation_is_consistent_across_frontend_pages(monkeypatch):
+def test_header_navigation_is_consistent_across_frontend_pages():
     db_base_path = _isolated_db_base()
-    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
-    columns = config.required_columns
-    data = pd.DataFrame(
-        [
-            {
-                columns[0]: 2026,
-                columns[1]: 4,
-                columns[2]: 10,
-                columns[3]: "Hospital A",
-                columns[4]: "P1",
-                columns[5]: "Product One",
-                columns[6]: 3,
-                columns[7]: 100,
-                columns[8]: 0,
-            }
-        ]
-    )
-    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
-    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
-    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
+    data = pd.DataFrame([{
+        "年": 2026, "月": 4, "日": 10,
+        "客戶簡稱": "Hospital A", "商品號": "P1", "商品簡稱": "Product One",
+        "銷+贈S量": 3, "單價NT(淨)": 100, "含稅總額(淨)": 0,
+    }])
+    _seed_sales_from_legacy_df(db_base_path, data)
+    client = _client({"DB_BASE_PATH": db_base_path})
 
     expectations = {
         "/": 'href="/" aria-current="page"',
@@ -413,39 +427,16 @@ def test_templates_use_shared_head_assets_and_no_static_inline_layout():
     assert ".item-code" in css
 
 
-def test_old_exclusions_page_redirects_to_item_management(monkeypatch):
+def test_old_exclusions_page_redirects_to_item_management():
     db_base_path = _isolated_db_base()
-    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
-    columns = config.required_columns
-    data = pd.DataFrame(
-        [
-            {
-                columns[0]: 2026,
-                columns[1]: 4,
-                columns[2]: 10,
-                columns[3]: "Hospital A",
-                columns[4]: "P1",
-                columns[5]: "Product One",
-                columns[6]: 3,
-                columns[7]: 100,
-                columns[8]: 0,
-            },
-            {
-                columns[0]: 2026,
-                columns[1]: 4,
-                columns[2]: 10,
-                columns[3]: "Hospital A",
-                columns[4]: "P2",
-                columns[5]: "Product Two",
-                columns[6]: 5,
-                columns[7]: 200,
-                columns[8]: 0,
-            },
-        ]
-    )
-    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
-    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
-    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
+    data = pd.DataFrame([
+        {"年": 2026, "月": 4, "日": 10, "客戶簡稱": "Hospital A", "商品號": "P1",
+         "商品簡稱": "Product One", "銷+贈S量": 3, "單價NT(淨)": 100, "含稅總額(淨)": 0},
+        {"年": 2026, "月": 4, "日": 10, "客戶簡稱": "Hospital A", "商品號": "P2",
+         "商品簡稱": "Product Two", "銷+贈S量": 5, "單價NT(淨)": 200, "含稅總額(淨)": 0},
+    ])
+    _seed_sales_from_legacy_df(db_base_path, data)
+    client = _client({"DB_BASE_PATH": db_base_path})
 
     response = client.get("/exclusions")
 
@@ -453,39 +444,16 @@ def test_old_exclusions_page_redirects_to_item_management(monkeypatch):
     assert response.headers["Location"].endswith("/settings")
 
 
-def test_item_management_exclusion_is_reflected_on_workbench(monkeypatch):
+def test_item_management_exclusion_is_reflected_on_workbench():
     db_base_path = _isolated_db_base()
-    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
-    columns = config.required_columns
-    data = pd.DataFrame(
-        [
-            {
-                columns[0]: 2026,
-                columns[1]: 4,
-                columns[2]: 10,
-                columns[3]: "Hospital A",
-                columns[4]: "P1",
-                columns[5]: "Product One",
-                columns[6]: 3,
-                columns[7]: 100,
-                columns[8]: 0,
-            },
-            {
-                columns[0]: 2026,
-                columns[1]: 4,
-                columns[2]: 10,
-                columns[3]: "Hospital A",
-                columns[4]: "P2",
-                columns[5]: "Product Two",
-                columns[6]: 5,
-                columns[7]: 200,
-                columns[8]: 0,
-            },
-        ]
-    )
-    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
-    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
-    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
+    data = pd.DataFrame([
+        {"年": 2026, "月": 4, "日": 10, "客戶簡稱": "Hospital A", "商品號": "P1",
+         "商品簡稱": "Product One", "銷+贈S量": 3, "單價NT(淨)": 100, "含稅總額(淨)": 0},
+        {"年": 2026, "月": 4, "日": 10, "客戶簡稱": "Hospital A", "商品號": "P2",
+         "商品簡稱": "Product Two", "銷+贈S量": 5, "單價NT(淨)": 200, "含稅總額(淨)": 0},
+    ])
+    _seed_sales_from_legacy_df(db_base_path, data)
+    client = _client({"DB_BASE_PATH": db_base_path})
 
     response = client.post(
         "/items/save",
@@ -504,34 +472,20 @@ def test_item_management_exclusion_is_reflected_on_workbench(monkeypatch):
     assert re.search(r'data-search="[^"]*Product Two"[^>]*data-excluded="true"', workbench)
 
 
-def test_forecast_page_layers_discontinued_items_below_active_rows(monkeypatch):
+def test_forecast_page_layers_discontinued_items_below_active_rows():
     db_base_path = _isolated_db_base()
-    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
-    columns = config.required_columns
-    data = pd.DataFrame(
-        [
-            {
-                columns[0]: year,
-                columns[1]: month,
-                columns[2]: 10,
-                columns[3]: customer,
-                columns[4]: product_code,
-                columns[5]: product_name,
-                columns[6]: quantity,
-                columns[7]: price,
-                columns[8]: 0,
-            }
-            for year, month, customer, product_code, product_name, quantity, price in (
-                (2026, 2, "Hospital A", "P1", "Product Active", 10, 100),
-                (2026, 3, "Hospital A", "P1", "Product Active", 10, 100),
-                (2026, 4, "Hospital A", "P1", "Product Active", 10, 100),
-                (2025, 5, "Hospital A", "P2", "Product Old", 100, 100),
-            )
-        ]
-    )
-    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
-    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
-    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
+    data = pd.DataFrame([
+        {"年": y, "月": m, "日": 10, "客戶簡稱": c, "商品號": p, "商品簡稱": n,
+         "銷+贈S量": q, "單價NT(淨)": pr, "含稅總額(淨)": 0}
+        for y, m, c, p, n, q, pr in (
+            (2026, 2, "Hospital A", "P1", "Product Active", 10, 100),
+            (2026, 3, "Hospital A", "P1", "Product Active", 10, 100),
+            (2026, 4, "Hospital A", "P1", "Product Active", 10, 100),
+            (2025, 5, "Hospital A", "P2", "Product Old", 100, 100),
+        )
+    ])
+    _seed_sales_from_legacy_df(db_base_path, data)
+    client = _client({"DB_BASE_PATH": db_base_path})
 
     response = client.post(
         "/items/save",
@@ -557,28 +511,15 @@ def test_forecast_page_layers_discontinued_items_below_active_rows(monkeypatch):
     assert forecast.index("Product Active") < forecast.index("已停用品項") < forecast.index("Product Old")
 
 
-def test_settings_page_uses_item_status_without_auxiliary_labels(monkeypatch):
+def test_settings_page_uses_item_status_without_auxiliary_labels():
     db_base_path = _isolated_db_base()
-    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
-    columns = config.required_columns
-    data = pd.DataFrame(
-        [
-            {
-                columns[0]: 2026,
-                columns[1]: 4,
-                columns[2]: 10,
-                columns[3]: "Hospital A",
-                columns[4]: "P1",
-                columns[5]: "Product One",
-                columns[6]: 3,
-                columns[7]: 100,
-                columns[8]: 0,
-            }
-        ]
-    )
-    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
-    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
-    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
+    data = pd.DataFrame([{
+        "年": 2026, "月": 4, "日": 10,
+        "客戶簡稱": "Hospital A", "商品號": "P1", "商品簡稱": "Product One",
+        "銷+贈S量": 3, "單價NT(淨)": 100, "含稅總額(淨)": 0,
+    }])
+    _seed_sales_from_legacy_df(db_base_path, data)
+    client = _client({"DB_BASE_PATH": db_base_path})
 
     settings = client.get("/settings").get_data(as_text=True)
 
@@ -590,29 +531,15 @@ def test_settings_page_uses_item_status_without_auxiliary_labels(monkeypatch):
     assert "status_label_P1" not in settings
 
 
-def test_item_settings_save_price_quantity_and_forecast_uses_it(monkeypatch):
+def test_item_settings_save_price_quantity_and_forecast_uses_it():
     db_base_path = _isolated_db_base()
-    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
-    columns = config.required_columns
-    data = pd.DataFrame(
-        [
-            {
-                columns[0]: 2026,
-                columns[1]: month,
-                columns[2]: 10,
-                columns[3]: "Hospital A",
-                columns[4]: "P1",
-                columns[5]: "Product One",
-                columns[6]: 300,
-                columns[7]: 3200,
-                columns[8]: 0,
-            }
-            for month in (1, 2, 3)
-        ]
-    )
-    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
-    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
-    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
+    data = pd.DataFrame([
+        {"年": 2026, "月": m, "日": 10, "客戶簡稱": "Hospital A", "商品號": "P1",
+         "商品簡稱": "Product One", "銷+贈S量": 300, "單價NT(淨)": 3200, "含稅總額(淨)": 0}
+        for m in (1, 2, 3)
+    ])
+    _seed_sales_from_legacy_df(db_base_path, data)
+    client = _client({"DB_BASE_PATH": db_base_path})
     with sqlite3.connect(db_base_path / "mor_workbench.db") as conn:
         conn.execute(
             """
@@ -651,29 +578,15 @@ def test_item_settings_save_price_quantity_and_forecast_uses_it(monkeypatch):
     assert 'data-price=' in forecast
 
 
-def test_item_settings_save_clears_forecast_context_cache(monkeypatch):
+def test_item_settings_save_clears_forecast_context_cache():
     db_base_path = _isolated_db_base()
-    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
-    columns = config.required_columns
-    data = pd.DataFrame(
-        [
-            {
-                columns[0]: 2026,
-                columns[1]: month,
-                columns[2]: 10,
-                columns[3]: "Hospital A",
-                columns[4]: "P1",
-                columns[5]: "Product One",
-                columns[6]: 100,
-                columns[7]: 1000,
-                columns[8]: 0,
-            }
-            for month in (1, 2, 3)
-        ]
-    )
-    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
-    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
-    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
+    data = pd.DataFrame([
+        {"年": 2026, "月": m, "日": 10, "客戶簡稱": "Hospital A", "商品號": "P1",
+         "商品簡稱": "Product One", "銷+贈S量": 100, "單價NT(淨)": 1000, "含稅總額(淨)": 0}
+        for m in (1, 2, 3)
+    ])
+    _seed_sales_from_legacy_df(db_base_path, data)
+    client = _client({"DB_BASE_PATH": db_base_path})
 
     first_forecast = client.get("/forecast?year=2026&month=4").get_data(as_text=True)
     response = client.post(
@@ -690,29 +603,15 @@ def test_item_settings_save_clears_forecast_context_cache(monkeypatch):
     assert "Product One" not in second_forecast
 
 
-def test_unbudgeted_item_has_no_budget_target_on_forecast_page(monkeypatch):
+def test_unbudgeted_item_has_no_budget_target_on_forecast_page():
     db_base_path = _isolated_db_base()
-    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
-    columns = config.required_columns
-    data = pd.DataFrame(
-        [
-            {
-                columns[0]: 2026,
-                columns[1]: month,
-                columns[2]: 10,
-                columns[3]: "Hospital A",
-                columns[4]: "P1",
-                columns[5]: "Product One",
-                columns[6]: 100,
-                columns[7]: 1000,
-                columns[8]: 0,
-            }
-            for month in (1, 2, 3)
-        ]
-    )
-    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
-    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
-    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
+    data = pd.DataFrame([
+        {"年": 2026, "月": m, "日": 10, "客戶簡稱": "Hospital A", "商品號": "P1",
+         "商品簡稱": "Product One", "銷+贈S量": 100, "單價NT(淨)": 1000, "含稅總額(淨)": 0}
+        for m in (1, 2, 3)
+    ])
+    _seed_sales_from_legacy_df(db_base_path, data)
+    client = _client({"DB_BASE_PATH": db_base_path})
     with sqlite3.connect(db_base_path / "mor_workbench.db") as conn:
         conn.execute(
             """
@@ -784,7 +683,7 @@ def test_adjustment_save_migrates_old_database_without_updated_by():
 
 
 def test_forecast_page_renders_review_validation_and_accessibility_hooks():
-    client = _client()
+    client = _client_with_sales()
 
     response = client.get("/forecast")
     html = response.get_data(as_text=True)
@@ -825,7 +724,7 @@ def test_adjustment_save_manual_quantity_as_integer():
 
 
 def test_forecast_rows_expose_dashboard_jump_anchor():
-    client = _client()
+    client = _client_with_sales()
 
     response = client.get("/forecast")
     html = response.get_data(as_text=True)
@@ -911,40 +810,27 @@ def test_dashboard_css_uses_bem_class_names():
     assert "forecast-table__row--collapsed" in css
 
 
-def test_homepage_shows_friendly_error_for_missing_data_file():
-    missing_base = Path.cwd() / "__missing_sales_data__"
-    client = _client({"DATA_BASE_PATH": missing_base})
+def test_homepage_loads_gracefully_with_empty_db():
+    """DB-first: empty DB produces 200 with no hard error (Excel path irrelevant)."""
+    client = _client()   # isolated empty DB, DATA_BASE_PATH not used for rendering
 
     response = client.get("/")
     html = response.get_data(as_text=True)
 
     assert response.status_code == 200
-    assert 'role="alert"' in html
-    assert "無法產生預估" in html
+    assert "業績總覽" in html   # page structure renders even with no data
 
 
-def test_homepage_exposes_unrendered_total_when_rows_are_limited(monkeypatch):
-    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales", visible_row_limit=1)
+def test_homepage_exposes_unrendered_total_when_rows_are_limited():
+    config = ForecastConfig(visible_row_limit=1)
     db_base_path = _isolated_db_base()
-    columns = config.required_columns
-    rows = []
-    for customer, product_code in (("A", "P1"), ("B", "P2")):
-        for month in (1, 2, 3):
-            rows.append(
-                {
-                    columns[0]: 2026,
-                    columns[1]: month,
-                    columns[2]: 15,
-                    columns[3]: customer,
-                    columns[4]: product_code,
-                    columns[5]: f"Product {product_code}",
-                    columns[6]: 10,
-                    columns[7]: 100,
-                columns[8]: 0,
-                }
-            )
-    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config, db=None: pd.DataFrame(rows))
-    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config, db=None: pd.DataFrame(rows))
+    data = pd.DataFrame([
+        {"年": 2026, "月": m, "日": 15, "客戶簡稱": c, "商品號": p,
+         "商品簡稱": f"Product {p}", "銷+贈S量": 10, "單價NT(淨)": 100, "含稅總額(淨)": 0}
+        for c, p in (("A", "P1"), ("B", "P2"))
+        for m in (1, 2, 3)
+    ])
+    _seed_sales_from_legacy_df(db_base_path, data)
     client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
     with sqlite3.connect(db_base_path / "mor_workbench.db") as conn:
         conn.execute(
@@ -965,38 +851,16 @@ def test_homepage_exposes_unrendered_total_when_rows_are_limited(monkeypatch):
     assert "1 / 2" in html
 
 
-def test_product_monitor_page_renders_drop_table(monkeypatch):
-    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
-    columns = config.required_columns
-    data = pd.DataFrame(
-        [
-            {
-                columns[0]: 2025,
-                columns[1]: 5,
-                columns[2]: 10,
-                columns[3]: "Hospital A",
-                columns[4]: "P1",
-                columns[5]: "ELI 22.5癌立佳",
-                columns[6]: 100,
-                columns[7]: 100,
-                columns[8]: 0,
-            },
-            {
-                columns[0]: 2026,
-                columns[1]: 4,
-                columns[2]: 10,
-                columns[3]: "Hospital A",
-                columns[4]: "P1",
-                columns[5]: "ELI 22.5癌立佳",
-                columns[6]: 40,
-                columns[7]: 100,
-                columns[8]: 0,
-            },
-        ]
-    )
-    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
-    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
-    client = _client({"FORECAST_CONFIG": config})
+def test_product_monitor_page_renders_drop_table():
+    db_base_path = _isolated_db_base()
+    data = pd.DataFrame([
+        {"年": 2025, "月": 5, "日": 10, "客戶簡稱": "Hospital A", "商品號": "P1",
+         "商品簡稱": "ELI 22.5癌立佳", "銷+贈S量": 100, "單價NT(淨)": 100, "含稅總額(淨)": 0},
+        {"年": 2026, "月": 4, "日": 10, "客戶簡稱": "Hospital A", "商品號": "P1",
+         "商品簡稱": "ELI 22.5癌立佳", "銷+贈S量": 40, "單價NT(淨)": 100, "含稅總額(淨)": 0},
+    ])
+    _seed_sales_from_legacy_df(db_base_path, data)
+    client = _client({"DB_BASE_PATH": db_base_path})
 
     response = client.get("/monitor/products?year=2026&month=5")
     html = response.get_data(as_text=True)
@@ -1015,28 +879,15 @@ def test_product_monitor_page_renders_drop_table(monkeypatch):
     assert "data-monitor-search" in html
 
 
-def test_settings_page_renders_item_config_and_data_checks(monkeypatch):
+def test_settings_page_renders_item_config_and_data_checks():
     db_base_path = _isolated_db_base()
-    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
-    columns = config.required_columns
-    data = pd.DataFrame(
-        [
-            {
-                columns[0]: 2026,
-                columns[1]: 4,
-                columns[2]: 10,
-                columns[3]: "Hospital A",
-                columns[4]: "P1",
-                columns[5]: "Product One",
-                columns[6]: 3,
-                columns[7]: 0,
-                columns[8]: 0,
-            }
-        ]
-    )
-    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
-    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
-    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
+    data = pd.DataFrame([{
+        "年": 2026, "月": 4, "日": 10,
+        "客戶簡稱": "Hospital A", "商品號": "P1", "商品簡稱": "Product One",
+        "銷+贈S量": 3, "單價NT(淨)": 0, "含稅總額(淨)": 0,
+    }])
+    _seed_sales_from_legacy_df(db_base_path, data)
+    client = _client({"DB_BASE_PATH": db_base_path})
 
     response = client.get("/settings")
     html = response.get_data(as_text=True)
@@ -1052,28 +903,15 @@ def test_settings_page_renders_item_config_and_data_checks(monkeypatch):
     assert "儲存設定" in html
 
 
-def test_dashboard_omits_zero_budget_notice_but_keeps_price_warning(monkeypatch):
+def test_dashboard_omits_zero_budget_notice_but_keeps_price_warning():
     db_base_path = _isolated_db_base()
-    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
-    columns = config.required_columns
-    data = pd.DataFrame(
-        [
-            {
-                columns[0]: 2026,
-                columns[1]: 4,
-                columns[2]: 10,
-                columns[3]: "Hospital A",
-                columns[4]: "P1",
-                columns[5]: "Product One",
-                columns[6]: 3,
-                columns[7]: 0,
-                columns[8]: 0,
-            }
-        ]
-    )
-    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
-    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
-    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
+    data = pd.DataFrame([{
+        "年": 2026, "月": 4, "日": 10,
+        "客戶簡稱": "Hospital A", "商品號": "P1", "商品簡稱": "Product One",
+        "銷+贈S量": 3, "單價NT(淨)": 0, "含稅總額(淨)": 0,
+    }])
+    _seed_sales_from_legacy_df(db_base_path, data)
+    client = _client({"DB_BASE_PATH": db_base_path})
 
     dashboard = client.get("/").get_data(as_text=True)
     settings = client.get("/settings").get_data(as_text=True)
@@ -1093,28 +931,15 @@ def test_items_route_redirects_to_settings():
     assert response.headers["Location"].endswith("/settings")
 
 
-def test_settings_page_exposes_item_search_tools(monkeypatch):
+def test_settings_page_exposes_item_search_tools():
     db_base_path = _isolated_db_base()
-    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
-    columns = config.required_columns
-    data = pd.DataFrame(
-        [
-            {
-                columns[0]: 2026,
-                columns[1]: 4,
-                columns[2]: 10,
-                columns[3]: "Hospital A",
-                columns[4]: "P1",
-                columns[5]: "Product One",
-                columns[6]: 3,
-                columns[7]: 100,
-                columns[8]: 0,
-            }
-        ]
-    )
-    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
-    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
-    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
+    data = pd.DataFrame([{
+        "年": 2026, "月": 4, "日": 10,
+        "客戶簡稱": "Hospital A", "商品號": "P1", "商品簡稱": "Product One",
+        "銷+贈S量": 3, "單價NT(淨)": 100, "含稅總額(淨)": 0,
+    }])
+    _seed_sales_from_legacy_df(db_base_path, data)
+    client = _client({"DB_BASE_PATH": db_base_path})
 
     response = client.get("/settings")
     html = response.get_data(as_text=True)
@@ -1156,7 +981,7 @@ def test_export_accepts_current_forecast_signature():
 
 
 def test_export_workbook_readback_has_expected_tabs_and_totals():
-    client = _client()
+    client = _client_with_sales()
     review_response = client.get("/forecast?year=2026&month=5")
     signature = re.search(
         r'name="forecast_signature" value="([^"]+)"',
@@ -1191,37 +1016,33 @@ def test_export_workbook_readback_has_expected_tabs_and_totals():
     assert summary_values["排除品項數"] == len(excluded_rows)
 
 
-def test_export_rejects_stale_forecast_signature(monkeypatch):
-    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales", visible_row_limit=1)
-    columns = config.required_columns
+def test_export_rejects_stale_forecast_signature():
+    """Stale signature: add a forecast adjustment between review and export to change the forecast."""
+    config = ForecastConfig(visible_row_limit=1)
+    db_base_path = _isolated_db_base()
+    # Seed two customers so there are at least 2 forecast rows
+    data = pd.DataFrame([
+        {"年": 2026, "月": m, "日": 15, "客戶簡稱": c, "商品號": p,
+         "商品簡稱": f"Product {p}", "銷+贈S量": 10, "單價NT(淨)": 100, "含稅總額(淨)": 0}
+        for c, p in (("A", "P1"), ("B", "P2"))
+        for m in (1, 2, 3)
+    ])
+    _seed_sales_from_legacy_df(db_base_path, data)
+    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
 
-    def make_rows(second_customer_quantity):
-        rows = []
-        for customer, product_code, quantity in (("A", "P1", 10), ("B", "P2", second_customer_quantity)):
-            for month in (1, 2, 3):
-                rows.append(
-                    {
-                        columns[0]: 2026,
-                        columns[1]: month,
-                        columns[2]: 15,
-                        columns[3]: customer,
-                        columns[4]: product_code,
-                        columns[5]: f"Product {product_code}",
-                        columns[6]: quantity,
-                        columns[7]: 100,
-                columns[8]: 0,
-                    }
-                )
-        return pd.DataFrame(rows)
+    # GET /forecast — capture signature
+    review_response = client.get("/forecast?year=2026&month=4")
+    signature = re.search(
+        r'name="forecast_signature" value="([^"]+)"',
+        review_response.get_data(as_text=True),
+    ).group(1)
 
-    loaded_data = [make_rows(10)]
-    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config, db=None: loaded_data[-1])
-    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config, db=None: loaded_data[-1])
-    client = _client({"FORECAST_CONFIG": config})
-
-    review_response = client.get("/forecast")
-    signature = re.search(r'name="forecast_signature" value="([^"]+)"', review_response.get_data(as_text=True)).group(1)
-    loaded_data.append(make_rows(99))
+    # Mutate B__P2 forecast via adjustment → cache clears → new signature on next build
+    client.patch(
+        "/forecast/row/B__P2",
+        data={"year": "2026", "month": "4", "qty": "99"},
+        content_type="application/x-www-form-urlencoded",
+    )
 
     export_response = client.post(
         "/export",
@@ -1282,39 +1103,16 @@ def _daily_import_workbook() -> BytesIO:
     return stream
 
 
-def test_product_monitor_import_route_stores_daily_actuals(monkeypatch):
+def test_product_monitor_import_route_stores_daily_actuals():
     db_base_path = _isolated_db_base()
-    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
-    columns = config.required_columns
-    data = pd.DataFrame(
-        [
-            {
-                columns[0]: 2025,
-                columns[1]: 5,
-                columns[2]: 10,
-                columns[3]: "Hospital A",
-                columns[4]: "P1",
-                columns[5]: "Product One",
-                columns[6]: 10,
-                columns[7]: 100,
-                columns[8]: 0,
-            },
-            {
-                columns[0]: 2026,
-                columns[1]: 4,
-                columns[2]: 10,
-                columns[3]: "Hospital A",
-                columns[4]: "P1",
-                columns[5]: "Product One",
-                columns[6]: 3,
-                columns[7]: 100,
-                columns[8]: 0,
-            },
-        ]
-    )
-    monkeypatch.setattr(app, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
-    monkeypatch.setattr(operational_views, "load_sales_detail", lambda base_path, forecast_config, db=None: data)
-    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
+    data = pd.DataFrame([
+        {"年": 2025, "月": 5, "日": 10, "客戶簡稱": "Hospital A", "商品號": "P1",
+         "商品簡稱": "Product One", "銷+贈S量": 10, "單價NT(淨)": 100, "含稅總額(淨)": 0},
+        {"年": 2026, "月": 4, "日": 10, "客戶簡稱": "Hospital A", "商品號": "P1",
+         "商品簡稱": "Product One", "銷+贈S量": 3, "單價NT(淨)": 100, "含稅總額(淨)": 0},
+    ])
+    _seed_sales_from_legacy_df(db_base_path, data)
+    client = _client({"DB_BASE_PATH": db_base_path})
 
     response = client.post(
         "/monitor/products/import",
@@ -1340,18 +1138,14 @@ def test_product_monitor_page_exposes_daily_sales_import_form():
     assert "系統將依欄位格式判斷資料，不限制檔名。" in html
 
 
-def test_close_month_route_creates_record_and_blocks_reimport(monkeypatch):
+def test_close_month_route_creates_record_and_blocks_reimport():
     db_base_path = _isolated_db_base()
-    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
-    columns = config.required_columns
     data = pd.DataFrame([{
-        columns[0]: 2025, columns[1]: 5, columns[2]: 10,
-        columns[3]: "Hospital A", columns[4]: "P1", columns[5]: "Product One",
-        columns[6]: 10, columns[7]: 100, columns[8]: 0,
+        "年": 2025, "月": 5, "日": 10, "客戶簡稱": "Hospital A", "商品號": "P1",
+        "商品簡稱": "Product One", "銷+贈S量": 10, "單價NT(淨)": 100, "含稅總額(淨)": 0,
     }])
-    monkeypatch.setattr(app, "load_sales_detail", lambda *_: data)
-    monkeypatch.setattr(operational_views, "load_sales_detail", lambda *_: data)
-    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
+    _seed_sales_from_legacy_df(db_base_path, data)
+    client = _client({"DB_BASE_PATH": db_base_path})
 
     # Import May 2026 data
     client.post(
@@ -1386,19 +1180,15 @@ def test_monthly_review_page_loads_without_data():
     assert "尚無結月資料" in html
 
 
-def test_close_month_auto_saves_forecast_snapshot(monkeypatch):
+def test_close_month_auto_saves_forecast_snapshot():
     """結月路由應自動儲存最終預估快照，供 Phase 7 月底檢討頁使用。"""
     db_base_path = _isolated_db_base()
-    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
-    columns = config.required_columns
     data = pd.DataFrame([{
-        columns[0]: 2025, columns[1]: 5, columns[2]: 10,
-        columns[3]: "Hospital A", columns[4]: "P1", columns[5]: "Product One",
-        columns[6]: 10, columns[7]: 100, columns[8]: 0,
+        "年": 2025, "月": 5, "日": 10, "客戶簡稱": "Hospital A", "商品號": "P1",
+        "商品簡稱": "Product One", "銷+贈S量": 10, "單價NT(淨)": 100, "含稅總額(淨)": 0,
     }])
-    monkeypatch.setattr(app, "load_sales_detail", lambda *_: data)
-    monkeypatch.setattr(operational_views, "load_sales_detail", lambda *_: data)
-    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
+    _seed_sales_from_legacy_df(db_base_path, data)
+    client = _client({"DB_BASE_PATH": db_base_path})
 
     client.post(
         "/monitor/products/import",
@@ -1420,18 +1210,14 @@ def test_close_month_auto_saves_forecast_snapshot(monkeypatch):
     assert len(items) >= 1  # at least one forecast row saved
 
 
-def test_product_monitor_shows_close_button_after_import(monkeypatch):
+def test_product_monitor_shows_close_button_after_import():
     db_base_path = _isolated_db_base()
-    config = ForecastConfig(detail_file="sales.xlsx", detail_sheet="Sales")
-    columns = config.required_columns
     data = pd.DataFrame([{
-        columns[0]: 2025, columns[1]: 5, columns[2]: 10,
-        columns[3]: "Hospital A", columns[4]: "P1", columns[5]: "Product One",
-        columns[6]: 10, columns[7]: 100, columns[8]: 0,
+        "年": 2025, "月": 5, "日": 10, "客戶簡稱": "Hospital A", "商品號": "P1",
+        "商品簡稱": "Product One", "銷+贈S量": 10, "單價NT(淨)": 100, "含稅總額(淨)": 0,
     }])
-    monkeypatch.setattr(app, "load_sales_detail", lambda *_: data)
-    monkeypatch.setattr(operational_views, "load_sales_detail", lambda *_: data)
-    client = _client({"FORECAST_CONFIG": config, "DB_BASE_PATH": db_base_path})
+    _seed_sales_from_legacy_df(db_base_path, data)
+    client = _client({"DB_BASE_PATH": db_base_path})
 
     client.post(
         "/monitor/products/import",
