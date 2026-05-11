@@ -18,64 +18,19 @@ Make MOR a compact multi-page operating tool:
 
 ---
 
-## Frontend Improvement Plan
+## Future Backlog
 
-Staged fixes identified from architecture review on 2026-05-09. Do not start a later phase before completing the current one.
+Keep this list short. Move large implementation plans to `docs/archive/plans/` once their decisions are absorbed into active docs.
 
-### Phase 1 — Correctness (Bug Risk) `priority: high`
+1. Split `operational_views.py` into smaller dashboard, monitor, settings, and forecast context services.
+2. Replace inline SQLite schema migrations in `database.py` with a clearer migration convention.
+3. Stabilize row identity beyond `customer + "__" + product_code` before adding customer-code workflows.
+4. Add focused route guards for any new request-time data path to keep normal pages DB-first.
 
-These have actual incorrect behaviour under normal usage.
+## Archived Plans
 
-- [x] **Unify row visibility into one mechanism.**
-  Currently three competing systems exist in the forecast table:
-  `row.hidden` (search/status filter in `recalculate`),
-  `tr.style.display` (customer dropdown in `filterRows`), and
-  `.forecast-table__row--collapsed` (anomaly view toggle in `applyViewMode`).
-  They can layer in unpredictable order; total and count displays show wrong values when more than one filter is active simultaneously.
-  Fix: fold `filterRows` into `recalculate` state using a `data-customer` dataset check, and fold `applyViewMode` into the same visible-flag logic, so a single `row.hidden = !visible` pass controls everything.
-
-- [x] **Replace positional `nth-child` column-group borders with class selectors.**
-  `mor.css` lines 921–926 use `tbody td:nth-child(9)` and `tbody td:nth-child(13)` for group dividers.
-  Adding or removing any column silently shifts the borders to the wrong columns.
-  Fix: add `col-group-start` class to the relevant `<td>` cells in `_forecast_row.html` (already applied to `<th>` in the header) and remove the `nth-child` rules.
-
-### Phase 2 — Consistency (Design System Integrity) `priority: medium`
-
-These do not break behaviour but will cause agent and dev errors over time.
-
-- [x] **Sync DESIGN.md token values with `mor.css`.**
-  `DESIGN.md` lists `--ink: #16202a` but `mor.css` uses `#0f172a`. Several tokens in the
-  "Recommended additions" block have since been implemented in CSS but the doc still marks them as suggestions.
-  Fix: update `DESIGN.md` Section 2 to reflect the actual token values in `mor.css`; remove the split between "current" and "recommended" since all tokens now exist.
-
-- [x] **Move hardcoded hover colour into design token.**
-  `mor.css` line 511: `background-color: #eef6ff` (blue tint) is the only hardcoded colour
-  outside the token system. It conflicts with the teal accent identity.
-  Fix: add `--row-hover: #eef6ff` (or convert to an accent-based tint) to `:root` and reference it in the hover rule.
-
-### Phase 3 — Maintainability `priority: low`
-
-Clean-up that makes future changes safer and faster.
-
-- [x] **Unify customer dropdown with the main filter path.**
-  The customer `<select>` fires `filterRows()` which bypasses `recalculate()`.
-  After Phase 1 is done, fold the customer value into the unified visibility check so search,
-  status, customer, and anomaly-only all go through one pass.
-
-- [x] **Extract `<thead>` into a shared partial.**
-  Created `templates/_forecast_thead.html`; both main and discontinued tables now include it.
-  Also fixed a latent bug: the discontinued thead was missing `col-group-start` on 最後預估 (Phase 1
-  replace_all missed it due to different indentation depth).
-
-- [x] **Audit HTMX usage; remove if not actively used.**
-  HTMX is actively used in two places — keep the script tag on all pages:
-  1. `_forecast_row.html` — `hx-patch` on qty/reason inputs replaces the row `outerHTML` on `change`.
-  2. `_header.html` — `hx-get="/dashboard/metrics"` refreshes the metrics zone when the period selector changes.
-  3. `_dashboard_metrics.html` — `htmx-indicator` shows a loading state during the metrics fetch.
-
-  Follow-up fixed on 2026-05-10: `forecast-table.js` now binds row events through an idempotent
-  `bindForecastRow()` path and rebinds swapped rows via `htmx:afterSwap`, so `hx-swap="outerHTML"`
-  keeps input recalculation, row detail, and restore interactions working after replacement.
+Completed or superseded implementation plans now live in `docs/archive/plans/`.
+Do not read archived plans for implementation context unless explicitly researching history.
 
 ## Working Rules
 
