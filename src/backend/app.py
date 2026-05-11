@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import calendar
 import hashlib
+import logging
 from dataclasses import replace
 from datetime import date
 from pathlib import Path
@@ -44,6 +45,8 @@ from src.backend.snapshot_service import (
     save_snapshot,
 )
 
+
+logger = logging.getLogger(__name__)
 
 BASE_PATH = Path(__file__).resolve().parent
 
@@ -276,7 +279,7 @@ def create_app(config: dict | None = None) -> Flask:
     @app.get("/monitor/products")
     def product_monitor() -> str:
         try:
-            context = build_forecast_page_context(data_base_path, forecast_config, db, request.args)
+            context = _load_context_from_request()
             error_message = None
         except (FileNotFoundError, ValueError, FormValidationError) as exc:
             context = None
@@ -325,8 +328,9 @@ def create_app(config: dict | None = None) -> Flask:
                 }
                 for r in ctx.summary.rows
             ]
-        except Exception:
-            snapshot_rows = []
+        except Exception as exc:
+            logger.error("結月快照自動建立失敗 %d/%02d: %s", year, month, exc, exc_info=True)
+            raise
         return save_snapshot(
             db, year, month,
             f"結月快照 {year}/{month:02d}", "CloseMonth",
