@@ -115,29 +115,29 @@ Issues identified from architecture review on 2026-05-11. Work top-to-bottom wit
 
 ### Phase 3 — Maintainability `priority: low`
 
-- [ ] **`build_forecast_page_context` 是 god function。**
+- [ ] **`build_forecast_page_context` 是 god function。** (intentionally deferred — requires larger refactor)
   單一函式包含：載入資料、建立預測、套用調整、計算 dashboard、計算 monitor rows、
   計算 projections、取得 items，共 60+ 行呼叫 10+ 個函式，幾乎無法對單一步驟寫單元測試。
   Fix: 拆成 `_build_summary()`、`_build_monitor()`、`_build_health()` 等獨立步驟，
   `build_forecast_page_context` 變成純組裝。
 
-- [ ] **`export` 路由保留無文件的 legacy 欄位名稱相容邏輯。**
+- [x] **`export` 路由保留無文件的 legacy 欄位名稱相容邏輯。**
   `legacy_manual_adjustments` 的 merge 路徑沒有說明是誰在用，造成兩條平行的
   form 解析路徑。Fix: 確認前端不再送舊格式後移除 legacy merge 邏輯。
 
-- [ ] **`save_items` 路由直接內嵌 SQL 邏輯。**
+- [x] **`save_items` 路由直接內嵌 SQL 邏輯。**
   與「routes 薄、邏輯在 service」的設計方向不一致，若之後要加測試會是瓶頸。
   Fix: 抽出 `update_item_configs(db, items)` service function，路由只解 form 和呼叫它。
 
-- [ ] **`upload_current_month` 有 inline import。**
+- [x] **`upload_current_month` 有 inline import。**
   `from src.backend.etl import import_current_month` 在函式體內才 import，
   與其他路由的 top-level import 不一致。Fix: 移至檔案頂部。
 
-- [ ] **`monthly_review` 的 except 是冗餘的。**
+- [x] **`monthly_review` 的 except 是冗餘的。**
   `except (ValueError, Exception)` 中 `Exception` 已涵蓋 `ValueError`，多寫反而誤導。
   Fix: 改為 `except Exception`。
 
-- [ ] **`load_item_configs` 迴圈跑兩次 rows。**
+- [x] **`load_item_configs` 迴圈跑兩次 rows。**
   先建 dict，再對同一個 `rows` 第二次迴圈補 normalized code alias，可以合在一個 pass。
   Fix: 在第一個迴圈內同時處理 normalized key。
 

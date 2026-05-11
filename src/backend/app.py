@@ -26,6 +26,7 @@ from src.backend.operational_views import (
     last_year_amount_total,
     recalculate_forecast_amounts,
     build_status_distribution,
+    update_item_configs,
 )
 from src.backend.web.form_parser import FormValidationError, parse_manual_quantities, parse_target_period
 from src.backend.web.forecast_presenter import product_display_name
@@ -36,7 +37,7 @@ from src.backend.daily_sales_importer import (
     import_daily_sales_workbook,
 )
 from src.backend.database import get_db
-from src.backend.etl import sync_excel_to_db
+from src.backend.etl import import_current_month, sync_excel_to_db
 from src.backend.snapshot_service import (
     delete_snapshot,
     is_finalized,
@@ -390,8 +391,6 @@ def create_app(config: dict | None = None) -> Flask:
             )
             summary = context.summary
             manual_adjustments = parse_manual_quantities(request.form, key_prefix="manual_adjustment__", type_cast=int)
-            legacy_manual_adjustments = parse_manual_quantities(request.form, type_cast=int)
-            manual_adjustments = {**legacy_manual_adjustments, **manual_adjustments}
             adjustment_reasons = parse_manual_quantities(request.form, key_prefix="adjustment_reason__", type_cast=str)
 
             _validate_submitted_row_ids(summary, set(manual_adjustments))
@@ -455,7 +454,7 @@ def create_app(config: dict | None = None) -> Flask:
         if year and month:
             try:
                 summary = build_monthly_review(db, year, month)
-            except (ValueError, Exception) as exc:
+            except Exception as exc:
                 error_message = str(exc)
         return render_template(
             "monthly_review.html",
@@ -473,31 +472,22 @@ def create_app(config: dict | None = None) -> Flask:
     @app.post("/items/save")
     def save_items() -> Response:
         product_codes = request.form.getlist("product_codes")
-        with db.get_connection() as conn:
-            for pid in product_codes:
-                pid = normalize_product_code(pid)
-                is_excluded = 1 if request.form.get(f"is_excluded_{pid}") == "1" else 0
-                is_budgeted = 1 if request.form.get(f"is_budgeted_{pid}") == "1" else 0
-                is_visible = 1 if request.form.get(f"is_visible_{pid}") == "1" else 0
-                try:
-                    price_quantity = int(float(request.form.get(f"price_quantity_{pid}") or 0))
-                except ValueError:
-                    price_quantity = 0
-                item_status = request.form.get(f"item_status_{pid}")
-                if item_status not in {"active", "discontinued"}:
-                    item_status = "active"
-                
-                conn.execute("""
-                    INSERT OR IGNORE INTO item_configs
-                    (product_code, is_excluded, is_budgeted, is_visible, price_quantity, item_status, status_label, custom_category)
-                    VALUES (?, 0, 1, 1, 0, 'active', NULL, NULL)
-                """, (pid,))
-                conn.execute("""
-                    UPDATE item_configs
-                    SET is_excluded = ?, is_budgeted = ?, is_visible = ?, price_quantity = ?, item_status = ?
-                    WHERE product_code = ?
-                """, (is_excluded, is_budgeted, is_visible, price_quantity, item_status, pid))
-            conn.commit()
+        items = []
+        for pid in product_codes:
+            pid = normalize_product_code(pid)
+            try:
+                price_quantity = int(float(request.form.get(f"price_quantity_{pid}") or 0))
+            except ValueError:
+                price_quantity = 0
+            items.append({
+                "product_code":  pid,
+                "is_excluded":   request.form.get(f"is_excluded_{pid}") == "1",
+                "is_budgeted":   request.form.get(f"is_budgeted_{pid}") == "1",
+                "is_visible":    request.form.get(f"is_visible_{pid}") == "1",
+                "price_quantity": price_quantity,
+                "item_status":   request.form.get(f"item_status_{pid}", "active"),
+            })
+        update_item_configs(db, items)
         _invalidate_all_context_cache()
         return settings()
 
@@ -525,7 +515,6 @@ def create_app(config: dict | None = None) -> Flask:
         上傳後清除 cache，讓下次頁面請求重新合併當月資料。
         支援重複上傳：每次只取代 SHPB 涵蓋的年月，歷史資料不受影響。
         """
-        from src.backend.etl import import_current_month
         file = request.files.get("file")
         if not file or not file.filename:
             return "請選擇檔案", 400
@@ -548,9 +537,6 @@ def create_app(config: dict | None = None) -> Flask:
         if not row_id or year is None or month is None:
             return Response("Missing required fields", status=400)
 
-        # Parse row_id back to customer/product if needed, but it's easier to store as is 
-        # or use the year/month/customer/product key.
-        # Our row_id is currently "{customer}__{product_code}"
         try:
             _save_row_override(row_id, manual_qty, reason, year, month)
         except FormValidationError:
