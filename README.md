@@ -12,17 +12,20 @@ MOR 是一套本地端 Flask 應用程式，用於月度銷售業績預估。它
 - **結月檢討**：匯入每日業績、結月後鎖定實績與快照，並在月底檢討頁比較實績、預估、預算與去年同期。
 - **資料檢核**：設定頁集中管理品項規則，並顯示預算缺漏、零單價、去年同期缺資料等健康檢查。
 
-## 目前架構狀態（2026-05-10）
+## 目前架構狀態（2026-05-11）
 
-- MOR 目前是 Flask + Jinja + vanilla JS 的本地操作型工作台，資料密度與表格操作優先。
-- `src/backend/app.py` 是主要路由編排層；預估、呈現、匯入、快照、結月與檢討邏輯已拆到 backend service。
+- MOR 目前是 Flask + Jinja + vanilla JS 的本地多頁營運工具，資料密度與表格操作優先。
+- 一般頁面請求與匯出已轉成 **DB-first**：`/`、`/forecast`、`/monitor/products`、`/settings`、`/monthly-review`、row patch、snapshot、export 都以 `mor_workbench.db` 為主要資料來源。
+- Excel 現在是匯入 / 同步來源，不是一般 request-time 讀取來源。允許讀 Excel 的路徑主要是 `/sync`、`/upload/current-month`、`/monitor/products/import` 與測試 fixtures。
 - `mor_workbench.db` 是目前工作台狀態中心，保存歷史業績、當月累積、預算、品項規則、人工調整、快照、每日實績與結月紀錄。
-- 主流程是 `build_forecast_page_context()` 組合 Excel / SQLite 資料，產生 `ForecastSummary`，再供 Dashboard、產品監控、預估調整、匯出與 analytics 使用。
-- 主要技術債在 `ROADMAP.md`：完成多頁瀏覽器驗證、強化預算 mapping 資料健康檢查，並評估後續客戶 / 產品視角頁。
+- `load_sales_detail_from_db(db)` 會合併 `sales_records` 與 `current_month_records`，再轉成 forecast engine 仍沿用的 normalized DataFrame shape。
+- `build_forecast_page_context()` 是目前主要組裝點：讀 DB、套用 item config、manual adjustment、budget、history、daily actual、projection，最後產生 Dashboard、產品監控、預估調整、設定頁與匯出需要的 context。
+- `forecast_engine.py` 維持可測的核心 forecast 計算；`exporter.py` 只接收完成後的 `ForecastSummary` 產生 Excel。
+- 目前待收斂的架構債：`src/backend/app.py` routes 偏厚、`operational_views.py` 承擔太多 service 職責、SQLite migration 仍集中在 `database.py` 的 inline `ALTER TABLE`，後續應分批拆小。
 
 ## 系統架構
 
-此架構圖反映目前實作狀態。Excel 與上傳檔先經 ETL / importer 寫入或合併到 SQLite，`operational_views.py` 再把預估、預算、品項設定、每日實績、快照與工作日資料組成頁面上下文。Flask route 保持薄層，負責導頁、表單解析、服務呼叫與回應。
+此架構圖反映目前實作狀態。Excel 與 SHPB 上傳檔先經 ETL / importer 寫入 SQLite；一般頁面與匯出再從 SQLite 讀取。`operational_views.py` 目前負責把預估、預算、品項設定、每日實績、快照與工作日資料組成頁面上下文。Flask route 應維持薄層，負責導頁、表單解析、服務呼叫與回應。
 
 ```mermaid
 flowchart TD
@@ -46,7 +49,7 @@ flowchart TD
     subgraph data["Data + Persistence"]
         etl["etl.py<br/>業績 / 預算同步"]
         daily["daily_sales_importer.py<br/>每日業績匯入 / 結月"]
-        loader["data_loader.py<br/>Excel + DB 合併載入"]
+        loader["data_loader.py<br/>DB 請求載入 / Excel ETL helper"]
         validator["data_validator.py<br/>資料檢核"]
         db["database.py<br/>mor_workbench.db"]
         history["history_service.py / snapshot_service.py<br/>歷史補值與預估快照"]

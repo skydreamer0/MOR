@@ -41,7 +41,7 @@ Current-month cumulative sales — populated by SHPB upload, replaced per month 
 | Column | Type | Notes |
 |---|---|---|
 | id | INTEGER PK AUTOINCREMENT | |
-| order_date | DATETIME | stored as `'YYYY-MM-DD HH:MM:SS'` |
+| order_date | DATE NOT NULL | stored as date/datetime text accepted by pandas mixed parsing |
 | customer_name | TEXT NOT NULL | |
 | product_code | TEXT NOT NULL | |
 | product_name | TEXT | |
@@ -103,38 +103,74 @@ PK: `(year, month, customer_name, product_code)`
 
 ## Operational Tables
 
+### `daily_import_batches`
+One row per daily sales import workbook.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | INTEGER PK AUTOINCREMENT | |
+| source_filename | TEXT NOT NULL | |
+| source_hash | TEXT NOT NULL | |
+| sales_year | INTEGER NOT NULL | |
+| sales_month | INTEGER NOT NULL | |
+| imported_at | TIMESTAMP DEFAULT CURRENT_TIMESTAMP | |
+| row_count | INTEGER DEFAULT 0 | |
+| date_start | DATE | |
+| date_end | DATE | |
+| quantity_total | REAL DEFAULT 0 | |
+| taxed_amount_total | REAL DEFAULT 0 | |
+| status | TEXT DEFAULT `'success'` | |
+| message | TEXT | |
+
 ### `daily_sales_actuals`
 Current-month daily sales imported from monitor workbooks.
 
 | Column | Type |
 |---|---|
-| id | INTEGER PK |
-| import_batch_id | INTEGER |
-| sales_year | INTEGER |
-| sales_month | INTEGER |
-| customer_name | TEXT |
-| product_code | TEXT |
+| id | INTEGER PK AUTOINCREMENT |
+| sales_year | INTEGER NOT NULL |
+| sales_month | INTEGER NOT NULL |
+| sales_date | DATE NOT NULL |
+| customer_code | TEXT |
+| customer_name | TEXT NOT NULL |
+| product_code | TEXT NOT NULL |
 | product_name | TEXT |
-| actual_quantity | REAL |
-| taxed_amount | REAL |
-| latest_sales_date | DATE |
+| sales_quantity | REAL DEFAULT 0 |
+| gift_quantity | REAL DEFAULT 0 |
+| actual_quantity | REAL DEFAULT 0 |
+| net_unit_price | REAL DEFAULT 0 |
+| taxed_amount | REAL DEFAULT 0 |
+| bonus_basis_amount | REAL DEFAULT 0 |
+| invoice_number | TEXT |
+| shipment_number | TEXT |
+| order_type | TEXT |
+| performance_type | TEXT |
+| import_batch_id | INTEGER |
+
+Indexes: `idx_daily_actuals_month` on `(sales_year, sales_month)`, `idx_daily_actuals_row` on `(customer_name, product_code)`.
 
 ### `month_close_records`
 Tracks which months have been closed (locked against re-import).
 
 | Column | Type |
 |---|---|
-| id | INTEGER PK |
-| year | INTEGER |
-| month | INTEGER |
-| closed_at | TIMESTAMP |
+| id | INTEGER PK AUTOINCREMENT |
+| year | INTEGER NOT NULL |
+| month | INTEGER NOT NULL |
+| closed_at | TIMESTAMP DEFAULT CURRENT_TIMESTAMP |
+| source_batch_id | INTEGER |
+| actual_row_count | INTEGER DEFAULT 0 |
+| actual_quantity_total | REAL DEFAULT 0 |
+| actual_amount_total | REAL DEFAULT 0 |
 | note | TEXT |
 | final_snapshot_id | INTEGER |
+
+Constraint: `UNIQUE (year, month)`.
 
 ### `forecast_snapshots` / `snapshot_items`
 Point-in-time forecast saves (Draft / Final / CloseMonth).
 
-**forecast_snapshots**: id, year, month, snapshot_name, snapshot_type, created_by, created_at, is_finalized
+**forecast_snapshots**: id, snapshot_name, snapshot_type, year, month, created_by, created_at
 
 **snapshot_items**: id, snapshot_id, customer_name, product_code, system_forecast, manual_adjustment, final_forecast
 
@@ -143,6 +179,8 @@ Cached workday schedule used for cycle-delay calculations.
 
 | Column | Type |
 |---|---|
-| calendar_date | DATE PK |
-| is_workday | INTEGER |
-| year | INTEGER |
+| date | TEXT PK |
+| is_workday | INTEGER NOT NULL DEFAULT 1 |
+| holiday_name | TEXT |
+| source | TEXT |
+| note | TEXT |

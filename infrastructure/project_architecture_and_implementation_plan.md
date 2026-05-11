@@ -5,7 +5,7 @@
 
 MOR is a local monthly sales forecast engine designed for sales planning, order review, and Excel-based operational reporting.
 
-The system converts historical sales detail data from Excel into a structured forecast workspace, allowing users to review baseline predictions, manually adjust assumptions, exclude abnormal records, and export a final forecast workbook.
+The system imports Excel and SHPB source files into a local SQLite workbench, then builds a structured forecast workspace from that database. Users can review baseline predictions, manually adjust assumptions, manage item rules, monitor current-month risk, close months, and export a final forecast workbook.
 
 ## 2. Business Goal
 
@@ -23,7 +23,7 @@ The goal is to reduce manual Excel forecasting work and create a repeatable mont
 
 ### Functional success
 
-1. User can upload or load source Excel data.
+1. User can sync/import source Excel or SHPB data into SQLite.
 2. System can normalize hospital, product, date, and quantity fields.
 3. System can calculate baseline forecast values.
 4. User can adjust forecast rows in the UI.
@@ -36,21 +36,22 @@ The goal is to reduce manual Excel forecasting work and create a repeatable mont
 2. Missing columns or wrong file formats return user-friendly error messages.
 3. No Python traceback should appear in the user interface.
 4. Export output must be deterministic.
-5. The system should remain usable without database dependency in the first version.
+5. Normal page requests and exports should read from `mor_workbench.db`; Excel parsing should stay limited to explicit sync/import flows.
 
 ## 4. Project Scope
 
 ### In Scope
 
-1. Excel data ingestion.
-2. Schema normalization.
-3. Monthly sales history calculation.
-4. Baseline forecast calculation.
-5. Manual adjustment workspace.
-6. Row exclusion and edited-state tracking.
-7. Final Excel export.
-8. Basic error handling.
-9. Unit tests for core forecast logic.
+1. Excel and SHPB data ingestion through sync/import endpoints.
+2. SQLite-backed operational data storage.
+3. Schema normalization for forecast-ready records.
+4. Monthly sales history calculation.
+5. Baseline forecast calculation.
+6. Manual adjustment workspace and forecast snapshots.
+7. Item rules, current-month monitoring, month close, and monthly review.
+8. Final Excel export.
+9. Basic error handling.
+10. Unit and route tests for core forecast and DB-first request flows.
 
 ### Out of Scope for Version 1
 
@@ -77,8 +78,8 @@ Current choice:
 1. Flask
 2. Jinja
 3. Vanilla JavaScript
-4. Excel input and output
-5. No database in Version 1
+4. SQLite local workbench database
+5. Excel input and output through explicit import/export workflows
 
 ### 5.2 Thin Web Layer
 
@@ -113,22 +114,22 @@ JavaScript improves user experience through filtering, searching, live totals, a
 
 ```mermaid
 flowchart TD
-    A[Open MOR workspace] --> B[Load source Excel]
-    B --> C[Validate required columns]
-    C --> D[Normalize raw sales data]
-    D --> E[Generate baseline forecast]
+    A[Open MOR workspace] --> B[Sync/import Excel or SHPB source files]
+    B --> C[Store normalized records in SQLite]
+    C --> D[Open dashboard, monitor, forecast, or settings page]
+    D --> E[Build forecast page context from DB]
     E --> F[Render review workspace]
-    F --> G[User edits forecast rows]
-    G --> H[User excludes abnormal rows]
-    H --> I[Submit final state]
-    I --> J[Backend validates submitted state]
+    F --> G[User edits forecast rows or item rules]
+    G --> H[Save adjustments or snapshots]
+    H --> I[Export final state]
+    I --> J[Backend validates DB-backed forecast state]
     J --> K[Generate final Excel workbook]
     K --> L[Download forecast file]
 ```
 
 ## 7. System Architecture
 
-This diagram is the target architecture for the monthly operating version.
+This diagram reflects the current DB-first monthly operating architecture.
 The implementation has been resolved to use `src/backend/` as the canonical backend path.
 
 ```mermaid
@@ -148,19 +149,28 @@ flowchart TD
 
     subgraph Domain [Forecast Domain Layer]
         Config[forecast_config.py]
-        Loader[data_loader.py]
+        Loader[data_loader.py DB request loader]
         Engine[forecast_engine.py]
         Models[forecast_models.py]
-        Rules[forecast_rules.py - planned]
+        Ops[operational_views.py context/service assembly]
     end
 
     subgraph Output [Export Layer]
         Exporter[exporter.py]
-        WorkbookBuilder[workbook_builder.py - planned]
     end
 
-    subgraph Data [File-based Persistence]
-        SourceExcel[(Source Excel)]
+    subgraph Import [Explicit Sync / Import Flows]
+        SourceExcel[(Historical Excel)]
+        SHPB[(SHPB / Daily Sales Uploads)]
+        ETL[etl.py / daily_sales_importer.py]
+    end
+
+    subgraph Data [SQLite Persistence]
+        DB[(mor_workbench.db)]
+        Sales[(sales_records)]
+        Current[(current_month_records)]
+        ConfigTables[(item_configs / budget_targets / adjustments)]
+        OpsTables[(snapshots / daily_actuals / month_close)]
         ExportExcel[(Forecast Workbook)]
     end
 
@@ -169,15 +179,24 @@ flowchart TD
     Routes --> Parser
     Routes --> Presenter
     Parser --> Validator
+    SourceExcel --> ETL
+    SHPB --> ETL
+    ETL --> DB
+    DB --> Sales
+    DB --> Current
+    DB --> ConfigTables
+    DB --> OpsTables
     Routes --> Loader
-    Loader --> SourceExcel
+    Loader --> DB
     Loader --> Engine
     Engine --> Config
-    Engine --> Rules
     Engine --> Models
+    Routes --> Ops
+    Ops --> Loader
+    Ops --> Engine
+    Ops --> DB
     Routes --> Exporter
-    Exporter --> WorkbookBuilder
-    WorkbookBuilder --> ExportExcel
+    Exporter --> ExportExcel
 ```
 
 ## 8. Component Responsibilities
@@ -283,12 +302,16 @@ Responsible for:
 
 Responsible for:
 
-1. Loading Excel files.
-2. Validating required columns.
-3. Standardizing column names.
-4. Cleaning empty rows.
-5. Converting date and quantity fields.
-6. Returning normalized records.
+1. Loading request-time sales records from `mor_workbench.db`.
+2. Combining `sales_records` and `current_month_records`.
+3. Returning the normalized DataFrame shape expected by `forecast_engine.py`.
+4. Preserving product-code normalization.
+5. Keeping Excel loading helpers available only for ETL/import compatibility.
+
+Request-time rule:
+
+1. Normal pages and export use `load_sales_detail_from_db(db)`.
+2. Excel reads are allowed only in `/sync`, `/upload/current-month`, `/monitor/products/import`, and intentional test fixtures.
 
 ### 10.3 forecast_engine.py
 
@@ -363,32 +386,53 @@ Responsible for:
 sequenceDiagram
     participant User
     participant Flask
+    participant DB
     participant Loader
+    participant Context
     participant Engine
     participant UI
     participant Exporter
 
-    User->>Flask: Open forecast page
-    Flask->>Loader: Load source Excel
-    Loader->>Loader: Validate and normalize schema
+    User->>Flask: Sync/import source workbook
+    Flask->>DB: Store normalized sales, budget, actuals, and config
+    User->>Flask: Open dashboard/forecast/monitor/settings
+    Flask->>Context: Build page context
+    Context->>Loader: Load sales detail from DB
+    Loader->>DB: Query sales_records UNION ALL current_month_records
+    DB->>Loader: Return request-time sales rows
     Loader->>Engine: Send normalized records
     Engine->>Engine: Calculate baseline forecast
-    Engine->>Flask: Return forecast rows and summary
+    Engine->>Context: Return forecast rows and summary
+    Context->>Flask: Add adjustments, budgets, history, actuals, projections
     Flask->>UI: Render review workspace
-    User->>UI: Edit forecast and exclude rows
-    UI->>Flask: Submit final reviewed state
-    Flask->>Exporter: Generate Excel workbook
+    User->>UI: Edit forecast, item rules, or snapshots
+    UI->>Flask: Save reviewed state
+    Flask->>DB: Persist adjustments or snapshots
+    User->>Flask: Export final reviewed state
+    Flask->>Exporter: Generate Excel workbook from DB-backed summary
     Exporter->>User: Download final workbook
 ```
 
 ## 13. Data Contract
 
-### 13.1 Source Excel Required Fields
+### 13.1 Request-Time Data Contract
 
-The data contract separates raw Excel columns from normalized domain fields.
-Raw workbook labels may be Chinese and must be preserved in source and export
-behavior. Documentation should describe their meaning without copying corrupted
-terminal output.
+Normal user-facing requests read sales data from `mor_workbench.db`, not directly
+from Excel. The DB-backed loader returns normalized records with the same semantic
+shape used by the forecast engine.
+
+Core DB-backed sales sources:
+
+1. `sales_records` for historical synced sales.
+2. `current_month_records` for cumulative current-month SHPB uploads.
+3. `budget_targets`, `item_configs`, and `forecast_adjustments` for planning state.
+4. `daily_sales_actuals`, `forecast_snapshots`, and `month_close_records` for monitor and monthly review state.
+
+### 13.2 Source Workbook Semantic Fields
+
+Excel and SHPB workbook labels may be Chinese and must be preserved in source and
+export behavior. Documentation should describe their meaning without copying
+corrupted terminal output.
 
 Minimum semantic fields:
 
@@ -419,7 +463,7 @@ Optional semantic fields:
 5. Channel.
 6. Remarks.
 
-### 13.2 Forecast Row Fields
+### 13.3 Forecast Row Fields
 
 Each forecast row should contain:
 
@@ -435,7 +479,7 @@ Each forecast row should contain:
 10. edited_by_user
 11. warning_status
 
-### 13.3 Data Contract Clarifications
+### 13.4 Data Contract Clarifications
 
 Current `row_id` implementation uses:
 
@@ -500,12 +544,13 @@ Current automated coverage:
 
 Known coverage gaps:
 
-1. Excel loader fixtures for required columns, missing columns, invalid dates, and Chinese labels.
-2. Successful `/export` route test with workbook readback.
-3. Workbook sheet names, column order, included/excluded rows, manual quantities, and totals.
-4. Multi-customer and multi-product forecast edge cases.
-5. Browser-level smoke tests for search, filter, manual quantity, row exclusion, and live totals.
-6. Encoding checks for user-visible Chinese labels in source files, browser output, and exported workbook.
+1. Import fixtures for required columns, missing columns, invalid dates, and Chinese labels.
+2. Route guard tests proving normal pages and `/export` do not call `pandas.read_excel`.
+3. Successful `/export` route test with workbook readback.
+4. Workbook sheet names, column order, included/excluded rows, manual quantities, and totals.
+5. Multi-customer and multi-product forecast edge cases.
+6. Browser-level smoke tests for search, filter, manual quantity, row exclusion, and live totals.
+7. Encoding checks for user-visible Chinese labels in source files, browser output, and exported workbook.
 
 ### 15.1 Unit Tests
 
@@ -518,7 +563,9 @@ Test modules:
 5. form_parser.py
 
 **Test Fixtures Requirement:**
-Must use real Excel fixtures managed in `tests/fixtures/`:
+Import/ETL tests should use real workbook fixtures managed in `tests/fixtures/` when workbook parsing behavior is under test. Request-time route tests should seed SQLite directly and guard against accidental Excel reads.
+
+Workbook fixture examples:
 - `sales_detail_minimal.xlsx`
 - `sales_detail_missing_columns.xlsx`
 - `sales_detail_outlier.xlsx`
@@ -527,15 +574,16 @@ Must use real Excel fixtures managed in `tests/fixtures/`:
 
 ### 15.2 Core Test Cases
 
-1. Valid Excel input.
-2. Missing required column.
-3. Empty Excel file.
+1. Valid Excel/SHPB import input.
+2. Missing required source column.
+3. Empty import workbook.
 4. Invalid date format.
-5. Product with no history.
-6. Hospital with multiple products.
-7. Manual adjustment submitted correctly.
-8. Excluded row excluded from summary.
-9. Export workbook matches submitted UI state.
+5. DB-backed page requests use `load_sales_detail_from_db(db)`.
+6. Product with no history.
+7. Hospital with multiple products.
+8. Manual adjustment submitted correctly.
+9. Excluded row excluded from summary.
+10. Export workbook matches submitted or saved UI state.
 
 ### 15.3 Regression Tests
 
@@ -584,8 +632,8 @@ Status: mostly complete.
 
 Deliverables:
 
-1. Load fixed Excel file.
-2. Generate forecast table.
+1. Sync fixed Excel file into SQLite.
+2. Generate forecast table from DB-backed records.
 3. Display Jinja page.
 4. Export basic Excel workbook.
 
