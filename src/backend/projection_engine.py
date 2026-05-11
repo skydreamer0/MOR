@@ -17,7 +17,7 @@ Confidence tiers:
 from __future__ import annotations
 
 import statistics
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Sequence
 
@@ -39,7 +39,8 @@ class ProjectionResult:
     remaining_shipments: int
     typical_qty_per_shipment: float
     workday_cycle: int | None
-    confidence: str          # "high" | "medium" | "low"
+    confidence: str                          # "high" | "medium" | "low"
+    gap_history: list[int] = field(default_factory=list)  # workday gaps, oldest→newest, max 8
 
 
 # ---------------------------------------------------------------------------
@@ -151,7 +152,8 @@ def _project(
     has_daily_actual: bool,
     max_cycle_days: int,
 ) -> ProjectionResult:
-    workday_cycle = _avg_workday_cycle(order_dates, workday_set, max_cycle_days)
+    gaps          = _workday_gaps(order_dates, workday_set, max_cycle_days)
+    workday_cycle = (max(1, round(sum(gaps) / len(gaps))) if gaps else None)
     typical_qty   = _typical_shipment_qty(order_quantities)
     n_shipments   = len(order_dates)
 
@@ -163,6 +165,7 @@ def _project(
             typical_qty_per_shipment=typical_qty,
             workday_cycle=workday_cycle,
             confidence="low",
+            gap_history=gaps,
         )
 
     # Workdays elapsed since last shipment
@@ -189,7 +192,25 @@ def _project(
         typical_qty_per_shipment=typical_qty,
         workday_cycle=workday_cycle,
         confidence=confidence,
+        gap_history=gaps,
     )
+
+
+def _workday_gaps(
+    order_dates: list[date],
+    workday_set: frozenset[date],
+    max_days: int,
+) -> list[int]:
+    """Workday gaps between consecutive order dates, capped and limited to last 8."""
+    if len(order_dates) < 2:
+        return []
+    sorted_dates = sorted(order_dates)
+    gaps = []
+    for prev, curr in zip(sorted_dates, sorted_dates[1:]):
+        gap = _workdays_between(prev, curr, workday_set)
+        if 0 < gap <= max_days:
+            gaps.append(gap)
+    return gaps[-8:]
 
 
 def _avg_workday_cycle(
@@ -198,14 +219,7 @@ def _avg_workday_cycle(
     max_days: int,
 ) -> int | None:
     """Average workday gap between consecutive order dates (capped at max_days)."""
-    if len(order_dates) < 2:
-        return None
-    sorted_dates = sorted(order_dates)
-    gaps = []
-    for prev, curr in zip(sorted_dates, sorted_dates[1:]):
-        gap = _workdays_between(prev, curr, workday_set)
-        if 0 < gap <= max_days:
-            gaps.append(gap)
+    gaps = _workday_gaps(order_dates, workday_set, max_days)
     if not gaps:
         return None
     return max(1, round(sum(gaps) / len(gaps)))

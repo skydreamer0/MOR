@@ -15,12 +15,11 @@ function bindMonitorTable() {
       const shouldShow = matchesSearch && matchesStatus;
       row.hidden = !shouldShow;
 
-      // Keep detail row in sync: hide it whenever its main row is filtered out
+      // Collapse detail row when main row is filtered out
       const detail = row.nextElementSibling;
       if (detail?.hasAttribute("data-monitor-detail") && !shouldShow) {
         detail.hidden = true;
-        const btn = row.querySelector("[data-monitor-expand]");
-        if (btn) btn.setAttribute("aria-expanded", "false");
+        row.setAttribute("aria-expanded", "false");
       }
 
       if (shouldShow) visible += 1;
@@ -29,16 +28,15 @@ function bindMonitorTable() {
     if (visibleCount) visibleCount.textContent = new Intl.NumberFormat("zh-TW").format(visible);
   }
 
-  // Expand / collapse detail rows
+  // Whole-row expand / collapse — skip clicks on interactive elements
   document.addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-monitor-expand]");
-    if (!btn) return;
-    const mainRow = btn.closest("[data-monitor-row]");
-    const detail = mainRow?.nextElementSibling;
+    if (e.target.closest("button, a, input, select, label")) return;
+    const mainRow = e.target.closest("[data-monitor-row]");
+    if (!mainRow) return;
+    const detail = mainRow.nextElementSibling;
     if (!detail?.hasAttribute("data-monitor-detail")) return;
-    const expanded = btn.getAttribute("aria-expanded") === "true";
-    btn.setAttribute("aria-expanded", String(!expanded));
-    btn.textContent = expanded ? "▶" : "▼";
+    const expanded = mainRow.getAttribute("aria-expanded") === "true";
+    mainRow.setAttribute("aria-expanded", String(!expanded));
     detail.hidden = expanded;
   });
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Iterable, Mapping
@@ -89,6 +89,10 @@ class ProductMonitorRow:
     final_forecast_amount: float = 0.0  # 最終預估金額（= ForecastRow.estimated_amount）
     last_year_amount: float = 0.0       # 去年同期金額（0 = 無資料，顯示 -）
     budget_amount: float = 0.0          # 本月預算金額
+    # Phase 6: inter-shipment workday gap history
+    gap_history: list[int] = field(default_factory=list)  # workday gaps oldest→newest
+    gap_trend: str = "none"    # "rising" | "falling" | "stable" | "none"
+    gap_trend_delta: int = 0   # recent_avg − overall_avg (workdays, signed)
 
 
 @dataclass(frozen=True)
@@ -582,6 +586,27 @@ def _days_since_order(workday_set: frozenset[date], order_date: date, today: dat
     return sum(1 for d in workday_set if order_date < d <= today)
 
 
+def _compute_gap_trend(gaps: list[int]) -> tuple[str, int]:
+    """Compare the most recent 3 gaps to the overall average.
+
+    Returns (trend, delta) where trend is "rising"/"falling"/"stable"/"none"
+    and delta is recent_avg − overall_avg rounded to nearest workday.
+    Threshold: ±15% of overall average to classify as trending.
+    """
+    if len(gaps) < 3:
+        return "none", 0
+    overall_avg = sum(gaps) / len(gaps)
+    recent_avg = sum(gaps[-3:]) / 3
+    delta = round(recent_avg - overall_avg)
+    if overall_avg == 0:
+        return "none", 0
+    if recent_avg > overall_avg * 1.10:
+        return "rising", delta
+    if recent_avg < overall_avg * 0.90:
+        return "falling", delta
+    return "stable", delta
+
+
 def _cycle_status_info(days_since: int | None, cycle_days: int | None) -> tuple[str, bool, bool]:
     """Return (cycle_status_key, is_high_risk, is_caution)."""
     if days_since is None or cycle_days is None or cycle_days <= 0:
@@ -671,12 +696,16 @@ def _to_monitor_row(
         raw_typical_qty = projection.typical_qty_per_shipment  # in raw units
         proj_confidence = projection.confidence
         projected_remaining_qty = projection.projected_remaining_qty  # raw units
+        gap_history = projection.gap_history
     else:
         raw_estimated_eom = row.system_forecast
         remaining_shipments = 0
         raw_typical_qty = 0.0
         proj_confidence = "low"
         projected_remaining_qty = 0.0
+        gap_history = []
+
+    gap_trend, gap_trend_delta = _compute_gap_trend(gap_history)
 
     # Phase 5: amount fields — use raw_current for implied price so projected amount stays correct
     current_taxed_amount = float(actual.taxed_amount) if actual is not None else 0.0
@@ -725,6 +754,9 @@ def _to_monitor_row(
         final_forecast_amount=final_forecast_amount,
         last_year_amount=last_year_amount,
         budget_amount=budget_amount,
+        gap_history=gap_history,
+        gap_trend=gap_trend,
+        gap_trend_delta=gap_trend_delta,
     )
 
 
