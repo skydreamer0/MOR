@@ -1,11 +1,7 @@
 """Data Loader — 讀取並合併業績資料供 forecast_engine 使用。
 
-資料來源有兩個，在此層合併後對外提供統一介面：
-
-1. 業績明細 Excel（歷史月份，已確定）
-2. current_month_records DB 表（當月累積，來自 SHPB 上傳，持續變動）
-
-forecast_engine 只呼叫 load_sales_detail()，不感知來源差異。
+正常頁面請求與匯出使用 load_sales_detail_from_db()，從 SQLite 讀取。
+Excel 只在同步/匯入流程（/sync, /upload/current-month, /monitor/products/import）使用。
 架構背景詳見 docs/architecture/current-month-data-integration.md。
 """
 from __future__ import annotations
@@ -20,6 +16,91 @@ from src.backend.forecast_models import ForecastTarget
 
 if TYPE_CHECKING:
     from src.backend.database import MORDatabase
+
+_SALES_COLUMNS = [
+    "order_date", "customer_name", "product_code", "product_name",
+    "quantity", "unit_price", "amount",
+]
+_RENAME_MAP = {
+    "customer_name": "客戶簡稱",
+    "product_code":  "商品號",
+    "product_name":  "商品簡稱",
+    "quantity":      "銷+贈S量",
+    "unit_price":    "單價NT(淨)",
+    "amount":        "含稅總額(淨)",
+}
+_REQUIRED_CHINESE_COLS = (
+    "年", "月", "日", "客戶簡稱", "商品號", "商品簡稱",
+    "銷+贈S量", "單價NT(淨)", "含稅總額(淨)", "order_date",
+)
+
+
+def load_sales_detail_from_db(db: "MORDatabase") -> pd.DataFrame:
+    """讀取 sales_records + current_month_records，回傳與業績明細相同格式的 DataFrame。
+
+    這是頁面請求與匯出的主要資料來源。不讀取 Excel。
+    若 DB 無資料，回傳具有正確欄位的空 DataFrame。
+    """
+    with db.get_connection() as conn:
+        rows = conn.execute(
+            "SELECT order_date, customer_name, product_code, product_name, "
+            "quantity, unit_price, amount FROM sales_records "
+            "UNION ALL "
+            "SELECT order_date, customer_name, product_code, product_name, "
+            "quantity, unit_price, amount FROM current_month_records"
+        ).fetchall()
+
+    if not rows:
+        return _empty_sales_dataframe()
+
+    df = pd.DataFrame(rows, columns=_SALES_COLUMNS)
+    return _normalize_db_sales_df(df)
+
+
+def default_target_from_db(db: "MORDatabase") -> ForecastTarget:
+    """從 DB 取得預設預估目標月份（不讀取 Excel）。
+
+    查詢 sales_records 和 current_month_records 的最新 order_date，
+    回傳下一個月份為預設目標。若無資料則以今日推算。
+    """
+    with db.get_connection() as conn:
+        row = conn.execute(
+            "SELECT MAX(d) AS max_date FROM ("
+            "  SELECT order_date AS d FROM sales_records "
+            "  UNION ALL "
+            "  SELECT order_date AS d FROM current_month_records"
+            ")"
+        ).fetchone()
+
+    max_date_str = row["max_date"] if row else None
+    if not max_date_str:
+        from datetime import date as _date
+        today = _date.today()
+        return ForecastTarget(today.year, today.month)
+
+    latest = pd.Timestamp(max_date_str).date()
+    if latest.month == 12:
+        return ForecastTarget(latest.year + 1, 1)
+    return ForecastTarget(latest.year, latest.month + 1)
+
+
+def _normalize_db_sales_df(df: pd.DataFrame) -> pd.DataFrame:
+    """英文欄位名稱 → 中文，補上年/月/日，正規化商品號，清除無效列。"""
+    df = df.copy()
+    # sales_records stores date strings ('2026-03-10'), current_month_records stores
+    # datetime strings ('2026-05-05 00:00:00'); format='mixed' handles both safely.
+    df["order_date"] = pd.to_datetime(df["order_date"], errors="coerce", format="mixed")
+    df = df.dropna(subset=["order_date"]).copy()
+    df["年"] = df["order_date"].dt.year.astype(int)
+    df["月"] = df["order_date"].dt.month.astype(int)
+    df["日"] = df["order_date"].dt.day.astype(int)
+    df = df.rename(columns=_RENAME_MAP)
+    df["商品號"] = df["商品號"].map(normalize_product_code)
+    return df.dropna(subset=["客戶簡稱", "商品號"]).reset_index(drop=True)
+
+
+def _empty_sales_dataframe() -> pd.DataFrame:
+    return pd.DataFrame(columns=list(_REQUIRED_CHINESE_COLS))
 
 
 def load_sales_detail(
@@ -94,8 +175,7 @@ def normalize_product_code(value: object) -> str:
 def _load_current_month_from_db(db: "MORDatabase") -> pd.DataFrame:
     """從 current_month_records 讀取當月資料，轉換為與業績明細相同的欄位格式。
 
-    DB 欄位（英文）需對應回 forecast_engine 期待的中文欄位名稱，
-    並補上年/月/日三欄供部分查詢使用。
+    供 load_sales_detail（Excel+DB 合併路徑）使用；頁面請求改用 load_sales_detail_from_db。
     """
     with db.get_connection() as conn:
         rows = conn.execute(
@@ -106,27 +186,8 @@ def _load_current_month_from_db(db: "MORDatabase") -> pd.DataFrame:
     if not rows:
         return pd.DataFrame()
 
-    df = pd.DataFrame(rows, columns=[
-        "order_date", "customer_name", "product_code", "product_name",
-        "quantity", "unit_price", "amount",
-    ])
-    df["order_date"] = pd.to_datetime(df["order_date"], errors="coerce")
-    df = df.dropna(subset=["order_date"])
-
-    # 補回業績明細格式的欄位名稱，讓 prepare_sales_data 能直接處理
-    df["年"] = df["order_date"].dt.year.astype(int)
-    df["月"] = df["order_date"].dt.month.astype(int)
-    df["日"] = df["order_date"].dt.day.astype(int)
-    df.rename(columns={
-        "customer_name": "客戶簡稱",
-        "product_code":  "商品號",
-        "product_name":  "商品簡稱",
-        "quantity":      "銷+贈S量",
-        "unit_price":    "單價NT(淨)",
-        "amount":        "含稅總額(淨)",
-    }, inplace=True)
-
-    return df
+    df = pd.DataFrame(rows, columns=_SALES_COLUMNS)
+    return _normalize_db_sales_df(df)
 
 
 def default_target_from_data(data: pd.DataFrame, config: ForecastConfig | None = None) -> ForecastTarget:

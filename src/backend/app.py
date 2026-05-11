@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import calendar
 import hashlib
-import os
 from dataclasses import replace
 from datetime import date
 from pathlib import Path
@@ -13,7 +12,7 @@ from flask_caching import Cache
 
 from src.backend.data_validator import validate_health
 from src.backend.monthly_review import build_monthly_review, list_reviewable_months
-from src.backend.data_loader import default_target_from_data, load_sales_detail, normalize_product_code
+from src.backend.data_loader import default_target_from_db, normalize_product_code
 from src.backend.exporter import export_forecast
 from src.backend.forecast_config import ForecastConfig
 from src.backend.forecast_engine import apply_user_adjustments
@@ -68,12 +67,16 @@ def create_app(config: dict | None = None) -> Flask:
     app.jinja_env.filters["product_display_name"] = product_display_name
 
     def _make_cache_key(year: int, month: int) -> str:
-        detail_path = data_base_path / forecast_config.detail_file
+        # Historical sales change only on sync; track count+max_date as a lightweight proxy.
         try:
-            mtime = int(os.path.getmtime(detail_path))
-        except FileNotFoundError:
-            mtime = 0
-        # 當月 SHPB 上傳後 current_month_records 會變動，需納入 cache key
+            with db.get_connection() as conn:
+                row = conn.execute(
+                    "SELECT COUNT(*), MAX(order_date) FROM sales_records"
+                ).fetchone()
+                sales_stamp = f"{row[0]}:{row[1] or ''}"
+        except Exception:
+            sales_stamp = ""
+        # Current-month records change on each SHPB upload.
         try:
             with db.get_connection() as conn:
                 row = conn.execute(
@@ -82,7 +85,7 @@ def create_app(config: dict | None = None) -> Flask:
                 cmr_stamp = str(row[0] or "")
         except Exception:
             cmr_stamp = ""
-        return f"forecast-context:{mtime}:{cmr_stamp}:{year}:{month}"
+        return f"forecast-context:{sales_stamp}:{cmr_stamp}:{year}:{month}"
 
     def _build_cached_context(year: int, month: int):
         key = _make_cache_key(year, month)
@@ -98,9 +101,7 @@ def create_app(config: dict | None = None) -> Flask:
         return context
 
     def _load_context_from_request():
-        # 傳入 db 讓 load_sales_detail 合併 current_month_records
-        data = load_sales_detail(data_base_path, forecast_config, db)
-        default_target = default_target_from_data(data, forecast_config)
+        default_target = default_target_from_db(db)
         target = parse_target_period(request.args, default_target)
         return _build_cached_context(target.year, target.month)
 
@@ -376,8 +377,7 @@ def create_app(config: dict | None = None) -> Flask:
     @app.post("/export")
     def export() -> Response:
         try:
-            data = load_sales_detail(data_base_path, forecast_config)
-            default_target = default_target_from_data(data, forecast_config)
+            default_target = default_target_from_db(db)
             target = parse_target_period(request.form, default_target)
 
             context = build_forecast_page_context(
@@ -608,93 +608,6 @@ def create_app(config: dict | None = None) -> Flask:
         return redirect(url_for("forecast", year=year, month=month))
 
     return app
-
-
-def _load_items_from_sales(data_base_path: Path, forecast_config: ForecastConfig, db) -> list[dict]:
-    data = load_sales_detail(data_base_path, forecast_config)
-    unique_products = data[["商品號", "商品簡稱"]].drop_duplicates("商品號")
-
-    item_configs = _load_item_configs(db)
-    items = []
-    for _, row in unique_products.iterrows():
-        pid = normalize_product_code(row["商品號"])
-        cfg = item_configs.get(pid, {
-            "is_excluded": False,
-            "is_budgeted": True,
-            "is_visible": True,
-            "price_quantity": 0.0,
-            "item_status": "active",
-        })
-        items.append({
-            "product_code": pid,
-            "product_name": row["商品簡稱"],
-            **cfg,
-        })
-    return items
-
-
-def _load_item_configs(db) -> dict[str, dict]:
-    with db.get_connection() as conn:
-        rows = conn.execute("SELECT * FROM item_configs").fetchall()
-        configs = {
-            row["product_code"]: {
-                "is_excluded": bool(row["is_excluded"]),
-                "is_budgeted": bool(row["is_budgeted"]),
-                "is_visible": bool(row["is_visible"]),
-                "price_quantity": float(row["price_quantity"] or 0),
-                "item_status": "discontinued" if row["item_status"] == "discontinued" or row["status_label"] == "停用" else "active",
-            }
-            for row in rows
-        }
-        for row in rows:
-            normalized_code = normalize_product_code(row["product_code"])
-            configs.setdefault(normalized_code, configs[row["product_code"]])
-        return configs
-
-
-def _load_adjustments(db, year: int, month: int) -> tuple[dict[str, float], dict[str, str]]:
-    manual_adjustments = {}
-    adjustment_reasons = {}
-    with db.get_connection() as conn:
-        rows = conn.execute("""
-            SELECT customer_name, product_code, manual_quantity, adjustment_reason 
-            FROM forecast_adjustments 
-            WHERE year = ? AND month = ?
-        """, (year, month)).fetchall()
-        for row in rows:
-            row_id = f"{row['customer_name']}__{row['product_code']}"
-            if row["manual_quantity"] is not None:
-                manual_adjustments[row_id] = row["manual_quantity"]
-            if row["adjustment_reason"]:
-                adjustment_reasons[row_id] = row["adjustment_reason"]
-    return manual_adjustments, adjustment_reasons
-
-
-def _load_exclusions(db) -> set[str]:
-    with db.get_connection() as conn:
-        rows = conn.execute(
-            "SELECT product_code FROM item_configs WHERE is_excluded = 1"
-        ).fetchall()
-    excluded = set()
-    for row in rows:
-        product_code = row["product_code"]
-        excluded.add(product_code)
-        excluded.add(normalize_product_code(product_code))
-    return excluded
-
-
-def _load_budgets(db, year: int, month: int) -> dict[str, float]:
-    budgets = {}
-    with db.get_connection() as conn:
-        rows = conn.execute("""
-            SELECT customer_name, product_code, target_quantity
-            FROM budget_targets
-            WHERE year = ? AND month = ?
-        """, (year, month)).fetchall()
-        for row in rows:
-            row_id = f"{row['customer_name']}__{row['product_code']}"
-            budgets[row_id] = row["target_quantity"]
-    return budgets
 
 
 def _validate_submitted_row_ids(summary: ForecastSummary, submitted_row_ids: set[str]) -> None:
