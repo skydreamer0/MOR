@@ -153,6 +153,8 @@ def test_forecast_page_renders_forecast_review_assets_and_tools():
     assert 'href="/static/css/mor.css"' in html
     assert 'src="/static/js/forecast-table.js"' in html
     assert 'class="forecast-tools workbench-toolbar"' in html
+    assert "總列數" in html
+    assert "顯示列數" not in html
     assert "搜尋客戶或品項" in html
     assert "狀態篩選" in html
     assert "data-filter-search" in html
@@ -808,6 +810,13 @@ def test_dashboard_css_uses_bem_class_names():
     assert "risk-panel__summary" in css + dashboard
     assert "risk-panel__customer-rank" in css + dashboard
     assert "forecast-table__row--collapsed" in css
+
+
+def test_dashboard_progress_hero_uses_dense_metric_layout():
+    css = Path("static/css/mor.css").read_text(encoding="utf-8")
+
+    assert "grid-template-columns: minmax(0, 1fr) minmax(440px, 520px);" in css
+    assert ".hero__sub-metrics {\n  display: grid;\n  grid-template-columns: repeat(2, minmax(0, 1fr));" in css
 
 
 def test_homepage_loads_gracefully_with_empty_db():
