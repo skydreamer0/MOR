@@ -364,19 +364,17 @@ def build_items_from_sales_data(data: pd.DataFrame, db) -> list[dict]:
 def load_item_configs(db) -> dict[str, dict]:
     with db.get_connection() as conn:
         rows = conn.execute("SELECT * FROM item_configs").fetchall()
-    configs = {
-        row["product_code"]: {
+    configs: dict[str, dict] = {}
+    for row in rows:
+        entry = {
             "is_excluded": bool(row["is_excluded"]),
             "is_budgeted": bool(row["is_budgeted"]),
             "is_visible": bool(row["is_visible"]),
             "price_quantity": float(row["price_quantity"] or 0),
             "item_status": _normalize_item_status(row["item_status"], row["status_label"]),
         }
-        for row in rows
-    }
-    for row in rows:
-        normalized_code = normalize_product_code(row["product_code"])
-        configs.setdefault(normalized_code, configs[row["product_code"]])
+        configs[row["product_code"]] = entry
+        configs.setdefault(normalize_product_code(row["product_code"]), entry)
     return configs
 
 
@@ -477,6 +475,35 @@ def load_budget_year_amounts(db, year: int) -> dict[str, list[float]]:
         if 0 <= m < 12:
             result[row_id][m] = float(row["target_amount"] or 0)
     return result
+
+
+def update_item_configs(db, items: list[dict]) -> None:
+    """Upsert item config rows.  Each dict must have product_code plus any
+    subset of: is_excluded, is_budgeted, is_visible, price_quantity, item_status.
+    """
+    with db.get_connection() as conn:
+        for item in items:
+            pid = normalize_product_code(item["product_code"])
+            is_excluded   = int(bool(item.get("is_excluded", False)))
+            is_budgeted   = int(bool(item.get("is_budgeted", True)))
+            is_visible    = int(bool(item.get("is_visible", True)))
+            price_quantity = int(item.get("price_quantity", 0))
+            item_status   = item.get("item_status", "active")
+            if item_status not in {"active", "discontinued"}:
+                item_status = "active"
+            conn.execute("""
+                INSERT OR IGNORE INTO item_configs
+                (product_code, is_excluded, is_budgeted, is_visible,
+                 price_quantity, item_status, status_label, custom_category)
+                VALUES (?, 0, 1, 1, 0, 'active', NULL, NULL)
+            """, (pid,))
+            conn.execute("""
+                UPDATE item_configs
+                SET is_excluded = ?, is_budgeted = ?, is_visible = ?,
+                    price_quantity = ?, item_status = ?
+                WHERE product_code = ?
+            """, (is_excluded, is_budgeted, is_visible, price_quantity, item_status, pid))
+        conn.commit()
 
 
 def list_budget_months(db) -> list[tuple[int, int]]:

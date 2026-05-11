@@ -956,7 +956,7 @@ def test_export_rejects_unknown_review_row_id_without_workbook():
 
     response = client.post(
         "/export",
-        data={"year": "2026", "month": "5", "manual_quantity__missing__row": "10"},
+        data={"year": "2026", "month": "5", "manual_adjustment__missing__row": "10"},
     )
 
     assert response.status_code == 400
@@ -1058,7 +1058,7 @@ def test_export_rejects_invalid_manual_quantity_without_500():
 
     response = client.post(
         "/export",
-        data={"year": "2026", "month": "5", "manual_quantity__A__P1": "abc"},
+        data={"year": "2026", "month": "5", "manual_adjustment__A__P1": "abc"},
     )
 
     assert response.status_code == 400
