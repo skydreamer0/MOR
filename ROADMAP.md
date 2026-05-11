@@ -1,45 +1,27 @@
-# MOR Roadmap
+# MOR Active Backlog
 
-## Current Focus
+Keep this file limited to work that still needs to be done. Completed or superseded implementation plans belong in `docs/archive/plans/`, not here.
 
-Make MOR a compact multi-page operating tool:
-
-1. Dashboard for quick business overview.
-2. Product drop monitor for daily risk review.
-3. Forecast adjustment page for manual overrides and export.
-4. Settings and data checks page for item rules and source-data health.
-
-## Small Task Queue
+## Next
 
 1. Finish multi-page UI verification in browser.
 2. Improve data health checks for missing budget mappings.
-3. Add customer view page after monitor rules stabilize.
-4. Add product view page after customer view is useful.
 
----
+## Later
 
-## Future Backlog
-
-Keep this list short. Move large implementation plans to `docs/archive/plans/` once their decisions are absorbed into active docs.
-
-1. Split `operational_views.py` into smaller dashboard, monitor, settings, and forecast context services.
-2. Replace inline SQLite schema migrations in `database.py` with a clearer migration convention.
-3. Stabilize row identity beyond `customer + "__" + product_code` before adding customer-code workflows.
-4. Add focused route guards for any new request-time data path to keep normal pages DB-first.
-
-## Archived Plans
-
-Completed or superseded implementation plans now live in `docs/archive/plans/`.
-Do not read archived plans for implementation context unless explicitly researching history.
+1. Add customer view page after monitor rules stabilize.
+2. Add product view page after customer view is useful.
+3. Split `operational_views.py` into smaller dashboard, monitor, settings, and forecast context services.
+4. Replace inline SQLite schema migrations in `database.py` with a clearer migration convention.
+5. Stabilize row identity beyond `customer + "__" + product_code` before adding customer-code workflows.
+6. Add focused route guards for any new request-time data path to keep normal pages DB-first.
 
 ## Working Rules
 
 - Do one task at a time.
-- Read `AGENTS.md`, this roadmap, and only the necessary active docs.
-- Keep Flask routes thin.
-- Keep calculation rules in testable backend services.
+- Read `AGENTS.md`, this backlog, and only the necessary active docs.
+- Keep Flask routes thin and forecast logic testable without Flask.
 - Update docs when workflows, forecast rules, Excel shape, or UI structure change.
-- Run the focused tests first, then the full suite when backend/routes/templates change.
 
 ## Recommended Verification
 
