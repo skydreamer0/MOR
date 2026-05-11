@@ -98,18 +98,18 @@ Issues identified from architecture review on 2026-05-11. Work top-to-bottom wit
 
 ### Phase 2 — Performance `priority: medium`
 
-- [ ] **`_make_cache_key` 每次請求打 DB 兩次。**
+- [x] **`_make_cache_key` 每次請求打 DB 兩次。**
   即使 cache hit，每個請求仍執行兩條 `SELECT`（`sales_records` count/max、
   `current_month_records` max）才能算出 key。
   Fix: 改用穩定 key + etag 比對，或在 write path 主動讓 key 失效，
   讓 hot-path 不需要先查 DB 才能決定要不要查 DB。
 
-- [ ] **`cache.clear()` 太粗暴。**
+- [x] **`cache.clear()` 太粗暴。**
   每次任何寫入（品項、調整、匯入）都清掉所有月份的快取，但不同月份的
   key 彼此獨立。Fix: 寫一個 `_invalidate_context_cache(year, month)` 只清
   當月的 key；跨月的品項設定異動才全清。
 
-- [ ] **`_init_db` 每次啟動都跑 migration 探測。**
+- [x] **`_init_db` 每次啟動都跑 migration 探測。**
   每次 app 啟動都對每個欄位執行 `PRAGMA table_info()` 再決定是否 `ALTER TABLE`。
   Fix: 加入 `schema_version` 表，記錄已套用的版本號，啟動時只比對版本跳過已完成的 migration。
 

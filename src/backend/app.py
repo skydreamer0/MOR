@@ -69,26 +69,24 @@ def create_app(config: dict | None = None) -> Flask:
     cache.init_app(app)
     app.jinja_env.filters["product_display_name"] = product_display_name
 
+    # Version counters for cache invalidation — no DB queries on hot path.
+    # _month_versions tracks per-(year, month) writes (adjustments, daily imports, close-month).
+    # _global_version tracks writes that affect all months (sync, item config changes).
+    _month_versions: dict[tuple[int, int], int] = {}
+    _global_version: list[int] = [0]
+
     def _make_cache_key(year: int, month: int) -> str:
-        # Historical sales change only on sync; track count+max_date as a lightweight proxy.
-        try:
-            with db.get_connection() as conn:
-                row = conn.execute(
-                    "SELECT COUNT(*), MAX(order_date) FROM sales_records"
-                ).fetchone()
-                sales_stamp = f"{row[0]}:{row[1] or ''}"
-        except Exception:
-            sales_stamp = ""
-        # Current-month records change on each SHPB upload.
-        try:
-            with db.get_connection() as conn:
-                row = conn.execute(
-                    "SELECT MAX(imported_at) FROM current_month_records"
-                ).fetchone()
-                cmr_stamp = str(row[0] or "")
-        except Exception:
-            cmr_stamp = ""
-        return f"forecast-context:{sales_stamp}:{cmr_stamp}:{year}:{month}"
+        return (
+            f"forecast-context:{year}:{month}"
+            f":g{_global_version[0]}"
+            f":m{_month_versions.get((year, month), 0)}"
+        )
+
+    def _invalidate_context_cache(year: int, month: int) -> None:
+        _month_versions[(year, month)] = _month_versions.get((year, month), 0) + 1
+
+    def _invalidate_all_context_cache() -> None:
+        _global_version[0] += 1
 
     def _build_cached_context(year: int, month: int):
         key = _make_cache_key(year, month)
@@ -162,7 +160,7 @@ def create_app(config: dict | None = None) -> Flask:
                 (year, month, customer, product_code, val, reason, "User"),
             )
             conn.commit()
-        cache.clear()
+        _invalidate_context_cache(year, month)
 
     def _find_forecast_row(row_id: str, year: int, month: int):
         context = _build_cached_context(year, month)
@@ -347,7 +345,7 @@ def create_app(config: dict | None = None) -> Flask:
         try:
             snapshot_id = _find_or_create_close_snapshot(year, month)
             close_month(db, year, month, snapshot_id=snapshot_id, note=note)
-            cache.clear()
+            _invalidate_context_cache(year, month)
         except Exception as exc:
             return redirect(url_for("product_monitor", year=year, month=month,
                                     import_error=f"結月失敗：{exc}"))
@@ -361,7 +359,7 @@ def create_app(config: dict | None = None) -> Flask:
             return redirect(url_for("product_monitor", import_error="請選擇當月累積業績檔。"))
         try:
             result = import_daily_sales_workbook(db, uploaded.stream, uploaded.filename)
-            cache.clear()
+            _invalidate_context_cache(result.sales_year, result.sales_month)
         except Exception as exc:
             return redirect(url_for("product_monitor", import_error=f"匯入失敗：{exc}"))
         return redirect(
@@ -500,7 +498,7 @@ def create_app(config: dict | None = None) -> Flask:
                     WHERE product_code = ?
                 """, (is_excluded, is_budgeted, is_visible, price_quantity, item_status, pid))
             conn.commit()
-        cache.clear()
+        _invalidate_all_context_cache()
         return settings()
 
     @app.get("/exclusions")
@@ -515,7 +513,7 @@ def create_app(config: dict | None = None) -> Flask:
     def sync_data() -> str:
         try:
             sync_excel_to_db(db, data_base_path)
-            cache.clear()
+            _invalidate_all_context_cache()
             return "資料同步完成！請重新載入工作台。"
         except Exception as exc:
             return f"同步失敗：{exc}"
@@ -534,7 +532,7 @@ def create_app(config: dict | None = None) -> Flask:
         try:
             df = pd.read_excel(file)
             count = import_current_month(db, df)
-            cache.clear()
+            _invalidate_all_context_cache()
             return f"已匯入 {count} 筆當月業績資料。"
         except Exception as exc:
             return f"匯入失敗：{exc}", 400
