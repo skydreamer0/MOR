@@ -19,7 +19,7 @@
 
     <section class="summary">
       <div class="metric"><span>預估月份</span><strong>{% if year and month %}{{ year }}/{{ "%02d"|format(month|int) }}{% else %}--{% endif %}</strong></div>
-      <div class="metric"><span>顯示列數</span><strong>{{ shown_count }} / {{ row_count }}</strong></div>
+      <div class="metric"><span>總列數</span><strong>{{ shown_count }} / {{ row_count }}</strong></div>
       <div class="metric"><span>自動預估列</span><strong>{{ rows|selectattr("auto_in_month")|list|length }}</strong></div>
       <div class="metric"><span>目前總額</span><strong id="top-total">{{ "{:,.0f}".format(total) }}</strong></div>
       {% if is_finalized %}

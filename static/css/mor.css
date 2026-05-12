@@ -1979,8 +1979,8 @@ details[open] .discontinued-toggle {
 /* Progress bar layout */
 .progress-body {
   display: grid;
-  grid-template-columns: 1fr 320px;
-  gap: var(--sp-6);
+  grid-template-columns: minmax(0, 1fr) minmax(440px, 520px);
+  gap: var(--sp-5);
   align-items: start;
 }
 
@@ -2053,7 +2053,7 @@ details[open] .discontinued-toggle {
 /* Sub-metrics */
 .hero__sub-metrics {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--sp-2);
 }
 
@@ -2420,67 +2420,412 @@ details[open] .discontinued-toggle {
   .rank-item { grid-template-columns: 120px 1fr 80px; }
 }
 
-/* ── Phase 3: Monitor expand button ── */
-.monitor-expand-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: var(--text-xs);
-  color: var(--muted);
-  padding: 0 var(--sp-2) 0 0;
-  line-height: 1;
-}
-.monitor-expand-btn:hover { color: var(--text); }
+/* ── Monitor: whole-row expand ── */
+[data-monitor-row] { cursor: pointer; }
 
-/* ── Phase 3: Monitor detail card ── */
+[data-monitor-row][aria-expanded="true"] td { background: var(--accent-subtle); }
+[data-monitor-row][aria-expanded="true"] td.monitor-sticky { background: var(--accent-subtle); }
+
+.row-chevron {
+  display: inline-block;
+  width: 10px;
+  margin-right: var(--sp-2);
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1;
+  vertical-align: middle;
+  transition: transform 0.15s ease;
+}
+.row-chevron::before { content: '▶'; }
+[data-monitor-row][aria-expanded="true"] .row-chevron { transform: rotate(90deg); }
+
+/* ── Monitor: detail card (redesigned) ── */
 [data-monitor-detail] td {
   padding: 0;
-  background: var(--surface-2, #f9fafb);
-  border-bottom: 1px solid var(--border);
+  background: var(--surface-subtle);
+  border-bottom: 2px solid var(--line);
 }
 
 .monitor-detail-card {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-4) var(--sp-6);
-  padding: var(--sp-3) var(--sp-5) var(--sp-4);
   font-size: var(--text-sm);
+  border-top: 2px solid var(--accent);
 }
 
-.detail-section {
+.detail-head {
+  display: flex;
+  gap: var(--sp-8);
+  flex-wrap: wrap;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--surface-subtle);
+  border-bottom: 1px solid var(--line);
+  border-left: 4px solid var(--accent);  /* accent 錨點線 */
+}
+
+.detail-head-item {
   display: flex;
   flex-direction: column;
   gap: var(--sp-1);
-  min-width: 160px;
 }
 
-.detail-label {
+.detail-head-item--grow {
+  flex: 1;
+}
+
+.detail-meta-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.detail-head-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.detail-head-item--grow { flex: 1; }
+
+.detail-meta-label {
   font-size: var(--text-xs);
   font-weight: 600;
   color: var(--muted);
   text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
-.detail-compare-grid {
+/* ── Detail body: three-column layout ── */
+.detail-body {
+  display: grid;
+  grid-template-columns: 1.6fr 1.3fr 1.3fr; /* 欄1三欄表格需更寬 */
+}
+
+.detail-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.detail-col + .detail-col {
+  border-left: 1px solid var(--line);
+}
+
+.detail-section {
+  padding: var(--sp-3) var(--sp-3) var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--line-subtle);
+}
+
+.detail-section:last-child {
+  border-bottom: none;
+  flex: 1;
+}
+
+.detail-section--chart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.detail-section-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: var(--sp-2);
+  padding-left: var(--sp-2);
+  border-left: 2px solid var(--accent);
+}
+
+/* Legacy block classes — kept for backward compat */
+.detail-block { flex: 1; min-width: 200px; padding: var(--sp-2) var(--sp-4); }
+.detail-block + .detail-block { border-left: 1px solid var(--line-subtle); }
+.detail-block-title {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--sp-2);
+  padding-bottom: var(--sp-1);
+  border-bottom: 1px solid var(--line-subtle);
+}
+
+.detail-kv-grid {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: var(--sp-1) var(--sp-3);
   align-items: baseline;
 }
 
-.compare-label {
+.detail-kv-grid--3col { grid-template-columns: auto 1fr 1fr; }
+
+.detail-kv-label {
   font-size: var(--text-xs);
   color: var(--muted);
   white-space: nowrap;
 }
 
-.detail-compare-grid--3col {
-  grid-template-columns: auto 1fr 1fr;
+.detail-kv-head {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--ink);
 }
 
-.compare-col-head {
+/* ── Detail table — proper tabular layout for sub-card sections ── */
+.detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+/* 二欄表格（金額比較、週期）：value 欄也縮到內容寬，不撐滿 */
+.detail-table--compact {
+  width: auto;
+}
+.detail-table--compact tbody td {
+  width: 1px;
+  white-space: nowrap;
+  text-align: right;
+  min-width: 80px; /* 數字最小不能太擠 */
+}
+
+/* thead: 淺底色 + 粗下分隔線 */
+.detail-table thead tr {
+  background: var(--surface-subtle);
+}
+.detail-table thead th {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  padding: 4px 8px;
+  border-bottom: 2px solid var(--line);
+  border-left: 1px solid var(--line);
+  text-align: right;
+  white-space: nowrap;
+}
+.detail-table thead th:first-child {
+  text-align: left;
+  border-left: none;
+  width: 1px;
+}
+
+/* tbody th = 標籤欄 */
+.detail-table tbody th {
+  width: 1px;
+  font-size: var(--text-xs);
+  font-weight: 400;
+  color: var(--muted);
+  text-align: left;
+  padding: 5px 10px 5px 8px;
+  border-bottom: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+/* tbody td = 數值欄 */
+.detail-table tbody td {
+  text-align: right;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+  vertical-align: middle;
+}
+.detail-table tbody td:first-child { border-left: none; }
+
+/* 斑馬紋 */
+.detail-table tbody tr:nth-child(even) {
+  background: var(--surface-subtle);
+}
+
+/* Row hover */
+.detail-table tbody tr:hover {
+  background: var(--accent-subtle) !important;
+}
+
+/* 最後一列去掉下邊線 */
+.detail-table tbody tr:last-child th,
+.detail-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* 主要數值加重（本月目前、推估月底） */
+.detail-table tbody td.val-primary {
+  font-weight: 700;
+  color: var(--ink);
+  font-size: var(--text-md);
+}
+
+.detail-footer {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: baseline;
+  padding: var(--sp-2) var(--sp-5);
+  border-top: 1px solid var(--line-subtle);
+  background: var(--panel);
+}
+
+/* ── Phase 6: Gap trend indicator ── */
+.gap-trend {
+  font-size: var(--text-xs);
   font-weight: 600;
-  color: var(--text);
+  white-space: nowrap;
+}
+.gap-trend--rising  { color: var(--danger); }
+.gap-trend--falling { color: var(--success-text); }
+.gap-trend--stable  { color: var(--muted); font-weight: 400; }
+
+.gap-sparkline {
+  display: block;
+  width: 100%;
+  height: 80px;
+}
+
+/* ── Phase 5: Merged table cells ── */
+.cycle-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+}
+
+.cycle-days {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1;
+}
+
+.metric-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.metric-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--text-xs);
+}
+
+.metric-label {
+  color: var(--muted);
+  min-width: 24px;
+  text-align: right;
+}
+
+/* ── Phase 7: Budget progress bars ── */
+.detail-budget {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-5);
+  border-top: 1px solid var(--line-subtle);
+  background: var(--panel);
+}
+
+.budget-bars {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+
+.budget-bar-row {
+  display: grid;
+  grid-template-columns: 36px 1fr auto;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.budget-bar-label {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.budget-bar-track {
+  height: 8px;
+  background: var(--surface-subtle);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.budget-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.budget-bar-fill--base {
+  background: none;
+  border: 2px dashed #94a3b8;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+.budget-bar-fill--current  { background: var(--accent); }
+.budget-bar-fill--estimated { background: var(--accent); opacity: 0.45; }
+.budget-bar-fill--ok       { background: var(--success-text); opacity: 1; }
+.budget-bar-fill--warn     { background: var(--warning-text); opacity: 1; }
+.budget-bar-fill--danger   { background: var(--danger); opacity: 1; }
+.budget-bar-fill--estimated.budget-bar-fill--ok     { opacity: 0.5; }
+.budget-bar-fill--estimated.budget-bar-fill--warn   { opacity: 0.5; }
+.budget-bar-fill--estimated.budget-bar-fill--danger { opacity: 0.5; }
+
+.budget-bar-value {
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  min-width: 120px;
+}
+
+/* ── Phase 7: Monthly history table ── */
+.detail-monthly {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-5) var(--sp-4);
+  border-top: 1px solid var(--line-subtle);
+}
+
+.monthly-history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-xs);
+}
+
+.monthly-history-table th {
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: var(--sp-1) var(--sp-2);
+  border-bottom: 1px solid var(--line-subtle);
+  text-align: left;
+}
+
+.monthly-history-table th.num { text-align: right; }
+
+.monthly-history-table td {
+  padding: var(--sp-1) var(--sp-2);
+  border-bottom: 1px solid var(--line-subtle);
+  color: var(--ink);
+}
+
+.monthly-history-table tbody tr:last-child td { border-bottom: none; }
+
+.monthly-history-table tbody tr:hover td { background: var(--surface-subtle); }
+
+.monthly-label {
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 /* ── Phase 6: Close-month status panel ── */
@@ -2509,9 +2854,12 @@ details[open] .discontinued-toggle {
 /* ── Import toolbar — 捲動收合 ── */
 .import-toolbar {
   overflow: hidden;
-  max-height: 80px;
+  max-height: 72px;
   opacity: 1;
-  /* margin-bottom 繼承自 workbench-toolbar 的 var(--sp-3) */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-6);
   transition: max-height 0.25s var(--ease-out),
               opacity    0.2s  ease,
               margin     0.25s var(--ease-out),
@@ -2524,6 +2872,76 @@ details[open] .discontinued-toggle {
   margin-bottom: 0;
   padding-top: 0;
   padding-bottom: 0;
+}
+
+/* Import summary — left side */
+.import-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.import-summary__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.import-period {
+  font-size: var(--text-md);
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.import-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 9px;
+  font-size: 10px;
+  font-weight: 600;
+  background: var(--accent-subtle);
+  color: var(--accent);
+  border: 1px solid var(--accent-ring);
+}
+
+.import-tag--empty {
+  background: var(--surface-subtle);
+  color: var(--muted);
+  border-color: var(--line);
+}
+
+.import-meta {
+  font-size: var(--text-sm);
+  color: var(--ink-secondary);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.import-time {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.import-feedback {
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.import-feedback--ok  { color: var(--success-text); }
+.import-feedback--err { color: var(--danger); }
+
+/* Import controls — right side */
+.import-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-shrink: 0;
 }
 
 /* ── File picker — 隱藏原生 input，用 label 模擬按鈕 ── */

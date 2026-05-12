@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Iterable, Mapping
@@ -89,6 +89,13 @@ class ProductMonitorRow:
     final_forecast_amount: float = 0.0  # 最終預估金額（= ForecastRow.estimated_amount）
     last_year_amount: float = 0.0       # 去年同期金額（0 = 無資料，顯示 -）
     budget_amount: float = 0.0          # 本月預算金額
+    # Phase 6: inter-shipment workday gap history
+    gap_history: list[int] = field(default_factory=list)  # workday gaps oldest→newest
+    gap_trend: str = "none"    # "rising" | "falling" | "stable" | "none"
+    gap_trend_delta: int = 0   # recent_avg − overall_avg (workdays, signed)
+    # Phase 7: last-N-months comparison table
+    monthly_history: list[dict] = field(default_factory=list)
+    # each dict: {year, month, label, actual, budget, last_year}
 
 
 @dataclass(frozen=True)
@@ -295,10 +302,24 @@ def build_product_monitor_rows(
     actuals = daily_actuals or {}
     projs = projections or {}
     workday_set = fetch_workday_set(db, today - timedelta(days=400), today) if db is not None else None
+
+    active_rows = [row for row in rows if not row.excluded]
     monitor_rows = [
         _to_monitor_row(row, actuals.get(row.row_id), workday_set, today, projs.get(row.row_id), target_month)
-        for row in rows if not row.excluded
+        for row in active_rows
     ]
+
+    # Attach last-6-month history (single batch query)
+    if db is not None:
+        closed_months = _get_last_closed_months(db, 6)
+        if closed_months:
+            row_ids = [(r.customer, r.product_code) for r in active_rows]
+            histories = _fetch_monthly_history(db, row_ids, closed_months)
+            monitor_rows = [
+                replace(r, monthly_history=histories.get(f"{r.customer}__{r.product_code}", []))
+                for r in monitor_rows
+            ]
+
     status_order = {"high": 0, "caution": 1, "ok": 2, "no_history": 3}
     return sorted(
         monitor_rows,
@@ -577,9 +598,128 @@ def _normalize_item_status(item_status: object, legacy_status_label: object = ""
     return "active"
 
 
+def _get_last_closed_months(db, n: int) -> list[tuple[int, int]]:
+    """Return the last n closed (year, month) pairs, newest first."""
+    with db.get_connection() as conn:
+        rows = conn.execute(
+            "SELECT year, month FROM month_close_records ORDER BY year DESC, month DESC LIMIT ?",
+            (n,),
+        ).fetchall()
+    return [(r["year"], r["month"]) for r in rows]
+
+
+def _fetch_monthly_history(
+    db,
+    row_ids: list[tuple[str, str]],
+    closed_months: list[tuple[int, int]],
+) -> dict[str, list[dict]]:
+    """Batch-fetch actual / budget / last-year qty for each (customer, product_code)
+    across the given closed months.  Returns a dict keyed by 'customer__product_code',
+    value is a list of month dicts ordered newest → oldest.
+    """
+    if not row_ids or not closed_months:
+        return {}
+
+    month_strs    = [f"{y}-{m:02d}" for y, m in closed_months]
+    ly_month_strs = [f"{y-1}-{m:02d}" for y, m in closed_months]
+
+    customers = list({r[0] for r in row_ids})
+    products  = list({r[1] for r in row_ids})
+    ph_c = ",".join("?" * len(customers))
+    ph_p = ",".join("?" * len(products))
+    ph_m  = ",".join("?" * len(month_strs))
+    ph_ly = ",".join("?" * len(ly_month_strs))
+
+    with db.get_connection() as conn:
+        actuals = conn.execute(
+            f"""SELECT CAST(strftime('%Y', order_date) AS INTEGER) AS yr,
+                       CAST(strftime('%m', order_date) AS INTEGER) AS mo,
+                       customer_name, product_code, SUM(quantity) AS qty
+                FROM   sales_records
+                WHERE  strftime('%Y-%m', order_date) IN ({ph_m})
+                  AND  customer_name IN ({ph_c})
+                  AND  product_code  IN ({ph_p})
+                GROUP  BY yr, mo, customer_name, product_code""",
+            month_strs + customers + products,
+        ).fetchall()
+
+        ly_actuals = conn.execute(
+            f"""SELECT CAST(strftime('%Y', order_date) AS INTEGER) + 1 AS yr,
+                       CAST(strftime('%m', order_date) AS INTEGER)     AS mo,
+                       customer_name, product_code, SUM(quantity) AS qty
+                FROM   sales_records
+                WHERE  strftime('%Y-%m', order_date) IN ({ph_ly})
+                  AND  customer_name IN ({ph_c})
+                  AND  product_code  IN ({ph_p})
+                GROUP  BY yr, mo, customer_name, product_code""",
+            ly_month_strs + customers + products,
+        ).fetchall()
+
+        budget_clauses = " OR ".join(["(year=? AND month=?)"] * len(closed_months))
+        budget_params  = [v for y, m in closed_months for v in (y, m)]
+        budgets = conn.execute(
+            f"""SELECT year, month, customer_name, product_code, target_quantity
+                FROM   budget_targets
+                WHERE  ({budget_clauses})
+                  AND  customer_name IN ({ph_c})
+                  AND  product_code  IN ({ph_p})""",
+            budget_params + customers + products,
+        ).fetchall()
+
+    actual_map = {
+        (r["customer_name"], r["product_code"], r["yr"], r["mo"]): float(r["qty"])
+        for r in actuals
+    }
+    ly_map = {
+        (r["customer_name"], r["product_code"], r["yr"], r["mo"]): float(r["qty"])
+        for r in ly_actuals
+    }
+    budget_map = {
+        (r["customer_name"], r["product_code"], r["year"], r["month"]): float(r["target_quantity"])
+        for r in budgets
+    }
+
+    result: dict[str, list[dict]] = {}
+    for customer, product_code in row_ids:
+        key = f"{customer}__{product_code}"
+        history = []
+        for y, m in closed_months:          # already newest → oldest
+            history.append({
+                "year":      y,
+                "month":     m,
+                "label":     f"{m:02d}月",
+                "actual":    actual_map.get((customer, product_code, y, m), 0.0),
+                "budget":    budget_map.get((customer, product_code, y, m), 0.0),
+                "last_year": ly_map.get((customer, product_code, y, m), 0.0),
+            })
+        result[key] = history
+    return result
+
+
 def _days_since_order(workday_set: frozenset[date], order_date: date, today: date) -> int:
     """Count workdays strictly after order_date up to and including today."""
     return sum(1 for d in workday_set if order_date < d <= today)
+
+
+def _compute_gap_trend(gaps: list[int]) -> tuple[str, int]:
+    """Compare the most recent 3 gaps to the overall average.
+
+    Returns (trend, delta) where trend is "rising"/"falling"/"stable"/"none"
+    and delta is recent_avg − overall_avg rounded to nearest workday.
+    Threshold: ±15% of overall average to classify as trending.
+    """
+    if len(gaps) < 3:
+        return "none", 0
+    overall_avg = sum(gaps) / len(gaps)
+    recent_avg = sum(gaps[-3:]) / 3
+    delta = round(recent_avg - overall_avg)
+    if overall_avg == 0:
+        return "none", 0
+    if recent_avg > overall_avg * 1.10:
+        return "rising", delta
+    if recent_avg < overall_avg * 0.90:
+        return "falling", delta
+    return "stable", delta
 
 
 def _cycle_status_info(days_since: int | None, cycle_days: int | None) -> tuple[str, bool, bool]:
@@ -671,12 +811,16 @@ def _to_monitor_row(
         raw_typical_qty = projection.typical_qty_per_shipment  # in raw units
         proj_confidence = projection.confidence
         projected_remaining_qty = projection.projected_remaining_qty  # raw units
+        gap_history = projection.gap_history
     else:
         raw_estimated_eom = row.system_forecast
         remaining_shipments = 0
         raw_typical_qty = 0.0
         proj_confidence = "low"
         projected_remaining_qty = 0.0
+        gap_history = []
+
+    gap_trend, gap_trend_delta = _compute_gap_trend(gap_history)
 
     # Phase 5: amount fields — use raw_current for implied price so projected amount stays correct
     current_taxed_amount = float(actual.taxed_amount) if actual is not None else 0.0
@@ -725,6 +869,9 @@ def _to_monitor_row(
         final_forecast_amount=final_forecast_amount,
         last_year_amount=last_year_amount,
         budget_amount=budget_amount,
+        gap_history=gap_history,
+        gap_trend=gap_trend,
+        gap_trend_delta=gap_trend_delta,
     )
 
 

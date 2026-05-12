@@ -17,57 +17,72 @@
       <section class="alert" role="alert">{{ error_message }}</section>
     {% endif %}
 
-    <section id="import-toolbar" class="workbench-toolbar import-toolbar" aria-labelledby="daily-import-title">
-      <div class="toolbar-title">
-        <h2 id="daily-import-title">選擇當月累積業績檔</h2>
-        <span>系統將依欄位格式判斷資料，不限制檔名。</span>
-      </div>
-      <form class="toolbar-controls" id="import-form" method="post" action="{{ url_for('import_product_monitor_daily_sales') }}" enctype="multipart/form-data">
-        <input type="file" id="daily-sales-file" name="daily_sales_file" accept=".xlsx,.xls" required class="sr-only">
-        <label for="daily-sales-file" class="btn-secondary file-pick-btn" id="file-pick-label">選擇檔案</label>
-        <span id="file-pick-name" class="file-pick-name muted">未選擇檔案</span>
-        <button type="submit">匯入</button>
-      </form>
-    </section>
+    {# ── 匯入工具列（整合狀態 + 操作）── #}
+    <section id="import-toolbar" class="workbench-toolbar import-toolbar" aria-label="業績匯入">
 
-    {% if import_message %}
-      <section class="alert alert-info" role="status">{{ import_message }}</section>
-    {% endif %}
-    {% if import_error %}
-      <section class="alert" role="alert">{{ import_error }}</section>
-    {% endif %}
+      {# 左側：月份 + 狀態摘要 #}
+      <div class="import-summary">
+        <div class="import-summary__head">
+          <span class="import-period">{{ year }}/{{ "%02d"|format(month) }} 業績</span>
+          {% if close_record %}
+            <span class="badge status-ok">已結月</span>
+          {% elif latest_batch %}
+            <span class="import-tag">已匯入</span>
+          {% else %}
+            <span class="import-tag import-tag--empty">未匯入</span>
+          {% endif %}
+        </div>
 
-    {# ── 結月狀態列 ── #}
-    {% if close_record %}
-      <section class="workbench-toolbar close-status-panel close-status-panel--closed">
-        <div class="toolbar-title">
-          <span class="badge status-ok">已結月</span>
-          <span>{{ close_record.year }}/{{ "%02d"|format(close_record.month) }} &nbsp;·&nbsp;
+        {% if import_message %}
+          <span class="import-feedback import-feedback--ok">{{ import_message }}</span>
+        {% elif import_error %}
+          <span class="import-feedback import-feedback--err">{{ import_error }}</span>
+        {% elif close_record %}
+          <span class="import-meta">
             {{ close_record.actual_row_count }} 筆 &nbsp;·&nbsp;
             數量 {{ "{:,.0f}".format(close_record.actual_quantity_total) }} &nbsp;·&nbsp;
             金額 {{ "{:,.0f}".format(close_record.actual_amount_total) }}
+            <span class="import-time">結月於 {{ close_record.closed_at[:16] if close_record.closed_at else "" }}</span>
           </span>
-        </div>
-        <span class="muted close-status-time">{{ close_record.closed_at[:16] if close_record.closed_at else "" }}</span>
-      </section>
-    {% elif latest_batch %}
-      <section class="workbench-toolbar close-status-panel">
-        <div class="toolbar-title">
-          <span>{{ year }}/{{ "%02d"|format(month) }} &nbsp;·&nbsp;
-            已匯入 {{ latest_batch.row_count }} 筆 &nbsp;·&nbsp;
+        {% elif latest_batch %}
+          <span class="import-meta">
+            {{ latest_batch.row_count }} 筆 &nbsp;·&nbsp;
             數量 {{ "{:,.0f}".format(latest_batch.quantity_total) }} &nbsp;·&nbsp;
             金額 {{ "{:,.0f}".format(latest_batch.taxed_amount_total) }}
+            {% if latest_batch.imported_at %}
+              <span class="import-time">匯入於 {{ latest_batch.imported_at[:16] }}</span>
+            {% endif %}
           </span>
-        </div>
-        <form class="toolbar-controls" method="post"
-              action="{{ url_for('close_product_monitor_month') }}"
+        {% else %}
+          <span class="import-meta muted">尚未匯入本月業績資料，請選擇檔案匯入。</span>
+        {% endif %}
+      </div>
+
+      {# 右側：操作控制 #}
+      <div class="import-controls">
+        {% if not close_record %}
+        <form class="toolbar-controls" id="import-form" method="post"
+              action="{{ url_for('import_product_monitor_daily_sales') }}"
+              enctype="multipart/form-data">
+          <input type="file" id="daily-sales-file" name="daily_sales_file"
+                 accept=".xlsx,.xls" required class="sr-only">
+          <label for="daily-sales-file" class="btn-secondary file-pick-btn" id="file-pick-label">選擇檔案</label>
+          <span id="file-pick-name" class="file-pick-name muted">未選擇檔案</span>
+          <button type="submit">匯入</button>
+        </form>
+        {% endif %}
+
+        {% if latest_batch and not close_record %}
+        <form method="post" action="{{ url_for('close_product_monitor_month') }}"
               onsubmit="return confirm('確認結月 {{ year }}/{{ '%02d'|format(month) }}？結月後無法再匯入或覆蓋。')">
           <input type="hidden" name="year" value="{{ year }}">
           <input type="hidden" name="month" value="{{ month }}">
           <button type="submit" class="btn-close-month">結月</button>
         </form>
-      </section>
-    {% endif %}
+        {% endif %}
+      </div>
+
+    </section>
 
     <section class="monitor-workspace workbench-panel" aria-labelledby="monitor-title">
       <div class="monitor-toolbar workbench-toolbar" aria-label="跳單監控工具">
@@ -78,18 +93,29 @@
         <div class="toolbar-controls">
           <label>
             搜尋
-            <input type="search" data-monitor-search placeholder="客戶、品項、ID">
+            <input type="search" data-monitor-search placeholder="客戶、品項、ID（空格可多關鍵字）">
           </label>
           <label>
-            狀態
+            篩選
             <select data-monitor-status>
               <option value="all">全部</option>
-              <option value="high">高風險</option>
-              <option value="caution">注意</option>
-              <option value="ok">正常/成長</option>
-              <option value="no_history">無去年同期</option>
+              <optgroup label="整體狀態">
+                <option value="high">高風險</option>
+                <option value="caution">注意</option>
+                <option value="ok">正常/成長</option>
+                <option value="no_history">無去年同期</option>
+              </optgroup>
+              <optgroup label="出貨週期">
+                <option value="cycle_delayed">週期逾期</option>
+                <option value="cycle_approaching">週期接近</option>
+              </optgroup>
+              <optgroup label="間隔趨勢">
+                <option value="gap_rising">間隔拉長 ↗</option>
+                <option value="gap_falling">間隔縮短 ↘</option>
+              </optgroup>
             </select>
           </label>
+          <button type="button" class="btn-secondary" data-monitor-export title="匯出目前篩選結果">匯出 CSV</button>
         </div>
       </div>
 
@@ -101,22 +127,39 @@
               <th class="monitor-sticky monitor-sticky--customer">客戶</th>
               <th class="monitor-sticky monitor-sticky--product">品項</th>
               <th class="num">最近出貨日</th>
-              <th class="num" title="距最近出貨工作日數">距出貨</th>
+              <th class="num" title="距最近出貨工作日數 / 週期狀態">出貨週期</th>
               <th class="num">本月目前</th>
               <th class="num" title="系統推估月底數量">推估月底</th>
               <th class="num">最終預估</th>
-              <th class="num">去年成長率</th>
-              <th class="num">預算達成率</th>
-              <th class="num">週期狀態</th>
+              <th class="num" title="去年成長率 / 預算達成率">達成指標</th>
+              <th class="num">間隔趨勢</th>
             </tr>
           </thead>
           <tbody>
             {% for row in rows %}
             {# ── 主列 ── #}
-            <tr data-monitor-row data-status="{{ row.status_key }}"
-                data-search="{{ row.customer }} {{ row.product_name }} {{ row.product_code }}">
+            <tr data-monitor-row aria-expanded="false"
+                data-status="{{ row.status_key }}"
+                data-cycle-status="{{ row.cycle_status }}"
+                data-gap-trend="{{ row.gap_trend }}"
+                data-search="{{ row.customer }} {{ row.product_name }} {{ row.product_code }}"
+                data-gap-history="{{ row.gap_history | tojson }}"
+                data-gap-avg="{{ row.cycle_days or 0 }}"
+                data-gap-current="{{ row.days_since_last_shipment_workdays or 0 }}"
+                data-csv-customer="{{ row.customer }}"
+                data-csv-product="{{ row.product_name }}"
+                data-csv-status="{{ row.status }}"
+                data-csv-date="{{ row.latest_order_date.strftime('%Y-%m-%d') if row.latest_order_date else '' }}"
+                data-csv-cycle-days="{{ row.days_since_last_shipment_workdays if row.days_since_last_shipment_workdays is not none else '' }}"
+                data-csv-cycle-status="{{ row.cycle_status }}"
+                data-csv-current="{{ '{:.0f}'.format(row.current_quantity) }}"
+                data-csv-eom="{{ '{:.0f}'.format(row.estimated_eom_qty) }}"
+                data-csv-forecast="{{ '{:.0f}'.format(row.forecast_quantity) }}"
+                data-csv-yoy="{{ '{:+.1f}'.format((row.yoy_growth_rate - 1) * 100) if row.yoy_growth_rate is not none else '' }}"
+                data-csv-budget="{{ '{:.1f}'.format(row.budget_achievement_rate * 100) if row.budget_achievement_rate is not none else '' }}"
+                data-csv-gap-trend="{{ row.gap_trend }}{% if row.gap_trend_delta != 0 %} {{ '%+d' % row.gap_trend_delta }}天{% endif %}">
               <td class="monitor-sticky monitor-sticky--status">
-                <button class="monitor-expand-btn" data-monitor-expand aria-expanded="false" aria-label="展開詳情">▶</button>
+                <span class="row-chevron" aria-hidden="true"></span>
                 <span class="badge status-{{ row.status_key }}">{{ row.status }}</span>
               </td>
               <td class="monitor-sticky monitor-sticky--customer">{{ row.customer }}</td>
@@ -124,53 +167,66 @@
               <td class="num">
                 {% if row.latest_order_date %}{{ row.latest_order_date.strftime("%m/%d") }}{% else %}<span class="muted">-</span>{% endif %}
               </td>
+              {# 出貨週期：距出貨工作天 + 週期狀態 badge #}
               <td class="num">
-                {% if row.days_since_last_shipment_workdays is not none %}
-                  <span class="{% if row.cycle_status == 'delayed' %}danger-text{% elif row.cycle_status == 'approaching' %}rate-warning{% endif %}">
-                    {{ row.days_since_last_shipment_workdays }}
+                <div class="cycle-cell">
+                  {% if row.days_since_last_shipment_workdays is not none %}
+                  <span class="cycle-days {% if row.cycle_status == 'delayed' %}danger-text{% elif row.cycle_status == 'approaching' %}rate-warning{% endif %}">
+                    {{ row.days_since_last_shipment_workdays }}天
                   </span>
-                {% else %}
-                  <span class="muted">-</span>
-                {% endif %}
+                  {% endif %}
+                  {% if row.cycle_status == "delayed" %}
+                    <span class="badge status-high">逾期</span>
+                  {% elif row.cycle_status == "approaching" %}
+                    <span class="badge status-caution">接近</span>
+                  {% elif row.cycle_status == "ok" %}
+                    <span class="badge status-ok">正常</span>
+                  {% elif row.days_since_last_shipment_workdays is none %}
+                    <span class="muted">-</span>
+                  {% endif %}
+                </div>
               </td>
               <td class="num">{{ "{:,.0f}".format(row.current_quantity) }}</td>
               <td class="num">{{ "{:,.0f}".format(row.estimated_eom_qty) }}</td>
               <td class="num">{{ "{:,.0f}".format(row.forecast_quantity) }}</td>
+              {# 達成指標：YoY + 預算達成率 #}
               <td class="num">
-                {% if row.yoy_growth_rate is none %}
-                  <span class="muted">-</span>
-                {% else %}
-                  {% set pct = (row.yoy_growth_rate - 1) * 100 %}
-                  <span class="gap-value {% if pct < 0 %}falling{% elif pct > 0 %}rising{% endif %}">
-                    {{ "{:+.1f}%".format(pct) }}
-                  </span>
-                {% endif %}
+                <div class="metric-cell">
+                  <div class="metric-row">
+                    <span class="metric-label">YoY</span>
+                    {% if row.yoy_growth_rate is none %}
+                      <span class="muted">-</span>
+                    {% else %}
+                      {% set pct = (row.yoy_growth_rate - 1) * 100 %}
+                      <span class="gap-value {% if pct < 0 %}falling{% elif pct > 0 %}rising{% endif %}">{{ "{:+.1f}%".format(pct) }}</span>
+                    {% endif %}
+                  </div>
+                  <div class="metric-row">
+                    <span class="metric-label">預算</span>
+                    {% if row.budget_achievement_rate is none %}
+                      <span class="muted">-</span>
+                    {% else %}
+                      {% set bpct = row.budget_achievement_rate * 100 %}
+                      <span class="{% if bpct < 90 %}danger-text{% elif bpct < 100 %}rate-warning{% else %}success-text{% endif %}">{{ "{:.1f}%".format(bpct) }}</span>
+                    {% endif %}
+                  </div>
+                </div>
               </td>
               <td class="num">
-                {% if row.budget_achievement_rate is none %}
+                {% if row.gap_trend == "none" %}
                   <span class="muted">-</span>
+                {% elif row.gap_trend == "rising" %}
+                  <span class="gap-trend gap-trend--rising">↗ +{{ row.gap_trend_delta }}天</span>
+                {% elif row.gap_trend == "falling" %}
+                  <span class="gap-trend gap-trend--falling">↘ {{ row.gap_trend_delta }}天</span>
                 {% else %}
-                  {% set bpct = row.budget_achievement_rate * 100 %}
-                  <span class="{% if bpct < 90 %}danger-text{% elif bpct < 100 %}rate-warning{% else %}success-text{% endif %}">
-                    {{ "{:.1f}%".format(bpct) }}
-                  </span>
-                {% endif %}
-              </td>
-              <td class="num">
-                {% if row.cycle_status == "delayed" %}
-                  <span class="badge status-high">逾期</span>
-                {% elif row.cycle_status == "approaching" %}
-                  <span class="badge status-caution">接近</span>
-                {% elif row.cycle_status == "ok" %}
-                  <span class="muted">正常</span>
-                {% else %}
-                  <span class="muted">-</span>
+                  <span class="gap-trend gap-trend--stable">→ 穩定</span>
                 {% endif %}
               </td>
             </tr>
             {# ── 展開詳情列 ── #}
             <tr data-monitor-detail hidden>
-              <td colspan="11">
+              <td colspan="10">
                 <div class="monitor-detail-card">
                   {# 風險摘要 #}
                   {% set risk_parts = [] %}
@@ -186,102 +242,236 @@
                     {% set _ = risk_parts.append("出貨週期接近（已 {} 工作日，平均 {} 天）".format(row.days_since_last_shipment_workdays, row.cycle_days)) %}
                   {% endif %}
 
-                  <div class="detail-section">
-                    <span class="detail-label">狀態原因</span>
-                    <span>{% if risk_parts %}{{ risk_parts | join("；") }}{% else %}各指標均達標{% endif %}</span>
+                  {# ── 頂部摘要列 ── #}
+                  <div class="detail-head">
+                    <div class="detail-head-item detail-head-item--grow">
+                      <span class="detail-meta-label">狀態原因</span>
+                      <span>{% if risk_parts %}{{ risk_parts | join("；") }}{% else %}各指標均達標{% endif %}</span>
+                    </div>
+                    <div class="detail-head-item">
+                      <span class="detail-meta-label">建議追蹤</span>
+                      <span>
+                        {% if row.status_key == "high" and row.cycle_status == "delayed" %}
+                          確認客戶是否有待處理需求，主動詢問補單時間
+                        {% elif row.status_key == "high" %}
+                          聯絡客戶確認本月訂購計畫，評估補單可能性
+                        {% elif row.status_key == "caution" %}
+                          持續追蹤，提前溝通補單可能性
+                        {% else %}
+                          維持正常追蹤週期
+                        {% endif %}
+                      </span>
+                    </div>
                   </div>
 
-                  <div class="detail-section">
-                    <span class="detail-label">建議追蹤</span>
-                    <span>
-                      {% if row.status_key == "high" and row.cycle_status == "delayed" %}
-                        確認客戶是否有待處理需求，主動詢問補單時間
-                      {% elif row.status_key == "high" %}
-                        聯絡客戶確認本月訂購計畫，評估補單可能性
-                      {% elif row.status_key == "caution" %}
-                        持續追蹤，提前溝通補單可能性
-                      {% else %}
-                        維持正常追蹤週期
-                      {% endif %}
-                    </span>
-                  </div>
+                  {# ── 主體三欄：數量 / 金額+預算 / 週期+走勢 ── #}
+                  <div class="detail-body">
 
-                  {# ── 數量三軸比較 ── #}
-                  <div class="detail-section detail-compare">
-                    <span class="detail-label">數量比較</span>
-                    <div class="detail-compare-grid detail-compare-grid--3col">
-                      <span class="compare-label"></span><span class="compare-label compare-col-head">數量</span><span class="compare-label compare-col-head">GAP</span>
+                    {# ── 欄 1：數量比較 ── #}
+                    <div class="detail-col">
+                      <div class="detail-section">
+                        <div class="detail-section-title">數量比較</div>
+                        <table class="detail-table">
+                          <thead>
+                            <tr>
+                              <th></th>
+                              <th>數量</th>
+                              <th>vs 推估月底</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr>
+                              <th>本月目前</th>
+                              <td class="val-primary">{{ "{:,.0f}".format(row.current_quantity) }}</td>
+                              <td class="muted">—</td>
+                            </tr>
+                            <tr>
+                              <th>推估月底</th>
+                              <td class="val-primary">{{ "{:,.0f}".format(row.estimated_eom_qty) }}</td>
+                              <td class="muted">—</td>
+                            </tr>
+                            <tr>
+                              <th>最終預估</th>
+                              <td class="muted">{{ "{:,.0f}".format(row.forecast_quantity) }}</td>
+                              {% set gap_fcst = row.estimated_eom_qty - row.forecast_quantity %}
+                              <td class="gap-value {% if gap_fcst < 0 %}falling{% elif gap_fcst > 0 %}rising{% endif %}">{{ "{:+,.0f}".format(gap_fcst) }}</td>
+                            </tr>
+                            {% if row.last_year_quantity > 0 %}
+                            <tr>
+                              <th>去年同期</th>
+                              <td class="muted">{{ "{:,.0f}".format(row.last_year_quantity) }}</td>
+                              {% set gap_yoy = row.estimated_eom_qty - row.last_year_quantity %}
+                              <td class="gap-value {% if gap_yoy < 0 %}falling{% elif gap_yoy > 0 %}rising{% endif %}">{{ "{:+,.0f}".format(gap_yoy) }}</td>
+                            </tr>
+                            {% endif %}
+                            {% if row.budget_quantity > 0 %}
+                            <tr>
+                              <th>本月預算</th>
+                              <td class="muted">{{ "{:,.0f}".format(row.budget_quantity) }}</td>
+                              {% set gap_bud = row.estimated_eom_qty - row.budget_quantity %}
+                              <td class="gap-value {% if gap_bud < 0 %}falling{% elif gap_bud > 0 %}rising{% endif %}">{{ "{:+,.0f}".format(gap_bud) }}</td>
+                            </tr>
+                            {% endif %}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>{# /欄1 #}
 
-                      <span class="compare-label">本月目前</span>
-                      <strong>{{ "{:,.0f}".format(row.current_quantity) }}</strong>
-                      <span></span>
-
-                      <span class="compare-label">推估月底</span>
-                      <strong>{{ "{:,.0f}".format(row.estimated_eom_qty) }}</strong>
-                      <span></span>
-
-                      <span class="compare-label">vs 最終預估</span>
-                      <span class="muted">{{ "{:,.0f}".format(row.forecast_quantity) }}</span>
-                      {% set gap_fcst = row.estimated_eom_qty - row.forecast_quantity %}
-                      <span class="gap-value {% if gap_fcst < 0 %}falling{% elif gap_fcst > 0 %}rising{% endif %}">{{ "{:+,.0f}".format(gap_fcst) }}</span>
-
-                      {% if row.last_year_quantity > 0 %}
-                      <span class="compare-label">vs 去年同期</span>
-                      <span class="muted">{{ "{:,.0f}".format(row.last_year_quantity) }}</span>
-                      {% set gap_yoy = row.estimated_eom_qty - row.last_year_quantity %}
-                      <span class="gap-value {% if gap_yoy < 0 %}falling{% elif gap_yoy > 0 %}rising{% endif %}">{{ "{:+,.0f}".format(gap_yoy) }}</span>
+                    {# ── 欄 2：金額比較 + 預算進度 ── #}
+                    <div class="detail-col">
+                      {% if row.current_taxed_amount > 0 or row.final_forecast_amount > 0 %}
+                      <div class="detail-section">
+                        <div class="detail-section-title">金額比較</div>
+                        <table class="detail-table detail-table--compact">
+                          <tbody>
+                            <tr><th>本月目前含稅</th><td class="val-primary">{{ "{:,.0f}".format(row.current_taxed_amount) if row.current_taxed_amount > 0 else "—" }}</td></tr>
+                            <tr><th>推估月底金額</th><td class="val-primary">{{ "{:,.0f}".format(row.estimated_eom_amount) if row.estimated_eom_amount > 0 else "—" }}</td></tr>
+                            <tr><th>最終預估金額</th><td class="muted">{{ "{:,.0f}".format(row.final_forecast_amount) if row.final_forecast_amount > 0 else "—" }}</td></tr>
+                            <tr><th>去年同期金額</th><td class="muted">{{ "{:,.0f}".format(row.last_year_amount) if row.last_year_amount > 0 else "—" }}</td></tr>
+                            <tr><th>本月預算金額</th><td class="muted">{{ "{:,.0f}".format(row.budget_amount) if row.budget_amount > 0 else "—" }}</td></tr>
+                          </tbody>
+                        </table>
+                      </div>
                       {% endif %}
 
                       {% if row.budget_quantity > 0 %}
-                      <span class="compare-label">vs 預算</span>
-                      <span class="muted">{{ "{:,.0f}".format(row.budget_quantity) }}</span>
-                      {% set gap_bud = row.estimated_eom_qty - row.budget_quantity %}
-                      <span class="gap-value {% if gap_bud < 0 %}falling{% elif gap_bud > 0 %}rising{% endif %}">{{ "{:+,.0f}".format(gap_bud) }}</span>
+                      <div class="detail-section detail-section--budget">
+                        <div class="detail-section-title">預算達成進度</div>
+                        <div class="budget-bars">
+                          <div class="budget-bar-row">
+                            <span class="budget-bar-label">預算</span>
+                            <div class="budget-bar-track">
+                              <div class="budget-bar-fill budget-bar-fill--base" style="width:100%"></div>
+                            </div>
+                            <span class="budget-bar-value muted">{{ "{:,.0f}".format(row.budget_quantity) }}</span>
+                          </div>
+                          {% set cur_pct = [[(row.current_quantity / row.budget_quantity * 100), 0]|max, 100]|min %}
+                          <div class="budget-bar-row">
+                            <span class="budget-bar-label">目前</span>
+                            <div class="budget-bar-track">
+                              <div class="budget-bar-fill budget-bar-fill--current {% if cur_pct >= 100 %}budget-bar-fill--ok{% elif cur_pct >= 70 %}budget-bar-fill--warn{% else %}budget-bar-fill--danger{% endif %}" style="width:{{ cur_pct }}%"></div>
+                            </div>
+                            <span class="budget-bar-value">{{ "{:,.0f}".format(row.current_quantity) }} <span class="muted">({{ "{:.0f}%".format(cur_pct) }})</span></span>
+                          </div>
+                          {% set est_pct = [[(row.estimated_eom_qty / row.budget_quantity * 100), 0]|max, 100]|min %}
+                          <div class="budget-bar-row">
+                            <span class="budget-bar-label">推估</span>
+                            <div class="budget-bar-track">
+                              <div class="budget-bar-fill budget-bar-fill--estimated {% if est_pct >= 100 %}budget-bar-fill--ok{% elif est_pct >= 80 %}budget-bar-fill--warn{% else %}budget-bar-fill--danger{% endif %}" style="width:{{ est_pct }}%"></div>
+                            </div>
+                            <span class="budget-bar-value">{{ "{:,.0f}".format(row.estimated_eom_qty) }} <span class="muted">({{ "{:.0f}%".format(est_pct) }})</span></span>
+                          </div>
+                        </div>
+                      </div>
                       {% endif %}
-                    </div>
-                  </div>
+                    </div>{# /欄2 #}
 
-                  {# ── 金額比較 ── #}
-                  {% if row.current_taxed_amount > 0 or row.final_forecast_amount > 0 %}
-                  <div class="detail-section detail-compare">
-                    <span class="detail-label">金額比較</span>
-                    <div class="detail-compare-grid">
-                      <span class="compare-label">本月目前含稅</span>
-                      <strong>{{ "{:,.0f}".format(row.current_taxed_amount) if row.current_taxed_amount > 0 else "-" }}</strong>
+                    {# ── 欄 3：週期 & 推估 + 間隔走勢 ── #}
+                    <div class="detail-col">
+                      <div class="detail-section">
+                        <div class="detail-section-title">週期 &amp; 推估</div>
+                        <table class="detail-table detail-table--compact">
+                          <tbody>
+                            <tr>
+                              <th>最近出貨日</th>
+                              <td>{% if row.latest_order_date %}{{ row.latest_order_date }}{% else %}—{% endif %}</td>
+                            </tr>
+                            <tr>
+                              <th>距今工作日</th>
+                              <td class="{% if row.cycle_status == 'delayed' %}danger-text{% elif row.cycle_status == 'approaching' %}rate-warning{% endif %}">
+                                {% if row.days_since_last_shipment_workdays is not none %}{{ row.days_since_last_shipment_workdays }} 天{% else %}—{% endif %}
+                              </td>
+                            </tr>
+                            <tr>
+                              <th>歷史平均週期</th>
+                              <td>{% if row.cycle_days %}{{ row.cycle_days }} 天{% else %}—{% endif %}</td>
+                            </tr>
+                            <tr>
+                              <th>典型出貨量</th>
+                              <td>{% if row.typical_qty_per_shipment > 0 %}{{ "{:,.0f}".format(row.typical_qty_per_shipment) }}{% else %}—{% endif %}</td>
+                            </tr>
+                            <tr>
+                              <th>月底前再出貨</th>
+                              <td>{{ row.remaining_shipments }} 次</td>
+                            </tr>
+                            <tr>
+                              <th>推估信心</th>
+                              <td class="{% if row.projection_confidence == 'high' %}success-text{% elif row.projection_confidence == 'medium' %}rate-warning{% else %}muted{% endif %}">
+                                {{ {"high": "高", "medium": "中", "low": "低"}.get(row.projection_confidence, "—") }}
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
 
-                      <span class="compare-label">推估月底金額</span>
-                      <strong>{{ "{:,.0f}".format(row.estimated_eom_amount) if row.estimated_eom_amount > 0 else "-" }}</strong>
+                      {% if row.gap_history|length >= 2 %}
+                      <div class="detail-section detail-section--chart">
+                        <div class="detail-section-title">出貨間隔走勢（工作天）</div>
+                        <canvas class="gap-sparkline"
+                                data-gaps="{{ row.gap_history | tojson }}"
+                                data-avg="{{ row.cycle_days or 0 }}"
+                                data-current="{{ row.days_since_last_shipment_workdays or 0 }}"
+                                width="240" height="80"></canvas>
+                      </div>
+                      {% endif %}
+                    </div>{# /欄3 #}
 
-                      <span class="compare-label">最終預估金額</span>
-                      <strong>{{ "{:,.0f}".format(row.final_forecast_amount) if row.final_forecast_amount > 0 else "-" }}</strong>
+                  </div>{# /detail-body #}
 
-                      <span class="compare-label">去年同期金額</span>
-                      <strong>{{ "{:,.0f}".format(row.last_year_amount) if row.last_year_amount > 0 else "-" }}</strong>
-
-                      <span class="compare-label">本月預算金額</span>
-                      <strong>{{ "{:,.0f}".format(row.budget_amount) if row.budget_amount > 0 else "-" }}</strong>
-                    </div>
+                  {# ── 近 6 月對照表 ── #}
+                  {% if row.monthly_history %}
+                  <div class="detail-monthly">
+                    <span class="detail-meta-label">近期月份對照</span>
+                    <table class="monthly-history-table">
+                      <thead>
+                        <tr>
+                          <th>月份</th>
+                          <th class="num">實際量</th>
+                          <th class="num">預算量</th>
+                          <th class="num">達成率</th>
+                          <th class="num">去年同期</th>
+                          <th class="num">YoY</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {% for m in row.monthly_history %}
+                        <tr>
+                          <td class="monthly-label">{{ m.year }}/{{ m.label }}</td>
+                          <td class="num">
+                            {% if m.actual > 0 %}{{ "{:,.0f}".format(m.actual) }}{% else %}<span class="muted">-</span>{% endif %}
+                          </td>
+                          <td class="num muted">
+                            {% if m.budget > 0 %}{{ "{:,.0f}".format(m.budget) }}{% else %}<span class="muted">-</span>{% endif %}
+                          </td>
+                          <td class="num">
+                            {% if m.budget > 0 and m.actual > 0 %}
+                              {% set ach = m.actual / m.budget * 100 %}
+                              <span class="{% if ach >= 100 %}success-text{% elif ach >= 80 %}rate-warning{% else %}danger-text{% endif %}">
+                                {{ "{:.0f}%".format(ach) }}
+                              </span>
+                            {% else %}<span class="muted">-</span>{% endif %}
+                          </td>
+                          <td class="num muted">
+                            {% if m.last_year > 0 %}{{ "{:,.0f}".format(m.last_year) }}{% else %}<span class="muted">-</span>{% endif %}
+                          </td>
+                          <td class="num">
+                            {% if m.last_year > 0 and m.actual > 0 %}
+                              {% set yoy = (m.actual / m.last_year - 1) * 100 %}
+                              <span class="gap-value {% if yoy < 0 %}falling{% elif yoy > 0 %}rising{% endif %}">
+                                {{ "{:+.1f}%".format(yoy) }}
+                              </span>
+                            {% else %}<span class="muted">-</span>{% endif %}
+                          </td>
+                        </tr>
+                        {% endfor %}
+                      </tbody>
+                    </table>
                   </div>
                   {% endif %}
 
-                  <div class="detail-section detail-compare">
-                    <span class="detail-label">週期 &amp; 推估</span>
-                    <div class="detail-compare-grid">
-                      <span class="compare-label">最近出貨日</span><strong>{% if row.latest_order_date %}{{ row.latest_order_date }}{% else %}-{% endif %}</strong>
-                      <span class="compare-label">距今工作日</span><strong>{% if row.days_since_last_shipment_workdays is not none %}{{ row.days_since_last_shipment_workdays }}{% else %}-{% endif %}</strong>
-                      <span class="compare-label">歷史平均週期</span><strong>{% if row.cycle_days %}{{ row.cycle_days }} 天{% else %}-{% endif %}</strong>
-                      <span class="compare-label">典型單次出貨量</span><strong>{% if row.typical_qty_per_shipment > 0 %}{{ "{:,.0f}".format(row.typical_qty_per_shipment) }}{% else %}-{% endif %}</strong>
-                      <span class="compare-label">月底前預計再出貨</span><strong>{{ row.remaining_shipments }} 次</strong>
-                      <span class="compare-label">推估信心</span>
-                      <strong class="{% if row.projection_confidence == 'high' %}success-text{% elif row.projection_confidence == 'medium' %}rate-warning{% else %}muted{% endif %}">
-                        {{ {"high": "高", "medium": "中", "low": "低"}.get(row.projection_confidence, "-") }}
-                      </strong>
-                    </div>
-                  </div>
-
                   {% if row.note %}
-                  <div class="detail-section">
-                    <span class="detail-label">備註</span>
+                  <div class="detail-footer">
+                    <span class="detail-meta-label">備註</span>
                     <span>{{ row.note }}</span>
                   </div>
                   {% endif %}
@@ -296,6 +486,7 @@
   </main>
 
   <script src="{{ url_for('static', filename='js/monitor-table.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/gap-sparkline.js') }}"></script>
   <script>
     // 選檔後更新顯示的檔名
     document.getElementById('daily-sales-file').addEventListener('change', function () {
