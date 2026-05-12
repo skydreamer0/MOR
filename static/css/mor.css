@@ -2449,7 +2449,6 @@ details[open] .discontinued-toggle {
 .monitor-detail-card {
   font-size: var(--text-sm);
   border-top: 2px solid var(--accent);
-  max-width: 900px;   /* 限制卡片寬度，避免撐滿寬表格 */
 }
 
 .detail-head {
@@ -2477,10 +2476,10 @@ details[open] .discontinued-toggle {
   letter-spacing: 0.05em;
 }
 
-/* ── Detail body: two-column layout ── */
+/* ── Detail body: three-column layout ── */
 .detail-body {
   display: grid;
-  grid-template-columns: 3fr 2fr;
+  grid-template-columns: 1fr 1fr 1fr;
 }
 
 .detail-col {
@@ -2488,7 +2487,7 @@ details[open] .discontinued-toggle {
   flex-direction: column;
 }
 
-.detail-col--right {
+.detail-col + .detail-col {
   border-left: 1px solid var(--line);
 }
 
@@ -2573,38 +2572,38 @@ details[open] .discontinued-toggle {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--muted);
-  padding: 5px 10px;
+  padding: 4px 8px;
   border-bottom: 2px solid var(--line);
-  border-left: 1px solid var(--line-subtle);
+  border-left: 1px solid var(--line);
   text-align: right;
   white-space: nowrap;
 }
 .detail-table thead th:first-child {
   text-align: left;
   border-left: none;
-  width: 1px;        /* 標籤欄縮到最小 */
+  width: 1px;
 }
 
-/* tbody th = 標籤欄：縮到最小，右側補縱線 */
+/* tbody th = 標籤欄 */
 .detail-table tbody th {
   width: 1px;
   font-size: var(--text-xs);
   font-weight: 400;
   color: var(--muted);
   text-align: left;
-  padding: 6px 12px 6px 10px;
-  border-bottom: 1px solid var(--line-subtle);
-  border-right: 1px solid var(--line-subtle);
+  padding: 5px 10px 5px 8px;
+  border-bottom: 1px solid var(--line);
+  border-right: 1px solid var(--line);
   white-space: nowrap;
   vertical-align: middle;
 }
 
-/* tbody td = 數值欄：右對齊，左縱線 */
+/* tbody td = 數值欄 */
 .detail-table tbody td {
   text-align: right;
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--line-subtle);
-  border-left: 1px solid var(--line-subtle);
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--line);
+  border-left: 1px solid var(--line);
   vertical-align: middle;
 }
 .detail-table tbody td:first-child { border-left: none; }

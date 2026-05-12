@@ -264,13 +264,11 @@
                     </div>
                   </div>
 
-                  {# ── 主體：左欄（數量/金額）+ 右欄（週期/走勢）── #}
+                  {# ── 主體三欄：數量 / 金額+預算 / 週期+走勢 ── #}
                   <div class="detail-body">
 
-                    {# ── 左欄 ── #}
+                    {# ── 欄 1：數量比較 ── #}
                     <div class="detail-col">
-
-                      {# 數量比較 #}
                       <div class="detail-section">
                         <div class="detail-section-title">數量比較</div>
                         <table class="detail-table">
@@ -316,9 +314,11 @@
                             {% endif %}
                           </tbody>
                         </table>
-                      </div>{# /數量比較 #}
+                      </div>
+                    </div>{# /欄1 #}
 
-                      {# 金額比較 #}
+                    {# ── 欄 2：金額比較 + 預算進度 ── #}
+                    <div class="detail-col">
                       {% if row.current_taxed_amount > 0 or row.final_forecast_amount > 0 %}
                       <div class="detail-section">
                         <div class="detail-section-title">金額比較</div>
@@ -334,12 +334,40 @@
                       </div>
                       {% endif %}
 
-                    </div>{# /左欄 #}
+                      {% if row.budget_quantity > 0 %}
+                      <div class="detail-section detail-section--budget">
+                        <div class="detail-section-title">預算達成進度</div>
+                        <div class="budget-bars">
+                          <div class="budget-bar-row">
+                            <span class="budget-bar-label">預算</span>
+                            <div class="budget-bar-track">
+                              <div class="budget-bar-fill budget-bar-fill--base" style="width:100%"></div>
+                            </div>
+                            <span class="budget-bar-value muted">{{ "{:,.0f}".format(row.budget_quantity) }}</span>
+                          </div>
+                          {% set cur_pct = [[(row.current_quantity / row.budget_quantity * 100), 0]|max, 100]|min %}
+                          <div class="budget-bar-row">
+                            <span class="budget-bar-label">目前</span>
+                            <div class="budget-bar-track">
+                              <div class="budget-bar-fill budget-bar-fill--current {% if cur_pct >= 100 %}budget-bar-fill--ok{% elif cur_pct >= 70 %}budget-bar-fill--warn{% else %}budget-bar-fill--danger{% endif %}" style="width:{{ cur_pct }}%"></div>
+                            </div>
+                            <span class="budget-bar-value">{{ "{:,.0f}".format(row.current_quantity) }} <span class="muted">({{ "{:.0f}%".format(cur_pct) }})</span></span>
+                          </div>
+                          {% set est_pct = [[(row.estimated_eom_qty / row.budget_quantity * 100), 0]|max, 100]|min %}
+                          <div class="budget-bar-row">
+                            <span class="budget-bar-label">推估</span>
+                            <div class="budget-bar-track">
+                              <div class="budget-bar-fill budget-bar-fill--estimated {% if est_pct >= 100 %}budget-bar-fill--ok{% elif est_pct >= 80 %}budget-bar-fill--warn{% else %}budget-bar-fill--danger{% endif %}" style="width:{{ est_pct }}%"></div>
+                            </div>
+                            <span class="budget-bar-value">{{ "{:,.0f}".format(row.estimated_eom_qty) }} <span class="muted">({{ "{:.0f}%".format(est_pct) }})</span></span>
+                          </div>
+                        </div>
+                      </div>
+                      {% endif %}
+                    </div>{# /欄2 #}
 
-                    {# ── 右欄 ── #}
-                    <div class="detail-col detail-col--right">
-
-                      {# 週期 & 推估 #}
+                    {# ── 欄 3：週期 & 推估 + 間隔走勢 ── #}
+                    <div class="detail-col">
                       <div class="detail-section">
                         <div class="detail-section-title">週期 &amp; 推估</div>
                         <table class="detail-table">
@@ -374,9 +402,8 @@
                             </tr>
                           </tbody>
                         </table>
-                      </div>{# /週期 & 推估 #}
+                      </div>
 
-                      {# 間隔走勢圖 #}
                       {% if row.gap_history|length >= 2 %}
                       <div class="detail-section detail-section--chart">
                         <div class="detail-section-title">出貨間隔走勢（工作天）</div>
@@ -387,47 +414,9 @@
                                 width="240" height="80"></canvas>
                       </div>
                       {% endif %}
-
-                    </div>{# /右欄 #}
+                    </div>{# /欄3 #}
 
                   </div>{# /detail-body #}
-
-                  {# ── 當月預算進度條 ── #}
-                  {% if row.budget_quantity > 0 %}
-                  <div class="detail-budget">
-                    <span class="detail-meta-label">當月預算進度</span>
-                    <div class="budget-bars">
-                      {# 預算基準線 #}
-                      <div class="budget-bar-row">
-                        <span class="budget-bar-label">預算</span>
-                        <div class="budget-bar-track">
-                          <div class="budget-bar-fill budget-bar-fill--base" style="width:100%"></div>
-                        </div>
-                        <span class="budget-bar-value">{{ "{:,.0f}".format(row.budget_quantity) }}</span>
-                      </div>
-                      {# 目前實績 #}
-                      {% set cur_pct = [[(row.current_quantity / row.budget_quantity * 100), 0]|max, 100]|min %}
-                      <div class="budget-bar-row">
-                        <span class="budget-bar-label">目前</span>
-                        <div class="budget-bar-track">
-                          <div class="budget-bar-fill budget-bar-fill--current {% if cur_pct >= 100 %}budget-bar-fill--ok{% elif cur_pct >= 70 %}budget-bar-fill--warn{% else %}budget-bar-fill--danger{% endif %}"
-                               style="width:{{ cur_pct }}%"></div>
-                        </div>
-                        <span class="budget-bar-value">{{ "{:,.0f}".format(row.current_quantity) }} <span class="muted">({{ "{:.0f}%".format(cur_pct) }})</span></span>
-                      </div>
-                      {# 推估月底 #}
-                      {% set est_pct = [[(row.estimated_eom_qty / row.budget_quantity * 100), 0]|max, 100]|min %}
-                      <div class="budget-bar-row">
-                        <span class="budget-bar-label">推估</span>
-                        <div class="budget-bar-track">
-                          <div class="budget-bar-fill budget-bar-fill--estimated {% if est_pct >= 100 %}budget-bar-fill--ok{% elif est_pct >= 80 %}budget-bar-fill--warn{% else %}budget-bar-fill--danger{% endif %}"
-                               style="width:{{ est_pct }}%"></div>
-                        </div>
-                        <span class="budget-bar-value">{{ "{:,.0f}".format(row.estimated_eom_qty) }} <span class="muted">({{ "{:.0f}%".format(est_pct) }})</span></span>
-                      </div>
-                    </div>
-                  </div>
-                  {% endif %}
 
                   {# ── 近 6 月對照表 ── #}
                   {% if row.monthly_history %}
