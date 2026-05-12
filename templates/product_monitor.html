@@ -17,57 +17,72 @@
       <section class="alert" role="alert">{{ error_message }}</section>
     {% endif %}
 
-    <section id="import-toolbar" class="workbench-toolbar import-toolbar" aria-labelledby="daily-import-title">
-      <div class="toolbar-title">
-        <h2 id="daily-import-title">選擇當月累積業績檔</h2>
-        <span>系統將依欄位格式判斷資料，不限制檔名。</span>
-      </div>
-      <form class="toolbar-controls" id="import-form" method="post" action="{{ url_for('import_product_monitor_daily_sales') }}" enctype="multipart/form-data">
-        <input type="file" id="daily-sales-file" name="daily_sales_file" accept=".xlsx,.xls" required class="sr-only">
-        <label for="daily-sales-file" class="btn-secondary file-pick-btn" id="file-pick-label">選擇檔案</label>
-        <span id="file-pick-name" class="file-pick-name muted">未選擇檔案</span>
-        <button type="submit">匯入</button>
-      </form>
-    </section>
+    {# ── 匯入工具列（整合狀態 + 操作）── #}
+    <section id="import-toolbar" class="workbench-toolbar import-toolbar" aria-label="業績匯入">
 
-    {% if import_message %}
-      <section class="alert alert-info" role="status">{{ import_message }}</section>
-    {% endif %}
-    {% if import_error %}
-      <section class="alert" role="alert">{{ import_error }}</section>
-    {% endif %}
+      {# 左側：月份 + 狀態摘要 #}
+      <div class="import-summary">
+        <div class="import-summary__head">
+          <span class="import-period">{{ year }}/{{ "%02d"|format(month) }} 業績</span>
+          {% if close_record %}
+            <span class="badge status-ok">已結月</span>
+          {% elif latest_batch %}
+            <span class="import-tag">已匯入</span>
+          {% else %}
+            <span class="import-tag import-tag--empty">未匯入</span>
+          {% endif %}
+        </div>
 
-    {# ── 結月狀態列 ── #}
-    {% if close_record %}
-      <section class="workbench-toolbar close-status-panel close-status-panel--closed">
-        <div class="toolbar-title">
-          <span class="badge status-ok">已結月</span>
-          <span>{{ close_record.year }}/{{ "%02d"|format(close_record.month) }} &nbsp;·&nbsp;
+        {% if import_message %}
+          <span class="import-feedback import-feedback--ok">{{ import_message }}</span>
+        {% elif import_error %}
+          <span class="import-feedback import-feedback--err">{{ import_error }}</span>
+        {% elif close_record %}
+          <span class="import-meta">
             {{ close_record.actual_row_count }} 筆 &nbsp;·&nbsp;
             數量 {{ "{:,.0f}".format(close_record.actual_quantity_total) }} &nbsp;·&nbsp;
             金額 {{ "{:,.0f}".format(close_record.actual_amount_total) }}
+            <span class="import-time">結月於 {{ close_record.closed_at[:16] if close_record.closed_at else "" }}</span>
           </span>
-        </div>
-        <span class="muted close-status-time">{{ close_record.closed_at[:16] if close_record.closed_at else "" }}</span>
-      </section>
-    {% elif latest_batch %}
-      <section class="workbench-toolbar close-status-panel">
-        <div class="toolbar-title">
-          <span>{{ year }}/{{ "%02d"|format(month) }} &nbsp;·&nbsp;
-            已匯入 {{ latest_batch.row_count }} 筆 &nbsp;·&nbsp;
+        {% elif latest_batch %}
+          <span class="import-meta">
+            {{ latest_batch.row_count }} 筆 &nbsp;·&nbsp;
             數量 {{ "{:,.0f}".format(latest_batch.quantity_total) }} &nbsp;·&nbsp;
             金額 {{ "{:,.0f}".format(latest_batch.taxed_amount_total) }}
+            {% if latest_batch.imported_at %}
+              <span class="import-time">匯入於 {{ latest_batch.imported_at[:16] }}</span>
+            {% endif %}
           </span>
-        </div>
-        <form class="toolbar-controls" method="post"
-              action="{{ url_for('close_product_monitor_month') }}"
+        {% else %}
+          <span class="import-meta muted">尚未匯入本月業績資料，請選擇檔案匯入。</span>
+        {% endif %}
+      </div>
+
+      {# 右側：操作控制 #}
+      <div class="import-controls">
+        {% if not close_record %}
+        <form class="toolbar-controls" id="import-form" method="post"
+              action="{{ url_for('import_product_monitor_daily_sales') }}"
+              enctype="multipart/form-data">
+          <input type="file" id="daily-sales-file" name="daily_sales_file"
+                 accept=".xlsx,.xls" required class="sr-only">
+          <label for="daily-sales-file" class="btn-secondary file-pick-btn" id="file-pick-label">選擇檔案</label>
+          <span id="file-pick-name" class="file-pick-name muted">未選擇檔案</span>
+          <button type="submit">匯入</button>
+        </form>
+        {% endif %}
+
+        {% if latest_batch and not close_record %}
+        <form method="post" action="{{ url_for('close_product_monitor_month') }}"
               onsubmit="return confirm('確認結月 {{ year }}/{{ '%02d'|format(month) }}？結月後無法再匯入或覆蓋。')">
           <input type="hidden" name="year" value="{{ year }}">
           <input type="hidden" name="month" value="{{ month }}">
           <button type="submit" class="btn-close-month">結月</button>
         </form>
-      </section>
-    {% endif %}
+        {% endif %}
+      </div>
+
+    </section>
 
     <section class="monitor-workspace workbench-panel" aria-labelledby="monitor-title">
       <div class="monitor-toolbar workbench-toolbar" aria-label="跳單監控工具">
