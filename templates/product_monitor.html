@@ -78,18 +78,29 @@
         <div class="toolbar-controls">
           <label>
             搜尋
-            <input type="search" data-monitor-search placeholder="客戶、品項、ID">
+            <input type="search" data-monitor-search placeholder="客戶、品項、ID（空格可多關鍵字）">
           </label>
           <label>
-            狀態
+            篩選
             <select data-monitor-status>
               <option value="all">全部</option>
-              <option value="high">高風險</option>
-              <option value="caution">注意</option>
-              <option value="ok">正常/成長</option>
-              <option value="no_history">無去年同期</option>
+              <optgroup label="整體狀態">
+                <option value="high">高風險</option>
+                <option value="caution">注意</option>
+                <option value="ok">正常/成長</option>
+                <option value="no_history">無去年同期</option>
+              </optgroup>
+              <optgroup label="出貨週期">
+                <option value="cycle_delayed">週期逾期</option>
+                <option value="cycle_approaching">週期接近</option>
+              </optgroup>
+              <optgroup label="間隔趨勢">
+                <option value="gap_rising">間隔拉長 ↗</option>
+                <option value="gap_falling">間隔縮短 ↘</option>
+              </optgroup>
             </select>
           </label>
+          <button type="button" class="btn-secondary" data-monitor-export title="匯出目前篩選結果">匯出 CSV</button>
         </div>
       </div>
 
@@ -112,11 +123,26 @@
           <tbody>
             {% for row in rows %}
             {# ── 主列 ── #}
-            <tr data-monitor-row aria-expanded="false" data-status="{{ row.status_key }}"
+            <tr data-monitor-row aria-expanded="false"
+                data-status="{{ row.status_key }}"
+                data-cycle-status="{{ row.cycle_status }}"
+                data-gap-trend="{{ row.gap_trend }}"
                 data-search="{{ row.customer }} {{ row.product_name }} {{ row.product_code }}"
                 data-gap-history="{{ row.gap_history | tojson }}"
                 data-gap-avg="{{ row.cycle_days or 0 }}"
-                data-gap-current="{{ row.days_since_last_shipment_workdays or 0 }}">
+                data-gap-current="{{ row.days_since_last_shipment_workdays or 0 }}"
+                data-csv-customer="{{ row.customer }}"
+                data-csv-product="{{ row.product_name }}"
+                data-csv-status="{{ row.status }}"
+                data-csv-date="{{ row.latest_order_date.strftime('%Y-%m-%d') if row.latest_order_date else '' }}"
+                data-csv-cycle-days="{{ row.days_since_last_shipment_workdays if row.days_since_last_shipment_workdays is not none else '' }}"
+                data-csv-cycle-status="{{ row.cycle_status }}"
+                data-csv-current="{{ '{:.0f}'.format(row.current_quantity) }}"
+                data-csv-eom="{{ '{:.0f}'.format(row.estimated_eom_qty) }}"
+                data-csv-forecast="{{ '{:.0f}'.format(row.forecast_quantity) }}"
+                data-csv-yoy="{{ '{:+.1f}'.format((row.yoy_growth_rate - 1) * 100) if row.yoy_growth_rate is not none else '' }}"
+                data-csv-budget="{{ '{:.1f}'.format(row.budget_achievement_rate * 100) if row.budget_achievement_rate is not none else '' }}"
+                data-csv-gap-trend="{{ row.gap_trend }}{% if row.gap_trend_delta != 0 %} {{ '%+d' % row.gap_trend_delta }}天{% endif %}">
               <td class="monitor-sticky monitor-sticky--status">
                 <span class="row-chevron" aria-hidden="true"></span>
                 <span class="badge status-{{ row.status_key }}">{{ row.status }}</span>
