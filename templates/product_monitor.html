@@ -317,6 +317,94 @@
 
                   </div>{# /detail-body #}
 
+                  {# ── 當月預算進度條 ── #}
+                  {% if row.budget_quantity > 0 %}
+                  <div class="detail-budget">
+                    <span class="detail-meta-label">當月預算進度</span>
+                    <div class="budget-bars">
+                      {# 預算基準線 #}
+                      <div class="budget-bar-row">
+                        <span class="budget-bar-label">預算</span>
+                        <div class="budget-bar-track">
+                          <div class="budget-bar-fill budget-bar-fill--base" style="width:100%"></div>
+                        </div>
+                        <span class="budget-bar-value">{{ "{:,.0f}".format(row.budget_quantity) }}</span>
+                      </div>
+                      {# 目前實績 #}
+                      {% set cur_pct = [[(row.current_quantity / row.budget_quantity * 100), 0]|max, 100]|min %}
+                      <div class="budget-bar-row">
+                        <span class="budget-bar-label">目前</span>
+                        <div class="budget-bar-track">
+                          <div class="budget-bar-fill budget-bar-fill--current {% if cur_pct >= 100 %}budget-bar-fill--ok{% elif cur_pct >= 70 %}budget-bar-fill--warn{% else %}budget-bar-fill--danger{% endif %}"
+                               style="width:{{ cur_pct }}%"></div>
+                        </div>
+                        <span class="budget-bar-value">{{ "{:,.0f}".format(row.current_quantity) }} <span class="muted">({{ "{:.0f}%".format(cur_pct) }})</span></span>
+                      </div>
+                      {# 推估月底 #}
+                      {% set est_pct = [[(row.estimated_eom_qty / row.budget_quantity * 100), 0]|max, 100]|min %}
+                      <div class="budget-bar-row">
+                        <span class="budget-bar-label">推估</span>
+                        <div class="budget-bar-track">
+                          <div class="budget-bar-fill budget-bar-fill--estimated {% if est_pct >= 100 %}budget-bar-fill--ok{% elif est_pct >= 80 %}budget-bar-fill--warn{% else %}budget-bar-fill--danger{% endif %}"
+                               style="width:{{ est_pct }}%"></div>
+                        </div>
+                        <span class="budget-bar-value">{{ "{:,.0f}".format(row.estimated_eom_qty) }} <span class="muted">({{ "{:.0f}%".format(est_pct) }})</span></span>
+                      </div>
+                    </div>
+                  </div>
+                  {% endif %}
+
+                  {# ── 近 6 月對照表 ── #}
+                  {% if row.monthly_history %}
+                  <div class="detail-monthly">
+                    <span class="detail-meta-label">近期月份對照</span>
+                    <table class="monthly-history-table">
+                      <thead>
+                        <tr>
+                          <th>月份</th>
+                          <th class="num">實際量</th>
+                          <th class="num">預算量</th>
+                          <th class="num">達成率</th>
+                          <th class="num">去年同期</th>
+                          <th class="num">YoY</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {% for m in row.monthly_history %}
+                        <tr>
+                          <td class="monthly-label">{{ m.year }}/{{ m.label }}</td>
+                          <td class="num">
+                            {% if m.actual > 0 %}{{ "{:,.0f}".format(m.actual) }}{% else %}<span class="muted">-</span>{% endif %}
+                          </td>
+                          <td class="num muted">
+                            {% if m.budget > 0 %}{{ "{:,.0f}".format(m.budget) }}{% else %}<span class="muted">-</span>{% endif %}
+                          </td>
+                          <td class="num">
+                            {% if m.budget > 0 and m.actual > 0 %}
+                              {% set ach = m.actual / m.budget * 100 %}
+                              <span class="{% if ach >= 100 %}success-text{% elif ach >= 80 %}rate-warning{% else %}danger-text{% endif %}">
+                                {{ "{:.0f}%".format(ach) }}
+                              </span>
+                            {% else %}<span class="muted">-</span>{% endif %}
+                          </td>
+                          <td class="num muted">
+                            {% if m.last_year > 0 %}{{ "{:,.0f}".format(m.last_year) }}{% else %}<span class="muted">-</span>{% endif %}
+                          </td>
+                          <td class="num">
+                            {% if m.last_year > 0 and m.actual > 0 %}
+                              {% set yoy = (m.actual / m.last_year - 1) * 100 %}
+                              <span class="gap-value {% if yoy < 0 %}falling{% elif yoy > 0 %}rising{% endif %}">
+                                {{ "{:+.1f}%".format(yoy) }}
+                              </span>
+                            {% else %}<span class="muted">-</span>{% endif %}
+                          </td>
+                        </tr>
+                        {% endfor %}
+                      </tbody>
+                    </table>
+                  </div>
+                  {% endif %}
+
                   {% if row.note %}
                   <div class="detail-footer">
                     <span class="detail-meta-label">備註</span>

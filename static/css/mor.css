@@ -2556,6 +2556,107 @@ details[open] .discontinued-toggle {
   height: 72px;
 }
 
+/* ── Phase 7: Budget progress bars ── */
+.detail-budget {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-5);
+  border-top: 1px solid var(--line-subtle);
+  background: var(--panel);
+}
+
+.budget-bars {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+
+.budget-bar-row {
+  display: grid;
+  grid-template-columns: 36px 1fr auto;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.budget-bar-label {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.budget-bar-track {
+  height: 8px;
+  background: var(--surface-subtle);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.budget-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.budget-bar-fill--base     { background: var(--line); }
+.budget-bar-fill--current  { background: var(--accent); }
+.budget-bar-fill--estimated { background: var(--accent); opacity: 0.45; }
+.budget-bar-fill--ok       { background: var(--success-text); opacity: 1; }
+.budget-bar-fill--warn     { background: var(--warning-text); opacity: 1; }
+.budget-bar-fill--danger   { background: var(--danger); opacity: 1; }
+.budget-bar-fill--estimated.budget-bar-fill--ok     { opacity: 0.5; }
+.budget-bar-fill--estimated.budget-bar-fill--warn   { opacity: 0.5; }
+.budget-bar-fill--estimated.budget-bar-fill--danger { opacity: 0.5; }
+
+.budget-bar-value {
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  min-width: 120px;
+}
+
+/* ── Phase 7: Monthly history table ── */
+.detail-monthly {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-5) var(--sp-4);
+  border-top: 1px solid var(--line-subtle);
+}
+
+.monthly-history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-xs);
+}
+
+.monthly-history-table th {
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: var(--sp-1) var(--sp-2);
+  border-bottom: 1px solid var(--line-subtle);
+  text-align: left;
+}
+
+.monthly-history-table th.num { text-align: right; }
+
+.monthly-history-table td {
+  padding: var(--sp-1) var(--sp-2);
+  border-bottom: 1px solid var(--line-subtle);
+  color: var(--ink);
+}
+
+.monthly-history-table tbody tr:last-child td { border-bottom: none; }
+
+.monthly-history-table tbody tr:hover td { background: var(--surface-subtle); }
+
+.monthly-label {
+  font-weight: 500;
+  white-space: nowrap;
+}
+
 /* ── Phase 6: Close-month status panel ── */
 .close-status-panel {
   border-left: 3px solid var(--accent-2);
