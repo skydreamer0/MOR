@@ -101,13 +101,11 @@
               <th class="monitor-sticky monitor-sticky--customer">客戶</th>
               <th class="monitor-sticky monitor-sticky--product">品項</th>
               <th class="num">最近出貨日</th>
-              <th class="num" title="距最近出貨工作日數">距出貨</th>
+              <th class="num" title="距最近出貨工作日數 / 週期狀態">出貨週期</th>
               <th class="num">本月目前</th>
               <th class="num" title="系統推估月底數量">推估月底</th>
               <th class="num">最終預估</th>
-              <th class="num">去年成長率</th>
-              <th class="num">預算達成率</th>
-              <th class="num">週期狀態</th>
+              <th class="num" title="去年成長率 / 預算達成率">達成指標</th>
               <th class="num">間隔趨勢</th>
             </tr>
           </thead>
@@ -128,48 +126,50 @@
               <td class="num">
                 {% if row.latest_order_date %}{{ row.latest_order_date.strftime("%m/%d") }}{% else %}<span class="muted">-</span>{% endif %}
               </td>
+              {# 出貨週期：距出貨工作天 + 週期狀態 badge #}
               <td class="num">
-                {% if row.days_since_last_shipment_workdays is not none %}
-                  <span class="{% if row.cycle_status == 'delayed' %}danger-text{% elif row.cycle_status == 'approaching' %}rate-warning{% endif %}">
-                    {{ row.days_since_last_shipment_workdays }}
+                <div class="cycle-cell">
+                  {% if row.days_since_last_shipment_workdays is not none %}
+                  <span class="cycle-days {% if row.cycle_status == 'delayed' %}danger-text{% elif row.cycle_status == 'approaching' %}rate-warning{% endif %}">
+                    {{ row.days_since_last_shipment_workdays }}天
                   </span>
-                {% else %}
-                  <span class="muted">-</span>
-                {% endif %}
+                  {% endif %}
+                  {% if row.cycle_status == "delayed" %}
+                    <span class="badge status-high">逾期</span>
+                  {% elif row.cycle_status == "approaching" %}
+                    <span class="badge status-caution">接近</span>
+                  {% elif row.cycle_status == "ok" %}
+                    <span class="badge status-ok">正常</span>
+                  {% elif row.days_since_last_shipment_workdays is none %}
+                    <span class="muted">-</span>
+                  {% endif %}
+                </div>
               </td>
               <td class="num">{{ "{:,.0f}".format(row.current_quantity) }}</td>
               <td class="num">{{ "{:,.0f}".format(row.estimated_eom_qty) }}</td>
               <td class="num">{{ "{:,.0f}".format(row.forecast_quantity) }}</td>
+              {# 達成指標：YoY + 預算達成率 #}
               <td class="num">
-                {% if row.yoy_growth_rate is none %}
-                  <span class="muted">-</span>
-                {% else %}
-                  {% set pct = (row.yoy_growth_rate - 1) * 100 %}
-                  <span class="gap-value {% if pct < 0 %}falling{% elif pct > 0 %}rising{% endif %}">
-                    {{ "{:+.1f}%".format(pct) }}
-                  </span>
-                {% endif %}
-              </td>
-              <td class="num">
-                {% if row.budget_achievement_rate is none %}
-                  <span class="muted">-</span>
-                {% else %}
-                  {% set bpct = row.budget_achievement_rate * 100 %}
-                  <span class="{% if bpct < 90 %}danger-text{% elif bpct < 100 %}rate-warning{% else %}success-text{% endif %}">
-                    {{ "{:.1f}%".format(bpct) }}
-                  </span>
-                {% endif %}
-              </td>
-              <td class="num">
-                {% if row.cycle_status == "delayed" %}
-                  <span class="badge status-high">逾期</span>
-                {% elif row.cycle_status == "approaching" %}
-                  <span class="badge status-caution">接近</span>
-                {% elif row.cycle_status == "ok" %}
-                  <span class="badge status-ok">正常</span>
-                {% else %}
-                  <span class="muted">-</span>
-                {% endif %}
+                <div class="metric-cell">
+                  <div class="metric-row">
+                    <span class="metric-label">YoY</span>
+                    {% if row.yoy_growth_rate is none %}
+                      <span class="muted">-</span>
+                    {% else %}
+                      {% set pct = (row.yoy_growth_rate - 1) * 100 %}
+                      <span class="gap-value {% if pct < 0 %}falling{% elif pct > 0 %}rising{% endif %}">{{ "{:+.1f}%".format(pct) }}</span>
+                    {% endif %}
+                  </div>
+                  <div class="metric-row">
+                    <span class="metric-label">預算</span>
+                    {% if row.budget_achievement_rate is none %}
+                      <span class="muted">-</span>
+                    {% else %}
+                      {% set bpct = row.budget_achievement_rate * 100 %}
+                      <span class="{% if bpct < 90 %}danger-text{% elif bpct < 100 %}rate-warning{% else %}success-text{% endif %}">{{ "{:.1f}%".format(bpct) }}</span>
+                    {% endif %}
+                  </div>
+                </div>
               </td>
               <td class="num">
                 {% if row.gap_trend == "none" %}
@@ -185,7 +185,7 @@
             </tr>
             {# ── 展開詳情列 ── #}
             <tr data-monitor-detail hidden>
-              <td colspan="12">
+              <td colspan="10">
                 <div class="monitor-detail-card">
                   {# 風險摘要 #}
                   {% set risk_parts = [] %}

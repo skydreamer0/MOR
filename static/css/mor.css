@@ -2556,6 +2556,40 @@ details[open] .discontinued-toggle {
   height: 72px;
 }
 
+/* ── Phase 5: Merged table cells ── */
+.cycle-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+}
+
+.cycle-days {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1;
+}
+
+.metric-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.metric-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--text-xs);
+}
+
+.metric-label {
+  color: var(--muted);
+  min-width: 24px;
+  text-align: right;
+}
+
 /* ── Phase 7: Budget progress bars ── */
 .detail-budget {
   display: flex;
