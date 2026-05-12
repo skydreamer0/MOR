@@ -170,6 +170,8 @@ def build_forecast_page_context(
         total=sum(row.estimated_amount for row in visible_rows if not row.excluded),
     )
     summary = replace(summary, rows=enrich_rows_with_history(summary.rows, db, target.year, target.month))
+    daily_actuals = fetch_daily_actuals_by_row_id(db, target.year, target.month)
+    summary = _patch_latest_order_dates(summary, daily_actuals)
     summary = apply_user_adjustments(summary, manual_adjustments=manual_adjustments, excluded_ids=set())
     summary = _apply_reasons_and_budgets(
         summary, adjustment_reasons, budget_targets,
@@ -178,7 +180,6 @@ def build_forecast_page_context(
     summary = replace(summary, total=forecast_amount_total(summary.rows))
 
     budget_months = list_budget_months(db)
-    daily_actuals = fetch_daily_actuals_by_row_id(db, target.year, target.month)
     today = date.today()
     ensure_calendar_year(db, today.year)
     projections = batch_project_eom(
@@ -694,6 +695,26 @@ def _fetch_monthly_history(
             })
         result[key] = history
     return result
+
+
+def _patch_latest_order_dates(
+    summary: ForecastSummary,
+    daily_actuals: Mapping[str, DailyActualAggregate],
+) -> ForecastSummary:
+    """Update ForecastRow.latest_order_date using current-month daily actuals.
+
+    build_forecast reads sales_records (historical only), so latest_order_date
+    may point to last month. If daily_actuals has a more recent date, use it.
+    """
+    patched = []
+    for row in summary.rows:
+        actual = daily_actuals.get(row.row_id)
+        if actual is not None and actual.latest_sales_date is not None:
+            new_date = date.fromisoformat(str(actual.latest_sales_date)[:10])
+            if row.latest_order_date is None or new_date > row.latest_order_date:
+                row = replace(row, latest_order_date=new_date)
+        patched.append(row)
+    return replace(summary, rows=patched)
 
 
 def _days_since_order(workday_set: frozenset[date], order_date: date, today: date) -> int:

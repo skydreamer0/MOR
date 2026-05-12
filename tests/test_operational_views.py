@@ -9,6 +9,7 @@ from src.backend.forecast_models import ForecastRow, ForecastSummary
 from src.backend.operational_views import (
     BudgetTarget,
     _apply_reasons_and_budgets,
+    _patch_latest_order_dates,
     build_customer_risk_ranking,
     build_dashboard_metrics,
     build_data_health_summary,
@@ -687,3 +688,84 @@ def test_build_forecast_page_context_uses_db_not_excel(tmp_path):
     assert ctx.target.month == 5
     # sales_data should contain the DB rows
     assert len(ctx.sales_data) > 0
+
+
+# ---------------------------------------------------------------------------
+# _patch_latest_order_dates — current-month daily actuals update ForecastRow
+# ---------------------------------------------------------------------------
+
+def _summary_with_rows(rows: list) -> ForecastSummary:
+    return ForecastSummary(year=2026, month=5, rows=rows, total=0.0)
+
+
+def test_patch_latest_order_dates_updates_when_actual_is_newer():
+    row = _row(
+        row_id="A__P1", customer="A", product_code="P1", product_name="X",
+        last_year=100, last_month=80, current=20, final=80, budget=100, price=10,
+    )
+    # row.latest_order_date is 2026-04-20 (set in _row helper)
+    actuals = {
+        "A__P1": DailyActualAggregate(
+            actual_quantity=30, taxed_amount=0, latest_sales_date="2026-05-08"
+        )
+    }
+    patched = _patch_latest_order_dates(_summary_with_rows([row]), actuals)
+
+    assert patched.rows[0].latest_order_date == date(2026, 5, 8)
+
+
+def test_patch_latest_order_dates_keeps_original_when_actual_is_older():
+    row = _row(
+        row_id="A__P1", customer="A", product_code="P1", product_name="X",
+        last_year=100, last_month=80, current=20, final=80, budget=100, price=10,
+    )
+    # row.latest_order_date = 2026-04-20; actual has an older date (shouldn't override)
+    actuals = {
+        "A__P1": DailyActualAggregate(
+            actual_quantity=10, taxed_amount=0, latest_sales_date="2026-04-01"
+        )
+    }
+    patched = _patch_latest_order_dates(_summary_with_rows([row]), actuals)
+
+    assert patched.rows[0].latest_order_date == date(2026, 4, 20)
+
+
+def test_patch_latest_order_dates_no_change_when_no_actual():
+    row = _row(
+        row_id="A__P1", customer="A", product_code="P1", product_name="X",
+        last_year=100, last_month=80, current=20, final=80, budget=100, price=10,
+    )
+    patched = _patch_latest_order_dates(_summary_with_rows([row]), {})
+
+    assert patched.rows[0].latest_order_date == date(2026, 4, 20)
+
+
+def test_patch_latest_order_dates_uses_actual_when_row_date_is_none():
+    row = _row(
+        row_id="A__P1", customer="A", product_code="P1", product_name="X",
+        last_year=100, last_month=80, current=20, final=80, budget=100, price=10,
+    )
+    row = replace(row, latest_order_date=None)
+    actuals = {
+        "A__P1": DailyActualAggregate(
+            actual_quantity=15, taxed_amount=0, latest_sales_date="2026-05-02"
+        )
+    }
+    patched = _patch_latest_order_dates(_summary_with_rows([row]), actuals)
+
+    assert patched.rows[0].latest_order_date == date(2026, 5, 2)
+
+
+def test_patch_latest_order_dates_skips_row_when_actual_sales_date_is_none():
+    row = _row(
+        row_id="A__P1", customer="A", product_code="P1", product_name="X",
+        last_year=100, last_month=80, current=20, final=80, budget=100, price=10,
+    )
+    actuals = {
+        "A__P1": DailyActualAggregate(
+            actual_quantity=10, taxed_amount=0, latest_sales_date=None
+        )
+    }
+    patched = _patch_latest_order_dates(_summary_with_rows([row]), actuals)
+
+    assert patched.rows[0].latest_order_date == date(2026, 4, 20)

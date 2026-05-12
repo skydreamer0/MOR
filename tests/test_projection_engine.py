@@ -294,3 +294,112 @@ def test_batch_project_eom_returns_low_confidence_for_empty_history(tmp_path: Pa
     results = batch_project_eom(db, rows, {}, date(2026, 5, 10), 2026, 5)
     assert results["X__P1"].confidence == "low"
     assert results["X__P1"].estimated_eom_qty == 30.0  # falls back to this_year_same_month_qty
+
+
+def _insert_daily_actuals(db: MORDatabase, rows: list[dict]) -> None:
+    with db.get_connection() as conn:
+        for r in rows:
+            d = date.fromisoformat(r["date"])
+            conn.execute(
+                """INSERT INTO daily_sales_actuals
+                   (sales_year, sales_month, sales_date, customer_name, product_code,
+                    actual_quantity, taxed_amount)
+                   VALUES (?, ?, ?, ?, ?, ?, 0)""",
+                (d.year, d.month, r["date"], r["customer"], r["product"], r["qty"]),
+            )
+        conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# batch_project_eom — current-month daily actuals integration
+# ---------------------------------------------------------------------------
+
+def test_batch_project_eom_includes_current_month_dates_in_gap_history(tmp_path: Path):
+    """Current-month shipment dates from daily_sales_actuals must appear in gap_history."""
+    db = _db(tmp_path)
+    # 5 historical shipments (Apr 2026 and earlier), each ~20 workdays apart
+    history_dates = [
+        date(2026, 1, 5), date(2026, 1, 26), date(2026, 2, 16),
+        date(2026, 3, 9), date(2026, 3, 30),
+    ]
+    _insert_sales(db, [
+        {"date": d.isoformat(), "customer": "H", "product": "P1", "qty": 100}
+        for d in history_dates
+    ])
+    # One shipment this month (2026-05-07) — only in daily_sales_actuals
+    _insert_daily_actuals(db, [
+        {"date": "2026-05-07", "customer": "H", "product": "P1", "qty": 100},
+    ])
+
+    from src.backend.daily_sales_importer import DailyActualAggregate
+    actuals = {"H__P1": DailyActualAggregate(
+        actual_quantity=100, taxed_amount=0, latest_sales_date="2026-05-07"
+    )}
+    rows = [_forecast_row("H", "P1")]
+    results = batch_project_eom(db, rows, actuals, date(2026, 5, 13), 2026, 5)
+
+    r = results["H__P1"]
+    # gap_history is capped to last 8; the gap from 2026-03-30 → 2026-05-07 must be present
+    assert len(r.gap_history) > 0
+    # The last gap in history should reflect the current-month shipment date (May 7)
+    # which is ~27 workdays after Mar 30 — certainly larger than a single week
+    assert r.gap_history[-1] > 5
+
+
+def test_batch_project_eom_current_month_actuals_only_reads_target_month(tmp_path: Path):
+    """Only the target month's daily_sales_actuals rows must be merged; other months ignored."""
+    db = _db(tmp_path)
+    # 4 historical shipments so we have a cycle to work with
+    history_dates = [
+        date(2026, 1, 5), date(2026, 1, 26), date(2026, 2, 16), date(2026, 3, 9),
+    ]
+    _insert_sales(db, [
+        {"date": d.isoformat(), "customer": "H", "product": "P1", "qty": 50}
+        for d in history_dates
+    ])
+    # May data (target month) — should be included
+    _insert_daily_actuals(db, [
+        {"date": "2026-05-05", "customer": "H", "product": "P1", "qty": 50},
+    ])
+    # April data in daily_sales_actuals (closed month, shouldn't affect May projection)
+    _insert_daily_actuals(db, [
+        {"date": "2026-04-10", "customer": "H", "product": "P1", "qty": 999},
+    ])
+
+    rows = [_forecast_row("H", "P1")]
+    results = batch_project_eom(db, rows, {}, date(2026, 5, 13), 2026, 5)
+
+    r = results["H__P1"]
+    # typical_qty median: 5 × 50 (history) + 1 × 50 (May actual) = all 50s → median 50
+    # If April's 999 were included, median would be skewed
+    assert r.typical_qty_per_shipment == 50.0
+
+
+def test_batch_project_eom_cycle_reflects_current_month_when_long_gap(tmp_path: Path):
+    """When current month has a shipment after an unusually long gap,
+    the workday_cycle must be pulled toward the real recent interval."""
+    db = _db(tmp_path)
+    # 4 tight shipments ≈ 5 workdays apart (Jan–Feb)
+    tight_dates = [
+        date(2026, 1, 5), date(2026, 1, 12), date(2026, 1, 19), date(2026, 1, 26),
+    ]
+    _insert_sales(db, [
+        {"date": d.isoformat(), "customer": "H", "product": "P1", "qty": 100}
+        for d in tight_dates
+    ])
+    # Then a long gap: last historical = Jan 26, current-month = May 7 (~65 workdays)
+    _insert_daily_actuals(db, [
+        {"date": "2026-05-07", "customer": "H", "product": "P1", "qty": 100},
+    ])
+
+    from src.backend.daily_sales_importer import DailyActualAggregate
+    actuals = {"H__P1": DailyActualAggregate(
+        actual_quantity=100, taxed_amount=0, latest_sales_date="2026-05-07"
+    )}
+    rows = [_forecast_row("H", "P1")]
+    results_with = batch_project_eom(db, rows, actuals, date(2026, 5, 13), 2026, 5)
+
+    # Without current month actuals the cycle is ~5; with it the long gap is added
+    assert results_with["H__P1"].workday_cycle is not None
+    # cycle should be greater than the tight 5-workday average because the long gap is included
+    assert results_with["H__P1"].workday_cycle > 5

@@ -96,13 +96,40 @@ def batch_project_eom(
             customer_names + product_codes + [current_month_prefix],
         ).fetchall()
 
-    # Build lookup: row_id → list of (shipment_date, quantity)
+        # Current month's per-date shipments from daily imports (daily_sales_actuals).
+        # These are excluded from sales_records (not yet closed), so we append them
+        # so that gap/cycle calculations include the most recent shipment dates.
+        curr_month_rows = conn.execute(
+            f"""
+            SELECT sales_date AS order_date, customer_name, product_code,
+                   SUM(actual_quantity) AS qty
+            FROM   daily_sales_actuals
+            WHERE  sales_year = ? AND sales_month = ?
+              AND  customer_name IN ({placeholders_c})
+              AND  product_code  IN ({placeholders_p})
+            GROUP  BY sales_date, customer_name, product_code
+            ORDER  BY customer_name, product_code, sales_date
+            """,
+            [year, month] + customer_names + product_codes,
+        ).fetchall()
+
+    # Build lookup: row_id → list of (shipment_date, quantity), oldest → newest
     history_map: dict[str, list[tuple[date, float]]] = {}
     for h in history_rows:
         raw = h["order_date"]
         d = date.fromisoformat(str(raw)[:10])
         key = f"{h['customer_name']}__{h['product_code']}"
         history_map.setdefault(key, []).append((d, float(h["qty"])))
+
+    for h in curr_month_rows:
+        raw = h["order_date"]
+        d = date.fromisoformat(str(raw)[:10])
+        key = f"{h['customer_name']}__{h['product_code']}"
+        history_map.setdefault(key, []).append((d, float(h["qty"])))
+
+    # Re-sort each entry to ensure chronological order after merging two sources
+    for key in history_map:
+        history_map[key].sort(key=lambda x: x[0])
 
     results: dict[str, ProjectionResult] = {}
     for row in active:
