@@ -2458,6 +2458,25 @@ details[open] .discontinued-toggle {
   padding: var(--sp-3) var(--sp-4);
   background: var(--surface-subtle);
   border-bottom: 1px solid var(--line);
+  border-left: 4px solid var(--accent);  /* accent 錨點線 */
+}
+
+.detail-head-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.detail-head-item--grow {
+  flex: 1;
+}
+
+.detail-meta-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .detail-head-item {
@@ -2479,7 +2498,7 @@ details[open] .discontinued-toggle {
 /* ── Detail body: three-column layout ── */
 .detail-body {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: 1.6fr 1.3fr 1.3fr; /* 欄1三欄表格需更寬 */
 }
 
 .detail-col {
@@ -2492,7 +2511,7 @@ details[open] .discontinued-toggle {
 }
 
 .detail-section {
-  padding: var(--sp-3);
+  padding: var(--sp-3) var(--sp-3) var(--sp-3) var(--sp-4);
   border-bottom: 1px solid var(--line-subtle);
 }
 
@@ -2514,6 +2533,8 @@ details[open] .discontinued-toggle {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   margin-bottom: var(--sp-2);
+  padding-left: var(--sp-2);
+  border-left: 2px solid var(--accent);
 }
 
 /* Legacy block classes — kept for backward compat */
@@ -2560,6 +2581,17 @@ details[open] .discontinued-toggle {
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   overflow: hidden;
+}
+
+/* 二欄表格（金額比較、週期）：value 欄也縮到內容寬，不撐滿 */
+.detail-table--compact {
+  width: auto;
+}
+.detail-table--compact tbody td {
+  width: 1px;
+  white-space: nowrap;
+  text-align: right;
+  min-width: 80px; /* 數字最小不能太擠 */
 }
 
 /* thead: 淺底色 + 粗下分隔線 */
@@ -2612,14 +2644,23 @@ details[open] .discontinued-toggle {
 .detail-table tbody tr:nth-child(even) {
   background: var(--surface-subtle);
 }
-.detail-table tbody tr:nth-child(even) td {
-  background: inherit;
+
+/* Row hover */
+.detail-table tbody tr:hover {
+  background: var(--accent-subtle) !important;
 }
 
 /* 最後一列去掉下邊線 */
 .detail-table tbody tr:last-child th,
 .detail-table tbody tr:last-child td {
   border-bottom: none;
+}
+
+/* 主要數值加重（本月目前、推估月底） */
+.detail-table tbody td.val-primary {
+  font-weight: 700;
+  color: var(--ink);
+  font-size: var(--text-md);
 }
 
 .detail-footer {

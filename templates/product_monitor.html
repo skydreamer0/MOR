@@ -282,12 +282,12 @@
                           <tbody>
                             <tr>
                               <th>本月目前</th>
-                              <td><strong>{{ "{:,.0f}".format(row.current_quantity) }}</strong></td>
+                              <td class="val-primary">{{ "{:,.0f}".format(row.current_quantity) }}</td>
                               <td class="muted">—</td>
                             </tr>
                             <tr>
                               <th>推估月底</th>
-                              <td><strong>{{ "{:,.0f}".format(row.estimated_eom_qty) }}</strong></td>
+                              <td class="val-primary">{{ "{:,.0f}".format(row.estimated_eom_qty) }}</td>
                               <td class="muted">—</td>
                             </tr>
                             <tr>
@@ -322,10 +322,10 @@
                       {% if row.current_taxed_amount > 0 or row.final_forecast_amount > 0 %}
                       <div class="detail-section">
                         <div class="detail-section-title">金額比較</div>
-                        <table class="detail-table">
+                        <table class="detail-table detail-table--compact">
                           <tbody>
-                            <tr><th>本月目前含稅</th><td><strong>{{ "{:,.0f}".format(row.current_taxed_amount) if row.current_taxed_amount > 0 else "—" }}</strong></td></tr>
-                            <tr><th>推估月底金額</th><td><strong>{{ "{:,.0f}".format(row.estimated_eom_amount) if row.estimated_eom_amount > 0 else "—" }}</strong></td></tr>
+                            <tr><th>本月目前含稅</th><td class="val-primary">{{ "{:,.0f}".format(row.current_taxed_amount) if row.current_taxed_amount > 0 else "—" }}</td></tr>
+                            <tr><th>推估月底金額</th><td class="val-primary">{{ "{:,.0f}".format(row.estimated_eom_amount) if row.estimated_eom_amount > 0 else "—" }}</td></tr>
                             <tr><th>最終預估金額</th><td class="muted">{{ "{:,.0f}".format(row.final_forecast_amount) if row.final_forecast_amount > 0 else "—" }}</td></tr>
                             <tr><th>去年同期金額</th><td class="muted">{{ "{:,.0f}".format(row.last_year_amount) if row.last_year_amount > 0 else "—" }}</td></tr>
                             <tr><th>本月預算金額</th><td class="muted">{{ "{:,.0f}".format(row.budget_amount) if row.budget_amount > 0 else "—" }}</td></tr>
@@ -370,7 +370,7 @@
                     <div class="detail-col">
                       <div class="detail-section">
                         <div class="detail-section-title">週期 &amp; 推估</div>
-                        <table class="detail-table">
+                        <table class="detail-table detail-table--compact">
                           <tbody>
                             <tr>
                               <th>最近出貨日</th>
