@@ -31,7 +31,11 @@
     const totalBars   = gaps.length + (showCurrent ? 1 : 0);
     const GAP         = 3;
     const barW        = Math.max(7, (chartW - GAP * (totalBars - 1)) / totalBars);
-    const maxVal      = Math.max(...gaps, showCurrent ? current : 0, avg > 0 ? avg * 1.1 : 1) * 1.1;
+    // Y 軸以歷史間隔為基準，最多放大到 avg*2.5，
+    // 「今」超出的部分蓋頂顯示（避免被拉高後歷史柱縮到底部）
+    const histMax  = Math.max(...gaps, avg > 0 ? avg : 1);
+    const maxVal   = Math.max(histMax, avg > 0 ? avg * 1.2 : 1) * 1.15;
+    const currentCapped = showCurrent && current > maxVal; // 超出上限時蓋頂
 
     function fy(v) { return PT + chartH - (v / maxVal) * chartH; }
 
@@ -110,10 +114,18 @@
       ctx.stroke();
       ctx.restore();
 
+      // 蓋頂時在柱子頂端顯示「▲ 101」提示實際數值
       ctx.fillStyle    = C.label;
       ctx.font         = "9px system-ui,sans-serif";
       ctx.textAlign    = "center";
       ctx.textBaseline = "top";
+      if (currentCapped) {
+        ctx.fillStyle = C.current;
+        ctx.font      = "bold 9px system-ui,sans-serif";
+        ctx.fillText("▲" + current, x + barW / 2, PT - 1);
+        ctx.fillStyle = C.label;
+        ctx.font      = "9px system-ui,sans-serif";
+      }
       ctx.fillText("今", x + barW / 2, H - PB + 2);
     }
   }

@@ -2725,7 +2725,12 @@ details[open] .discontinued-toggle {
   transition: width 0.3s ease;
 }
 
-.budget-bar-fill--base     { background: var(--line); }
+.budget-bar-fill--base {
+  background: none;
+  border: 2px dashed #94a3b8;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
 .budget-bar-fill--current  { background: var(--accent); }
 .budget-bar-fill--estimated { background: var(--accent); opacity: 0.45; }
 .budget-bar-fill--ok       { background: var(--success-text); opacity: 1; }
