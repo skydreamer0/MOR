@@ -895,7 +895,8 @@ def _to_monitor_row(
         yoy_growth_rate=yoy_rate,
         budget_achievement_rate=bud_rate,
         cycle_status=cycle_status_key,
-        cycle_days=row.cycle_days,
+        # Use projection's workday cycle for display — more meaningful than calendar-day average
+        cycle_days=projection.workday_cycle if projection is not None else row.cycle_days,
         budget_quantity=row.budget_quantity,
         remaining_shipments=remaining_shipments,
         typical_qty_per_shipment=raw_typical_qty,
