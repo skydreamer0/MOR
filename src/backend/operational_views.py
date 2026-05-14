@@ -189,7 +189,7 @@ def build_forecast_page_context(
         target=target,
         sales_data=data,
         summary=summary,
-        dashboard=build_dashboard_metrics(summary.rows, budget_targets.values()),
+        dashboard=build_dashboard_metrics(summary.rows, budget_targets.values(), projections, daily_actuals),
         monitor_rows=build_product_monitor_rows(
             summary.rows,
             daily_actuals=daily_actuals,
@@ -206,14 +206,29 @@ def build_forecast_page_context(
 def build_dashboard_metrics(
     rows: Iterable[ForecastRow],
     company_budgets: Iterable[BudgetTarget] | None = None,
+    projections: Mapping[str, ProjectionResult] | None = None,
+    daily_actuals: Mapping[str, DailyActualAggregate] | None = None,
 ) -> DashboardMetrics:
     included_rows = [row for row in rows if not row.excluded]
     budgeted_rows = [row for row in included_rows if row.budget_quantity > 0]
     target_quantity, target_amount = _target_totals(budgeted_rows, company_budgets)
+    actuals = daily_actuals or {}
     actual_quantity = sum(row.this_year_same_month_qty for row in budgeted_rows)
-    actual_amount = sum(_dashboard_amount(row.this_year_same_month_qty, row) for row in budgeted_rows)
-    forecast_quantity = sum(row.final_forecast for row in budgeted_rows)
-    forecast_amount = sum(_dashboard_amount(row.final_forecast, row) for row in budgeted_rows)
+    # Use taxed_amount from daily actuals when available — more accurate than qty × price
+    actual_amount = sum(
+        float(actuals[row.row_id].taxed_amount) if row.row_id in actuals
+        else _dashboard_amount(row.this_year_same_month_qty, row)
+        for row in budgeted_rows
+    )
+
+    # Use cycle-based projection for forecast if available; fall back to final_forecast
+    projs = projections or {}
+    def _eom_qty(row: ForecastRow) -> float:
+        return projs[row.row_id].estimated_eom_qty if row.row_id in projs else row.final_forecast
+
+    forecast_quantity = sum(_eom_qty(row) for row in budgeted_rows)
+    forecast_amount = sum(_dashboard_amount(_eom_qty(row), row) for row in budgeted_rows)
+
     high_risk_rows = [row for row in included_rows if is_high_risk_drop(row)]
 
     return DashboardMetrics(
@@ -880,7 +895,8 @@ def _to_monitor_row(
         yoy_growth_rate=yoy_rate,
         budget_achievement_rate=bud_rate,
         cycle_status=cycle_status_key,
-        cycle_days=row.cycle_days,
+        # Use projection's workday cycle for display — more meaningful than calendar-day average
+        cycle_days=projection.workday_cycle if projection is not None else row.cycle_days,
         budget_quantity=row.budget_quantity,
         remaining_shipments=remaining_shipments,
         typical_qty_per_shipment=raw_typical_qty,
