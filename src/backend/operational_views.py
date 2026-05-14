@@ -189,7 +189,7 @@ def build_forecast_page_context(
         target=target,
         sales_data=data,
         summary=summary,
-        dashboard=build_dashboard_metrics(summary.rows, budget_targets.values(), projections),
+        dashboard=build_dashboard_metrics(summary.rows, budget_targets.values(), projections, daily_actuals),
         monitor_rows=build_product_monitor_rows(
             summary.rows,
             daily_actuals=daily_actuals,
@@ -207,12 +207,19 @@ def build_dashboard_metrics(
     rows: Iterable[ForecastRow],
     company_budgets: Iterable[BudgetTarget] | None = None,
     projections: Mapping[str, ProjectionResult] | None = None,
+    daily_actuals: Mapping[str, DailyActualAggregate] | None = None,
 ) -> DashboardMetrics:
     included_rows = [row for row in rows if not row.excluded]
     budgeted_rows = [row for row in included_rows if row.budget_quantity > 0]
     target_quantity, target_amount = _target_totals(budgeted_rows, company_budgets)
+    actuals = daily_actuals or {}
     actual_quantity = sum(row.this_year_same_month_qty for row in budgeted_rows)
-    actual_amount = sum(_dashboard_amount(row.this_year_same_month_qty, row) for row in budgeted_rows)
+    # Use taxed_amount from daily actuals when available — more accurate than qty × price
+    actual_amount = sum(
+        float(actuals[row.row_id].taxed_amount) if row.row_id in actuals
+        else _dashboard_amount(row.this_year_same_month_qty, row)
+        for row in budgeted_rows
+    )
 
     # Use cycle-based projection for forecast if available; fall back to final_forecast
     projs = projections or {}
