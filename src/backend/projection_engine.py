@@ -65,9 +65,10 @@ def batch_project_eom(
     if not active:
         return {}
 
-    # Single workday set covering the full lookback range used for cycle calculation
+    # Single workday set covering the full lookback range plus through month-end
+    # (must extend to month_end so workdays_remaining calculation finds future dates)
     history_start = today - timedelta(days=_HISTORY_LOOKBACK_DAYS)
-    workday_set = fetch_workday_set(db, history_start, today)
+    workday_set = fetch_workday_set(db, history_start, month_end)
 
     # Workdays remaining from tomorrow to month-end
     import calendar as _cal
@@ -148,7 +149,9 @@ def batch_project_eom(
 
         entries = history_map.get(row.row_id, [])
         order_dates   = [e[0] for e in entries]
-        order_quantities = [e[1] for e in entries]
+        # Use only the most recent 20 orders for typical qty so that old volume
+        # patterns (e.g. pre-price-change bulk orders) don't skew the median.
+        order_quantities = [e[1] for e in entries[-20:]]
 
         results[row.row_id] = _project(
             order_dates=order_dates,
