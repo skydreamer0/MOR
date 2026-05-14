@@ -65,15 +65,15 @@ def batch_project_eom(
     if not active:
         return {}
 
+    import calendar as _cal
+    _, last_day = _cal.monthrange(year, month)
+    month_end = date(year, month, last_day)
+
     # Single workday set covering the full lookback range plus through month-end
     # (must extend to month_end so workdays_remaining calculation finds future dates)
     history_start = today - timedelta(days=_HISTORY_LOOKBACK_DAYS)
     workday_set = fetch_workday_set(db, history_start, month_end)
 
-    # Workdays remaining from tomorrow to month-end
-    import calendar as _cal
-    _, last_day = _cal.monthrange(year, month)
-    month_end = date(year, month, last_day)
     workdays_remaining = sum(1 for d in workday_set if today < d <= month_end)
 
     # Fetch historical shipments (excluding current month)
@@ -114,6 +114,12 @@ def batch_project_eom(
             [year, month] + customer_names + product_codes,
         ).fetchall()
 
+    # pack_factor per row_id — used to convert curr_month raw units to display units
+    pack_map = {
+        row.row_id: (row.price_quantity if row.price_quantity > 0 else 1.0)
+        for row in active
+    }
+
     # Build lookup: row_id → list of (shipment_date, quantity), oldest → newest
     history_map: dict[str, list[tuple[date, float]]] = {}
     for h in history_rows:
@@ -126,7 +132,10 @@ def batch_project_eom(
         raw = h["order_date"]
         d = date.fromisoformat(str(raw)[:10])
         key = f"{h['customer_name']}__{h['product_code']}"
-        history_map.setdefault(key, []).append((d, float(h["qty"])))
+        # daily_sales_actuals stores raw (smallest-package) units; convert to
+        # display units here so quantities are on the same scale as sales_records.
+        pack = pack_map.get(key, 1.0)
+        history_map.setdefault(key, []).append((d, float(h["qty"]) * pack))
 
     # Re-sort each entry to ensure chronological order after merging two sources
     for key in history_map:
@@ -135,8 +144,6 @@ def batch_project_eom(
     results: dict[str, ProjectionResult] = {}
     for row in active:
         actual = daily_actuals.get(row.row_id)
-        # actual_quantity 是最小包裝原始單位；× pack_factor 對齊歷史展示單位
-        # this_year_same_month_qty 已是展示單位，不需再轉換
         _pack = row.price_quantity if row.price_quantity > 0 else 1.0
         current_qty = (actual.actual_quantity * _pack) if actual is not None else row.this_year_same_month_qty
 
