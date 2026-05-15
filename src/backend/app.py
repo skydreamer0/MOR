@@ -13,7 +13,7 @@ from flask_caching import Cache
 
 from src.backend.data_validator import validate_health
 from src.backend.monthly_review import build_monthly_review, list_reviewable_months
-from src.backend.data_loader import default_target_from_db, normalize_product_code
+from src.backend.data_loader import default_target_from_data, default_target_from_db, latest_closed_month_from_data, load_sales_detail, normalize_product_code
 from src.backend.exporter import export_forecast
 from src.backend.forecast_config import ForecastConfig
 from src.backend.forecast_engine import apply_user_adjustments
@@ -22,6 +22,7 @@ from src.backend.operational_views import (
     aggregate_to_analytics,
     build_customer_risk_ranking,
     build_forecast_page_context,
+    build_monthly_review_report,
     forecast_amount_total,
     last_year_amount_total,
     recalculate_forecast_amounts,

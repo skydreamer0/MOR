@@ -1,5 +1,10 @@
 """Data Loader — 讀取並合併業績資料供 forecast_engine 使用。
 
+資料來源有兩個，在此層合併後對外提供統一介面：
+
+1. 業績明細 Excel（歷史月份，已確定）
+2. current_month_records DB 表（當月累積，來自 SHPB 上傳，持續變動）
+
 正常頁面請求與匯出使用 load_sales_detail_from_db()，從 SQLite 讀取。
 Excel 只在同步/匯入流程（/sync, /upload/current-month, /monitor/products/import）使用。
 架構背景詳見 docs/architecture/current-month-data-integration.md。
@@ -175,6 +180,8 @@ def normalize_product_code(value: object) -> str:
 def _load_current_month_from_db(db: "MORDatabase") -> pd.DataFrame:
     """從 current_month_records 讀取當月資料，轉換為與業績明細相同的欄位格式。
 
+    DB 欄位（英文）需對應回 forecast_engine 期待的中文欄位名稱，
+    並補上年/月/日三欄供部分查詢使用。
     供 load_sales_detail（Excel+DB 合併路徑）使用；頁面請求改用 load_sales_detail_from_db。
     """
     with db.get_connection() as conn:

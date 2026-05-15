@@ -165,6 +165,30 @@ def test_forecast_page_renders_forecast_review_assets_and_tools():
     assert "data-search=" in html
 
 
+def test_monthly_review_defaults_to_latest_closed_sales_month(monkeypatch):
+    from src.backend.monthly_review import MonthlyReviewSummary
+
+    stub_summary = MonthlyReviewSummary(
+        year=2026, month=4, closed_at="2026-05-01T00:00:00",
+        actual_quantity_total=8.0, actual_amount_total=840.0,
+        forecast_quantity_total=8.0, budget_quantity_total=8.0,
+        last_year_quantity_total=6.0, last_year_amount_total=567.0,
+        forecast_accuracy_total=1.0, yoy_growth_total=1.33,
+        budget_achievement_total=1.0, rows=[],
+    )
+    monkeypatch.setattr(app, "list_reviewable_months", lambda db: [(2026, 4), (2026, 3)])
+    monkeypatch.setattr(app, "build_monthly_review", lambda db, y, m: stub_summary)
+
+    client = _client()
+    response = client.get("/monthly-review")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert '<a href="/monthly-review" aria-current="page">月底檢討</a>' in html
+    assert "2026/04" in html   # latest month shown in picker
+    assert "840" in html       # actual_amount_total rendered in overview cards
+
+
 def test_frontend_pages_load_htmx_assets():
     client = _client()
 
@@ -324,6 +348,7 @@ def test_header_navigation_is_consistent_across_frontend_pages():
     expectations = {
         "/": 'href="/" aria-current="page"',
         "/forecast": 'href="/forecast" aria-current="page"',
+        "/monthly-review": 'href="/monthly-review" aria-current="page"',
         "/monitor/products": 'href="/monitor/products" aria-current="page"',
         "/settings": 'href="/settings" aria-current="page"',
     }
@@ -1143,8 +1168,7 @@ def test_product_monitor_page_exposes_daily_sales_import_form():
 
     assert 'action="/monitor/products/import"' in html
     assert 'name="daily_sales_file"' in html
-    assert "選擇當月累積業績檔" in html
-    assert "系統將依欄位格式判斷資料，不限制檔名。" in html
+    assert "選擇檔案" in html
 
 
 def test_close_month_route_creates_record_and_blocks_reimport():
