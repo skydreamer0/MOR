@@ -245,3 +245,107 @@ def test_load_sales_detail_without_db_returns_only_excel(tmp_path):
     result = load_sales_detail(tmp_path, config)   # 沒有 db
 
     assert list(result["月"].astype(int)) == [3]
+
+
+# ---------------------------------------------------------------------------
+# load_sales_detail_from_db (DB-first loader)
+# ---------------------------------------------------------------------------
+
+def _seed_sales_records(db, rows: list[dict]) -> None:
+    with db.get_connection() as conn:
+        for row in rows:
+            conn.execute(
+                "INSERT INTO sales_records "
+                "(order_date, customer_name, product_code, product_name, quantity, unit_price, amount) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    row["order_date"], row["customer_name"], row["product_code"],
+                    row.get("product_name", ""), row["quantity"],
+                    row.get("unit_price", 0), row.get("amount", 0),
+                ),
+            )
+        conn.commit()
+
+
+def test_load_sales_detail_from_db_returns_normalized_columns():
+    from src.backend.data_loader import load_sales_detail_from_db
+
+    db = _make_db()
+    _seed_sales_records(db, [{
+        "order_date": "2026-03-10", "customer_name": "A客戶",
+        "product_code": "P1", "product_name": "商品A",
+        "quantity": 10, "unit_price": 100, "amount": 1000,
+    }])
+
+    result = load_sales_detail_from_db(db)
+
+    expected = {"年", "月", "日", "客戶簡稱", "商品號", "商品簡稱", "銷+贈S量", "單價NT(淨)", "含稅總額(淨)", "order_date"}
+    assert expected.issubset(set(result.columns))
+    assert len(result) == 1
+    row = result.iloc[0]
+    assert int(row["年"]) == 2026
+    assert int(row["月"]) == 3
+    assert row["客戶簡稱"] == "A客戶"
+
+
+def test_load_sales_detail_from_db_combines_sales_and_current_month():
+    from src.backend.data_loader import load_sales_detail_from_db
+
+    db = _make_db()
+    _seed_sales_records(db, [{
+        "order_date": "2026-03-10", "customer_name": "A客戶",
+        "product_code": "P1", "product_name": "商品A",
+        "quantity": 10, "unit_price": 100, "amount": 1000,
+    }])
+    df_may = pd.DataFrame([_shpb_row(**{SHPB_COLUMNS["order_date"]: "20260505"})])
+    import_current_month(db, df_may)
+
+    result = load_sales_detail_from_db(db)
+
+    months = set(result["月"].astype(int).tolist())
+    assert 3 in months   # 歷史
+    assert 5 in months   # 當月 SHPB
+
+
+def test_load_sales_detail_from_db_returns_empty_df_with_correct_schema_when_no_data():
+    from src.backend.data_loader import load_sales_detail_from_db
+
+    db = _make_db()
+    result = load_sales_detail_from_db(db)
+
+    assert isinstance(result, pd.DataFrame)
+    expected = {"年", "月", "日", "客戶簡稱", "商品號", "商品簡稱", "銷+贈S量", "單價NT(淨)", "含稅總額(淨)", "order_date"}
+    assert expected.issubset(set(result.columns))
+    assert len(result) == 0
+
+
+def test_default_target_from_db_returns_next_month_after_latest_sale():
+    from src.backend.data_loader import default_target_from_db
+
+    db = _make_db()
+    _seed_sales_records(db, [{
+        "order_date": "2026-03-31", "customer_name": "A客戶",
+        "product_code": "P1", "product_name": "商品A",
+        "quantity": 5, "unit_price": 100, "amount": 500,
+    }])
+
+    target = default_target_from_db(db)
+
+    assert target.year == 2026
+    assert target.month == 4
+
+
+def test_default_target_from_db_handles_december_rollover():
+    from src.backend.data_loader import default_target_from_db
+
+    db = _make_db()
+    _seed_sales_records(db, [{
+        "order_date": "2026-12-15", "customer_name": "A客戶",
+        "product_code": "P1", "product_name": "商品A",
+        "quantity": 5, "unit_price": 100, "amount": 500,
+    }])
+
+    target = default_target_from_db(db)
+
+    assert target.year == 2027
+    assert target.month == 1

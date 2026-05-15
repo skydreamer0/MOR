@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import calendar
 import hashlib
-import os
+import logging
 from dataclasses import replace
 from datetime import date
 from pathlib import Path
@@ -12,7 +12,8 @@ from flask import Flask, Response, redirect, render_template, request, send_file
 from flask_caching import Cache
 
 from src.backend.data_validator import validate_health
-from src.backend.data_loader import default_target_from_data, latest_closed_month_from_data, load_sales_detail, normalize_product_code
+from src.backend.monthly_review import build_monthly_review, list_reviewable_months
+from src.backend.data_loader import default_target_from_data, default_target_from_db, latest_closed_month_from_data, load_sales_detail, normalize_product_code
 from src.backend.exporter import export_forecast
 from src.backend.forecast_config import ForecastConfig
 from src.backend.forecast_engine import apply_user_adjustments
@@ -26,18 +27,28 @@ from src.backend.operational_views import (
     last_year_amount_total,
     recalculate_forecast_amounts,
     build_status_distribution,
+    update_item_configs,
 )
 from src.backend.web.form_parser import FormValidationError, parse_manual_quantities, parse_target_period
 from src.backend.web.forecast_presenter import product_display_name
+from src.backend.daily_sales_importer import (
+    close_month,
+    get_close_record,
+    get_latest_import_batch,
+    import_daily_sales_workbook,
+)
 from src.backend.database import get_db
-from src.backend.etl import sync_excel_to_db
+from src.backend.etl import import_current_month, sync_excel_to_db
 from src.backend.snapshot_service import (
     delete_snapshot,
     is_finalized,
     list_snapshots,
+    load_snapshot_items,
     save_snapshot,
 )
 
+
+logger = logging.getLogger(__name__)
 
 BASE_PATH = Path(__file__).resolve().parent
 
@@ -60,22 +71,24 @@ def create_app(config: dict | None = None) -> Flask:
     cache.init_app(app)
     app.jinja_env.filters["product_display_name"] = product_display_name
 
+    # Version counters for cache invalidation — no DB queries on hot path.
+    # _month_versions tracks per-(year, month) writes (adjustments, daily imports, close-month).
+    # _global_version tracks writes that affect all months (sync, item config changes).
+    _month_versions: dict[tuple[int, int], int] = {}
+    _global_version: list[int] = [0]
+
     def _make_cache_key(year: int, month: int) -> str:
-        detail_path = data_base_path / forecast_config.detail_file
-        try:
-            mtime = int(os.path.getmtime(detail_path))
-        except FileNotFoundError:
-            mtime = 0
-        # 當月 SHPB 上傳後 current_month_records 會變動，需納入 cache key
-        try:
-            with db.get_connection() as conn:
-                row = conn.execute(
-                    "SELECT MAX(imported_at) FROM current_month_records"
-                ).fetchone()
-                cmr_stamp = str(row[0] or "")
-        except Exception:
-            cmr_stamp = ""
-        return f"forecast-context:{mtime}:{cmr_stamp}:{year}:{month}"
+        return (
+            f"forecast-context:{year}:{month}"
+            f":g{_global_version[0]}"
+            f":m{_month_versions.get((year, month), 0)}"
+        )
+
+    def _invalidate_context_cache(year: int, month: int) -> None:
+        _month_versions[(year, month)] = _month_versions.get((year, month), 0) + 1
+
+    def _invalidate_all_context_cache() -> None:
+        _global_version[0] += 1
 
     def _build_cached_context(year: int, month: int):
         key = _make_cache_key(year, month)
@@ -91,15 +104,7 @@ def create_app(config: dict | None = None) -> Flask:
         return context
 
     def _load_context_from_request():
-        # 傳入 db 讓 load_sales_detail 合併 current_month_records
-        data = load_sales_detail(data_base_path, forecast_config, db)
-        default_target = default_target_from_data(data, forecast_config)
-        target = parse_target_period(request.args, default_target)
-        return _build_cached_context(target.year, target.month)
-
-    def _load_monthly_review_context_from_request():
-        data = load_sales_detail(data_base_path, forecast_config)
-        default_target = latest_closed_month_from_data(data, forecast_config)
+        default_target = default_target_from_db(db)
         target = parse_target_period(request.args, default_target)
         return _build_cached_context(target.year, target.month)
 
@@ -157,7 +162,7 @@ def create_app(config: dict | None = None) -> Flask:
                 (year, month, customer, product_code, val, reason, "User"),
             )
             conn.commit()
-        cache.clear()
+        _invalidate_context_cache(year, month)
 
     def _find_forecast_row(row_id: str, year: int, month: int):
         context = _build_cached_context(year, month)
@@ -250,26 +255,6 @@ def create_app(config: dict | None = None) -> Flask:
             risk_levels=_risk_levels(rendered_rows),
         )
 
-    @app.get("/monthly-review")
-    def monthly_review() -> str:
-        try:
-            context = _load_monthly_review_context_from_request()
-            report = build_monthly_review_report(context)
-            error_message = None
-        except (FileNotFoundError, ValueError, FormValidationError) as exc:
-            context = None
-            report = None
-            error_message = f"無法產生月底檢討：{exc}"
-
-        target = context.target if context else None
-        return render_template(
-            "monthly_review.html",
-            year=target.year if target else request.args.get("year", ""),
-            month=target.month if target else request.args.get("month", ""),
-            report=report,
-            error_message=error_message,
-        )
-
     @app.patch("/forecast/row/<path:row_id>")
     def patch_forecast_row(row_id: str) -> str | Response:
         year = request.form.get("year", type=int)
@@ -294,25 +279,109 @@ def create_app(config: dict | None = None) -> Flask:
     @app.get("/monitor/products")
     def product_monitor() -> str:
         try:
-            context = build_forecast_page_context(data_base_path, forecast_config, db, request.args)
+            context = _load_context_from_request()
             error_message = None
         except (FileNotFoundError, ValueError, FormValidationError) as exc:
             context = None
             error_message = f"無法產生跳單監控：{exc}"
 
+        year = context.target.year if context else request.args.get("year", type=int) or 0
+        month = context.target.month if context else request.args.get("month", type=int) or 0
         return render_template(
             "product_monitor.html",
-            year=context.target.year if context else request.args.get("year", ""),
-            month=context.target.month if context else request.args.get("month", ""),
+            year=year,
+            month=month,
             rows=context.monitor_rows if context else [],
             error_message=error_message,
+            import_message=request.args.get("import_message"),
+            import_error=request.args.get("import_error"),
+            latest_batch=get_latest_import_batch(db, year, month) if year and month else None,
+            close_record=get_close_record(db, year, month) if year and month else None,
+        )
+
+    def _find_or_create_close_snapshot(year: int, month: int) -> int | None:
+        """Return an existing Final/CloseMonth snapshot ID, or auto-create one."""
+        with db.get_connection() as conn:
+            row = conn.execute(
+                """
+                SELECT id FROM forecast_snapshots
+                WHERE year = ? AND month = ? AND snapshot_type IN ('Final', 'CloseMonth')
+                ORDER BY id DESC LIMIT 1
+                """,
+                (year, month),
+            ).fetchone()
+        if row:
+            return row["id"]
+        # Auto-create from current forecast state
+        try:
+            ctx = build_forecast_page_context(
+                data_base_path, forecast_config, db,
+                {"year": str(year), "month": str(month)},
+            )
+            snapshot_rows = [
+                {
+                    "customer_name": r.customer,
+                    "product_code": r.product_code,
+                    "system_forecast": r.system_forecast,
+                    "manual_adjustment": r.manual_adjustment,
+                    "final_forecast": r.final_forecast,
+                }
+                for r in ctx.summary.rows
+            ]
+        except Exception as exc:
+            logger.error("結月快照自動建立失敗 %d/%02d: %s", year, month, exc, exc_info=True)
+            raise
+        return save_snapshot(
+            db, year, month,
+            f"結月快照 {year}/{month:02d}", "CloseMonth",
+            snapshot_rows, created_by="結月",
+        )
+
+    @app.post("/monitor/products/close-month")
+    def close_product_monitor_month() -> Response:
+        year = request.form.get("year", type=int)
+        month = request.form.get("month", type=int)
+        note = request.form.get("note", "").strip() or None
+        if not year or not month:
+            return redirect(url_for("product_monitor", import_error="缺少年月資訊。"))
+        try:
+            snapshot_id = _find_or_create_close_snapshot(year, month)
+            close_month(db, year, month, snapshot_id=snapshot_id, note=note)
+            _invalidate_context_cache(year, month)
+        except Exception as exc:
+            return redirect(url_for("product_monitor", year=year, month=month,
+                                    import_error=f"結月失敗：{exc}"))
+        return redirect(url_for("product_monitor", year=year, month=month,
+                                import_message=f"{year}/{month:02d} 結月完成。"))
+
+    @app.post("/monitor/products/import")
+    def import_product_monitor_daily_sales() -> Response:
+        uploaded = request.files.get("daily_sales_file")
+        if uploaded is None or not uploaded.filename:
+            return redirect(url_for("product_monitor", import_error="請選擇當月累積業績檔。"))
+        try:
+            result = import_daily_sales_workbook(db, uploaded.stream, uploaded.filename)
+            _invalidate_context_cache(result.sales_year, result.sales_month)
+        except Exception as exc:
+            return redirect(url_for("product_monitor", import_error=f"匯入失敗：{exc}"))
+        return redirect(
+            url_for(
+                "product_monitor",
+                year=result.sales_year,
+                month=result.sales_month,
+                import_message=(
+                    f"匯入完成：{result.sales_year}/{result.sales_month:02d}，"
+                    f"{result.row_count} 筆，"
+                    f"數量 {result.quantity_total:,.0f}，"
+                    f"含稅淨額 {result.taxed_amount_total:,.0f}"
+                ),
+            )
         )
 
     @app.post("/export")
     def export() -> Response:
         try:
-            data = load_sales_detail(data_base_path, forecast_config)
-            default_target = default_target_from_data(data, forecast_config)
+            default_target = default_target_from_db(db)
             target = parse_target_period(request.form, default_target)
 
             context = build_forecast_page_context(
@@ -323,8 +392,6 @@ def create_app(config: dict | None = None) -> Flask:
             )
             summary = context.summary
             manual_adjustments = parse_manual_quantities(request.form, key_prefix="manual_adjustment__", type_cast=int)
-            legacy_manual_adjustments = parse_manual_quantities(request.form, type_cast=int)
-            manual_adjustments = {**legacy_manual_adjustments, **manual_adjustments}
             adjustment_reasons = parse_manual_quantities(request.form, key_prefix="adjustment_reason__", type_cast=str)
 
             _validate_submitted_row_ids(summary, set(manual_adjustments))
@@ -378,6 +445,27 @@ def create_app(config: dict | None = None) -> Flask:
             error_message=error_message,
         )
 
+    @app.get("/monthly-review")
+    def monthly_review() -> str:
+        reviewable = list_reviewable_months(db)
+        year  = request.args.get("year",  type=int) or (reviewable[0][0] if reviewable else 0)
+        month = request.args.get("month", type=int) or (reviewable[0][1] if reviewable else 0)
+        summary = None
+        error_message = None
+        if year and month:
+            try:
+                summary = build_monthly_review(db, year, month)
+            except Exception as exc:
+                error_message = str(exc)
+        return render_template(
+            "monthly_review.html",
+            year=year,
+            month=month,
+            summary=summary,
+            reviewable_months=reviewable,
+            error_message=error_message,
+        )
+
     @app.get("/items")
     def items_management() -> Response:
         return redirect(url_for("settings"))
@@ -385,32 +473,23 @@ def create_app(config: dict | None = None) -> Flask:
     @app.post("/items/save")
     def save_items() -> Response:
         product_codes = request.form.getlist("product_codes")
-        with db.get_connection() as conn:
-            for pid in product_codes:
-                pid = normalize_product_code(pid)
-                is_excluded = 1 if request.form.get(f"is_excluded_{pid}") == "1" else 0
-                is_budgeted = 1 if request.form.get(f"is_budgeted_{pid}") == "1" else 0
-                is_visible = 1 if request.form.get(f"is_visible_{pid}") == "1" else 0
-                try:
-                    price_quantity = int(float(request.form.get(f"price_quantity_{pid}") or 0))
-                except ValueError:
-                    price_quantity = 0
-                item_status = request.form.get(f"item_status_{pid}")
-                if item_status not in {"active", "discontinued"}:
-                    item_status = "active"
-                
-                conn.execute("""
-                    INSERT OR IGNORE INTO item_configs
-                    (product_code, is_excluded, is_budgeted, is_visible, price_quantity, item_status, status_label, custom_category)
-                    VALUES (?, 0, 1, 1, 0, 'active', NULL, NULL)
-                """, (pid,))
-                conn.execute("""
-                    UPDATE item_configs
-                    SET is_excluded = ?, is_budgeted = ?, is_visible = ?, price_quantity = ?, item_status = ?
-                    WHERE product_code = ?
-                """, (is_excluded, is_budgeted, is_visible, price_quantity, item_status, pid))
-            conn.commit()
-        cache.clear()
+        items = []
+        for pid in product_codes:
+            pid = normalize_product_code(pid)
+            try:
+                price_quantity = int(float(request.form.get(f"price_quantity_{pid}") or 0))
+            except ValueError:
+                price_quantity = 0
+            items.append({
+                "product_code":  pid,
+                "is_excluded":   request.form.get(f"is_excluded_{pid}") == "1",
+                "is_budgeted":   request.form.get(f"is_budgeted_{pid}") == "1",
+                "is_visible":    request.form.get(f"is_visible_{pid}") == "1",
+                "price_quantity": price_quantity,
+                "item_status":   request.form.get(f"item_status_{pid}", "active"),
+            })
+        update_item_configs(db, items)
+        _invalidate_all_context_cache()
         return settings()
 
     @app.get("/exclusions")
@@ -425,7 +504,7 @@ def create_app(config: dict | None = None) -> Flask:
     def sync_data() -> str:
         try:
             sync_excel_to_db(db, data_base_path)
-            cache.clear()
+            _invalidate_all_context_cache()
             return "資料同步完成！請重新載入工作台。"
         except Exception as exc:
             return f"同步失敗：{exc}"
@@ -437,14 +516,13 @@ def create_app(config: dict | None = None) -> Flask:
         上傳後清除 cache，讓下次頁面請求重新合併當月資料。
         支援重複上傳：每次只取代 SHPB 涵蓋的年月，歷史資料不受影響。
         """
-        from src.backend.etl import import_current_month
         file = request.files.get("file")
         if not file or not file.filename:
             return "請選擇檔案", 400
         try:
             df = pd.read_excel(file)
             count = import_current_month(db, df)
-            cache.clear()
+            _invalidate_all_context_cache()
             return f"已匯入 {count} 筆當月業績資料。"
         except Exception as exc:
             return f"匯入失敗：{exc}", 400
@@ -460,9 +538,6 @@ def create_app(config: dict | None = None) -> Flask:
         if not row_id or year is None or month is None:
             return Response("Missing required fields", status=400)
 
-        # Parse row_id back to customer/product if needed, but it's easier to store as is 
-        # or use the year/month/customer/product key.
-        # Our row_id is currently "{customer}__{product_code}"
         try:
             _save_row_override(row_id, manual_qty, reason, year, month)
         except FormValidationError:
@@ -522,93 +597,6 @@ def create_app(config: dict | None = None) -> Flask:
         return redirect(url_for("forecast", year=year, month=month))
 
     return app
-
-
-def _load_items_from_sales(data_base_path: Path, forecast_config: ForecastConfig, db) -> list[dict]:
-    data = load_sales_detail(data_base_path, forecast_config)
-    unique_products = data[["商品號", "商品簡稱"]].drop_duplicates("商品號")
-
-    item_configs = _load_item_configs(db)
-    items = []
-    for _, row in unique_products.iterrows():
-        pid = normalize_product_code(row["商品號"])
-        cfg = item_configs.get(pid, {
-            "is_excluded": False,
-            "is_budgeted": True,
-            "is_visible": True,
-            "price_quantity": 0.0,
-            "item_status": "active",
-        })
-        items.append({
-            "product_code": pid,
-            "product_name": row["商品簡稱"],
-            **cfg,
-        })
-    return items
-
-
-def _load_item_configs(db) -> dict[str, dict]:
-    with db.get_connection() as conn:
-        rows = conn.execute("SELECT * FROM item_configs").fetchall()
-        configs = {
-            row["product_code"]: {
-                "is_excluded": bool(row["is_excluded"]),
-                "is_budgeted": bool(row["is_budgeted"]),
-                "is_visible": bool(row["is_visible"]),
-                "price_quantity": float(row["price_quantity"] or 0),
-                "item_status": "discontinued" if row["item_status"] == "discontinued" or row["status_label"] == "停用" else "active",
-            }
-            for row in rows
-        }
-        for row in rows:
-            normalized_code = normalize_product_code(row["product_code"])
-            configs.setdefault(normalized_code, configs[row["product_code"]])
-        return configs
-
-
-def _load_adjustments(db, year: int, month: int) -> tuple[dict[str, float], dict[str, str]]:
-    manual_adjustments = {}
-    adjustment_reasons = {}
-    with db.get_connection() as conn:
-        rows = conn.execute("""
-            SELECT customer_name, product_code, manual_quantity, adjustment_reason 
-            FROM forecast_adjustments 
-            WHERE year = ? AND month = ?
-        """, (year, month)).fetchall()
-        for row in rows:
-            row_id = f"{row['customer_name']}__{row['product_code']}"
-            if row["manual_quantity"] is not None:
-                manual_adjustments[row_id] = row["manual_quantity"]
-            if row["adjustment_reason"]:
-                adjustment_reasons[row_id] = row["adjustment_reason"]
-    return manual_adjustments, adjustment_reasons
-
-
-def _load_exclusions(db) -> set[str]:
-    with db.get_connection() as conn:
-        rows = conn.execute(
-            "SELECT product_code FROM item_configs WHERE is_excluded = 1"
-        ).fetchall()
-    excluded = set()
-    for row in rows:
-        product_code = row["product_code"]
-        excluded.add(product_code)
-        excluded.add(normalize_product_code(product_code))
-    return excluded
-
-
-def _load_budgets(db, year: int, month: int) -> dict[str, float]:
-    budgets = {}
-    with db.get_connection() as conn:
-        rows = conn.execute("""
-            SELECT customer_name, product_code, target_quantity
-            FROM budget_targets
-            WHERE year = ? AND month = ?
-        """, (year, month)).fetchall()
-        for row in rows:
-            row_id = f"{row['customer_name']}__{row['product_code']}"
-            budgets[row_id] = row["target_quantity"]
-    return budgets
 
 
 def _validate_submitted_row_ids(summary: ForecastSummary, submitted_row_ids: set[str]) -> None:

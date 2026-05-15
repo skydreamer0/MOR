@@ -12,10 +12,9 @@ Make MOR a compact multi-page operating tool:
 ## Small Task Queue
 
 1. Finish multi-page UI verification in browser.
-2. Add export readback tests for workbook tabs and totals.
-3. Improve data health checks for missing budget mappings.
-4. Add customer view page after monitor rules stabilize.
-5. Add product view page after customer view is useful.
+2. Improve data health checks for missing budget mappings.
+3. Add customer view page after monitor rules stabilize.
+4. Add product view page after customer view is useful.
 
 ---
 
@@ -74,11 +73,75 @@ Clean-up that makes future changes safer and faster.
   2. `_header.html` — `hx-get="/dashboard/metrics"` refreshes the metrics zone when the period selector changes.
   3. `_dashboard_metrics.html` — `htmx-indicator` shows a loading state during the metrics fetch.
 
-  ⚠️  Follow-up concern (not yet fixed): `hx-swap="outerHTML"` in `_forecast_row.html` replaces the
-  entire `<tr>` DOM node on `change`, which destroys JS event listeners bound by `bindForecastTable()`
-  (input recalculate, row-click detail panel, restore button). After a HTMX swap, those interactions
-  stop working for that row. Fix options: remove `hx-patch` (rely solely on `saveToServer`), or
-  rebind listeners via the `htmx:afterSwap` event.
+  Follow-up fixed on 2026-05-10: `forecast-table.js` now binds row events through an idempotent
+  `bindForecastRow()` path and rebinds swapped rows via `htmx:afterSwap`, so `hx-swap="outerHTML"`
+  keeps input recalculation, row detail, and restore interactions working after replacement.
+
+---
+
+## Backend Improvement Plan
+
+Issues identified from architecture review on 2026-05-11. Work top-to-bottom within each phase.
+
+### Phase 1 — Correctness & Reliability `priority: high`
+
+- [x] **`product_monitor` 路由繞過 cache。**
+  `product_monitor()` 直接呼叫 `build_forecast_page_context()` 而不走 `_build_cached_context()`，
+  使跳單監控頁每次都重跑完整計算，沒有享受到任何 cache 效益。
+  Fix: 讓 `product_monitor` 改呼叫 `_load_context_from_request()`（或 `_build_cached_context()`），
+  與 dashboard / forecast 路由保持一致。
+
+- [x] **`_find_or_create_close_snapshot` 靜默吞掉例外。**
+  `except Exception: snapshot_rows = []` 把任何錯誤都轉成空快照存入 DB，
+  無 log 也無回饋，可能留下靜默的資料錯誤。
+  Fix: 至少 log 錯誤，或讓例外往上拋讓路由回傳 500。
+
+### Phase 2 — Performance `priority: medium`
+
+- [x] **`_make_cache_key` 每次請求打 DB 兩次。**
+  即使 cache hit，每個請求仍執行兩條 `SELECT`（`sales_records` count/max、
+  `current_month_records` max）才能算出 key。
+  Fix: 改用穩定 key + etag 比對，或在 write path 主動讓 key 失效，
+  讓 hot-path 不需要先查 DB 才能決定要不要查 DB。
+
+- [x] **`cache.clear()` 太粗暴。**
+  每次任何寫入（品項、調整、匯入）都清掉所有月份的快取，但不同月份的
+  key 彼此獨立。Fix: 寫一個 `_invalidate_context_cache(year, month)` 只清
+  當月的 key；跨月的品項設定異動才全清。
+
+- [x] **`_init_db` 每次啟動都跑 migration 探測。**
+  每次 app 啟動都對每個欄位執行 `PRAGMA table_info()` 再決定是否 `ALTER TABLE`。
+  Fix: 加入 `schema_version` 表，記錄已套用的版本號，啟動時只比對版本跳過已完成的 migration。
+
+### Phase 3 — Maintainability `priority: low`
+
+- [ ] **`build_forecast_page_context` 是 god function。** (intentionally deferred — requires larger refactor)
+  單一函式包含：載入資料、建立預測、套用調整、計算 dashboard、計算 monitor rows、
+  計算 projections、取得 items，共 60+ 行呼叫 10+ 個函式，幾乎無法對單一步驟寫單元測試。
+  Fix: 拆成 `_build_summary()`、`_build_monitor()`、`_build_health()` 等獨立步驟，
+  `build_forecast_page_context` 變成純組裝。
+
+- [x] **`export` 路由保留無文件的 legacy 欄位名稱相容邏輯。**
+  `legacy_manual_adjustments` 的 merge 路徑沒有說明是誰在用，造成兩條平行的
+  form 解析路徑。Fix: 確認前端不再送舊格式後移除 legacy merge 邏輯。
+
+- [x] **`save_items` 路由直接內嵌 SQL 邏輯。**
+  與「routes 薄、邏輯在 service」的設計方向不一致，若之後要加測試會是瓶頸。
+  Fix: 抽出 `update_item_configs(db, items)` service function，路由只解 form 和呼叫它。
+
+- [x] **`upload_current_month` 有 inline import。**
+  `from src.backend.etl import import_current_month` 在函式體內才 import，
+  與其他路由的 top-level import 不一致。Fix: 移至檔案頂部。
+
+- [x] **`monthly_review` 的 except 是冗餘的。**
+  `except (ValueError, Exception)` 中 `Exception` 已涵蓋 `ValueError`，多寫反而誤導。
+  Fix: 改為 `except Exception`。
+
+- [x] **`load_item_configs` 迴圈跑兩次 rows。**
+  先建 dict，再對同一個 `rows` 第二次迴圈補 normalized code alias，可以合在一個 pass。
+  Fix: 在第一個迴圈內同時處理 normalized key。
+
+---
 
 ## Working Rules
 

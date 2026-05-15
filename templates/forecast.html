@@ -19,7 +19,7 @@
 
     <section class="summary">
       <div class="metric"><span>預估月份</span><strong>{% if year and month %}{{ year }}/{{ "%02d"|format(month|int) }}{% else %}--{% endif %}</strong></div>
-      <div class="metric"><span>顯示列數</span><strong>{{ shown_count }} / {{ row_count }}</strong></div>
+      <div class="metric"><span>總列數</span><strong>{{ shown_count }} / {{ row_count }}</strong></div>
       <div class="metric"><span>自動預估列</span><strong>{{ rows|selectattr("auto_in_month")|list|length }}</strong></div>
       <div class="metric"><span>目前總額</span><strong id="top-total">{{ "{:,.0f}".format(total) }}</strong></div>
       {% if is_finalized %}
@@ -242,17 +242,22 @@
       window.addEventListener('resize', resize);
     })();
 
-    // 捲動 table-wrap 時收合 summary（單向鎖定，無中間態）
+    // 捲動 table-wrap 時收合 summary
+    // wheel 偵測向下方向（不依賴 scrollTop，列數不足時也能正確觸發）
+    // scroll 偵測回到頂部才展開
     (function () {
       const summary   = document.querySelector('.summary');
       const tableWrap = document.querySelector('.table-wrap');
       if (!summary || !tableWrap) return;
       let isCollapsed = false;
-      tableWrap.addEventListener('scroll', () => {
-        if (!isCollapsed && tableWrap.scrollTop > 10) {
+      tableWrap.addEventListener('wheel', (e) => {
+        if (e.deltaY > 0 && !isCollapsed) {
           isCollapsed = true;
           summary.classList.add('summary--collapsed');
-        } else if (isCollapsed && tableWrap.scrollTop === 0) {
+        }
+      }, { passive: true });
+      tableWrap.addEventListener('scroll', () => {
+        if (isCollapsed && tableWrap.scrollTop < 8) {
           isCollapsed = false;
           summary.classList.remove('summary--collapsed');
         }

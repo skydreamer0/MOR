@@ -9,118 +9,287 @@
 <body>
   {% set page_title = "月底檢討" %}
   {% set active_page = "monthly_review" %}
-  {% set show_period_toolbar = true %}
   {% include "_header.html" %}
 
-  <main class="monthly-review-main">
+  <main class="review-main">
+
+    {# ── 月份選擇 ── #}
+    <section class="workbench-panel review-month-picker">
+      <div class="workbench-toolbar">
+        <div class="toolbar-title">
+          <h2>月底檢討</h2>
+          {% if summary %}<span>{{ summary.year }}/{{ "%02d"|format(summary.month) }} 結月於 {{ summary.closed_at[:16] }}</span>{% endif %}
+        </div>
+        <form class="toolbar-controls" method="get">
+          <label>
+            選擇月份
+            <select name="year_month" onchange="
+              var v = this.value.split('-');
+              this.form.querySelector('[name=year]').value = v[0];
+              this.form.querySelector('[name=month]').value = v[1];
+              this.form.submit();">
+              {% for y, m in reviewable_months %}
+                <option value="{{ y }}-{{ m }}"
+                  {% if y == year and m == month %}selected{% endif %}>
+                  {{ y }}/{{ "%02d"|format(m) }}
+                </option>
+              {% endfor %}
+            </select>
+          </label>
+          <input type="hidden" name="year"  value="{{ year }}">
+          <input type="hidden" name="month" value="{{ month }}">
+        </form>
+      </div>
+    </section>
+
     {% if error_message %}
       <section class="alert" role="alert">{{ error_message }}</section>
     {% endif %}
 
-    {% if report %}
-      <section class="summary" aria-label="月底檢討總覽">
-        <div class="metric">
-          <span>檢討月份</span>
-          <strong>{{ year }}/{{ "%02d"|format(month|int) }}</strong>
-        </div>
-        <div class="metric">
-          <span>實績數量</span>
-          <strong>{{ "{:,.0f}".format(report.totals.actual_quantity) }}</strong>
-        </div>
-        <div class="metric">
-          <span>實績金額</span>
-          <strong>{{ "{:,.0f}".format(report.totals.actual_amount) }}</strong>
-        </div>
-        <div class="metric">
-          <span>vs 最終預估</span>
-          <strong class="{% if report.totals.forecast_gap_amount < 0 %}falling{% elif report.totals.forecast_gap_amount > 0 %}rising{% endif %}">
-            {{ "{:+,.0f}".format(report.totals.forecast_gap_amount) }}
-          </strong>
-        </div>
-        <div class="metric">
-          <span>vs 預算</span>
-          <strong class="{% if report.totals.budget_gap_amount < 0 %}falling{% elif report.totals.budget_gap_amount > 0 %}rising{% endif %}">
-            {{ "{:+,.0f}".format(report.totals.budget_gap_amount) }}
-          </strong>
-        </div>
-      </section>
-
-      <section class="monthly-review-workspace workbench-panel" aria-labelledby="monthly-review-title">
-        <div class="workbench-toolbar" aria-label="月底檢討工具">
-          <div class="toolbar-title">
-            <h2 id="monthly-review-title">{{ year }}/{{ "%02d"|format(month|int) }} 月底檢討</h2>
-            <span><strong>{{ report.rows|length }}</strong> 筆</span>
-          </div>
-          <div class="toolbar-actions">
-            <a class="btn-link" href="{{ url_for('forecast', year=year, month=month) }}">查看當月預估</a>
-          </div>
-        </div>
-
-        {% if report.rows %}
-          <div class="table-wrap monthly-review-table-wrap workbench-table-shell">
-            <table class="monthly-review-table">
-              <thead>
-                <tr>
-                  <th>客戶</th>
-                  <th>品項</th>
-                  <th class="num">實績數量</th>
-                  <th class="num">實績金額</th>
-                  <th class="num">最終預估</th>
-                  <th class="num">預估差異</th>
-                  <th class="num">預算</th>
-                  <th class="num">預算差異</th>
-                  <th class="num">去年同期</th>
-                  <th class="num">同期差異</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for row in report.rows %}
-                <tr>
-                  <td>{{ row.customer }}</td>
-                  <td class="cell-product" title="{{ row.product_name }}">{{ row.product_name | product_display_name }}</td>
-                  <td class="num">{{ "{:,.0f}".format(row.actual_quantity) }}</td>
-                  <td class="num">{{ "{:,.0f}".format(row.actual_amount) }}</td>
-                  <td class="num">{{ "{:,.0f}".format(row.forecast_quantity) }}</td>
-                  <td class="num">
-                    <span class="gap-value {% if row.forecast_gap_quantity < 0 %}falling{% elif row.forecast_gap_quantity > 0 %}rising{% endif %}">
-                      {{ "{:+,.0f}".format(row.forecast_gap_quantity) }}
-                    </span>
-                  </td>
-                  <td class="num">{{ "{:,.0f}".format(row.budget_quantity) }}</td>
-                  <td class="num">
-                    <span class="gap-value {% if row.budget_gap_quantity < 0 %}falling{% elif row.budget_gap_quantity > 0 %}rising{% endif %}">
-                      {{ "{:+,.0f}".format(row.budget_gap_quantity) }}
-                    </span>
-                  </td>
-                  <td class="num">{{ "{:,.0f}".format(row.last_year_quantity) }}</td>
-                  <td class="num">
-                    <span class="gap-value {% if row.year_gap_quantity < 0 %}falling{% elif row.year_gap_quantity > 0 %}rising{% endif %}">
-                      {{ "{:+,.0f}".format(row.year_gap_quantity) }}
-                    </span>
-                  </td>
-                </tr>
-                {% endfor %}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <th colspan="2">合計</th>
-                  <td class="num">{{ "{:,.0f}".format(report.totals.actual_quantity) }}</td>
-                  <td class="num">{{ "{:,.0f}".format(report.totals.actual_amount) }}</td>
-                  <td class="num">{{ "{:,.0f}".format(report.totals.forecast_quantity) }}</td>
-                  <td class="num">{{ "{:+,.0f}".format(report.totals.forecast_gap_quantity) }}</td>
-                  <td class="num">{{ "{:,.0f}".format(report.totals.budget_quantity) }}</td>
-                  <td class="num">{{ "{:+,.0f}".format(report.totals.budget_gap_quantity) }}</td>
-                  <td class="num">{{ "{:,.0f}".format(report.totals.last_year_quantity) }}</td>
-                  <td class="num">{{ "{:+,.0f}".format(report.totals.year_gap_quantity) }}</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        {% else %}
-          <section class="empty-state">這個月份沒有可檢討的業績資料。</section>
-        {% endif %}
-      </section>
+    {% if not reviewable_months %}
+      <section class="alert alert-info" role="status">尚無結月資料。請先在「產品跳單監控」頁完成當月匯入並結月。</section>
     {% endif %}
+
+    {% if summary %}
+
+    {# ── 月度總覽 ── #}
+    <section class="workbench-panel review-section" aria-labelledby="review-overview-title">
+      <h3 id="review-overview-title" class="review-section-title">月度總覽</h3>
+      <div class="review-overview-grid">
+
+        <div class="review-metric-card">
+          <span class="review-metric-label">實際數量</span>
+          <strong class="review-metric-value">{{ "{:,.0f}".format(summary.actual_quantity_total) }}</strong>
+        </div>
+
+        <div class="review-metric-card">
+          <span class="review-metric-label">實際金額</span>
+          <strong class="review-metric-value">{{ "{:,.0f}".format(summary.actual_amount_total) }}</strong>
+        </div>
+
+        <div class="review-metric-card">
+          <span class="review-metric-label">最終預估數量</span>
+          <strong class="review-metric-value">{{ "{:,.0f}".format(summary.forecast_quantity_total) }}</strong>
+          {% if summary.forecast_accuracy_total is not none %}
+            {% set fa = summary.forecast_accuracy_total * 100 %}
+            <span class="review-metric-sub {% if fa >= 95 %}success-text{% elif fa >= 85 %}rate-warning{% else %}danger-text{% endif %}">
+              準確率 {{ "{:.1f}%".format(fa) }}
+            </span>
+          {% endif %}
+        </div>
+
+        <div class="review-metric-card">
+          <span class="review-metric-label">去年同期數量</span>
+          <strong class="review-metric-value">{{ "{:,.0f}".format(summary.last_year_quantity_total) if summary.last_year_quantity_total > 0 else "-" }}</strong>
+          {% if summary.yoy_growth_total is not none %}
+            {% set yoy = (summary.yoy_growth_total - 1) * 100 %}
+            <span class="review-metric-sub gap-value {% if yoy < 0 %}falling{% elif yoy > 0 %}rising{% endif %}">
+              {{ "{:+.1f}%".format(yoy) }}
+            </span>
+          {% endif %}
+        </div>
+
+        <div class="review-metric-card">
+          <span class="review-metric-label">預算數量</span>
+          <strong class="review-metric-value">{{ "{:,.0f}".format(summary.budget_quantity_total) if summary.budget_quantity_total > 0 else "-" }}</strong>
+          {% if summary.budget_achievement_total is not none %}
+            {% set ba = summary.budget_achievement_total * 100 %}
+            <span class="review-metric-sub {% if ba >= 100 %}success-text{% elif ba >= 90 %}rate-warning{% else %}danger-text{% endif %}">
+              達成率 {{ "{:.1f}%".format(ba) }}
+            </span>
+          {% endif %}
+        </div>
+
+      </div>
+    </section>
+
+    {# ── 預估準確度 ── #}
+    {% if summary.rows | selectattr("forecast_quantity", "gt", 0) | list %}
+    <section class="workbench-panel review-section" aria-labelledby="review-accuracy-title">
+      <h3 id="review-accuracy-title" class="review-section-title">預估準確度</h3>
+      <div class="table-wrap workbench-table-shell">
+        <table class="review-table">
+          <thead>
+            <tr>
+              <th>客戶</th><th>品項</th>
+              <th class="num">實際數量</th>
+              <th class="num">最終預估</th>
+              <th class="num">GAP</th>
+              <th class="num">準確率</th>
+            </tr>
+          </thead>
+          <tbody>
+            {# 誤差最大的前 20 列（依 |GAP| 降序） #}
+            {% set accuracy_rows = summary.rows
+               | selectattr("forecast_quantity", "gt", 0)
+               | sort(attribute="forecast_gap") | list %}
+            {# show bottom (most under) then top (most over) #}
+            {% for row in (accuracy_rows[:10] + accuracy_rows[-10:]) | unique(attribute="product_code") %}
+            <tr>
+              <td>{{ row.customer_name }}</td>
+              <td>{{ row.product_code }}</td>
+              <td class="num">{{ "{:,.0f}".format(row.actual_quantity) }}</td>
+              <td class="num">{{ "{:,.0f}".format(row.forecast_quantity) }}</td>
+              <td class="num">
+                <span class="gap-value {% if row.forecast_gap < 0 %}falling{% elif row.forecast_gap > 0 %}rising{% endif %}">
+                  {{ "{:+,.0f}".format(row.forecast_gap) }}
+                </span>
+              </td>
+              <td class="num">
+                {% if row.forecast_accuracy is not none %}
+                  {% set fa = row.forecast_accuracy * 100 %}
+                  <span class="{% if fa >= 95 %}success-text{% elif fa >= 85 %}rate-warning{% else %}danger-text{% endif %}">
+                    {{ "{:.1f}%".format(fa) }}
+                  </span>
+                {% else %}<span class="muted">-</span>{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% endif %}
+
+    {# ── 跳單與成長 ── #}
+    <section class="workbench-panel review-section" aria-labelledby="review-growth-title">
+      <h3 id="review-growth-title" class="review-section-title">跳單與成長</h3>
+      <div class="review-growth-grid">
+
+        {# 低於去年同期 #}
+        {% set yoy_below = summary.rows | selectattr("yoy_growth", "ne", none)
+           | selectattr("yoy_growth", "lt", 1.0)
+           | sort(attribute="yoy_growth") | list %}
+        <div class="review-growth-panel">
+          <h4>低於去年同期 <span class="badge status-high">{{ yoy_below | length }}</span></h4>
+          {% if yoy_below %}
+          <ul class="review-growth-list">
+            {% for row in yoy_below[:10] %}
+            <li>
+              <span>{{ row.customer_name }} / {{ row.product_code }}</span>
+              <span class="gap-value falling">{{ "{:+.1f}%".format((row.yoy_growth - 1) * 100) }}</span>
+            </li>
+            {% endfor %}
+          </ul>
+          {% else %}<p class="muted">無</p>{% endif %}
+        </div>
+
+        {# 高於去年同期 #}
+        {% set yoy_above = summary.rows | selectattr("yoy_growth", "ne", none)
+           | selectattr("yoy_growth", "ge", 1.0)
+           | sort(attribute="yoy_growth", reverse=true) | list %}
+        <div class="review-growth-panel">
+          <h4>高於去年同期 <span class="badge status-ok">{{ yoy_above | length }}</span></h4>
+          {% if yoy_above %}
+          <ul class="review-growth-list">
+            {% for row in yoy_above[:10] %}
+            <li>
+              <span>{{ row.customer_name }} / {{ row.product_code }}</span>
+              <span class="gap-value rising">{{ "{:+.1f}%".format((row.yoy_growth - 1) * 100) }}</span>
+            </li>
+            {% endfor %}
+          </ul>
+          {% else %}<p class="muted">無</p>{% endif %}
+        </div>
+
+        {# 低於預算 #}
+        {% set bud_below = summary.rows | selectattr("budget_achievement", "ne", none)
+           | selectattr("budget_achievement", "lt", 1.0)
+           | sort(attribute="budget_achievement") | list %}
+        <div class="review-growth-panel">
+          <h4>低於預算 <span class="badge status-high">{{ bud_below | length }}</span></h4>
+          {% if bud_below %}
+          <ul class="review-growth-list">
+            {% for row in bud_below[:10] %}
+            <li>
+              <span>{{ row.customer_name }} / {{ row.product_code }}</span>
+              <span class="{% if row.budget_achievement < 0.9 %}danger-text{% else %}rate-warning{% endif %}">
+                {{ "{:.1f}%".format(row.budget_achievement * 100) }}
+              </span>
+            </li>
+            {% endfor %}
+          </ul>
+          {% else %}<p class="muted">無</p>{% endif %}
+        </div>
+
+        {# 超過預算 #}
+        {% set bud_above = summary.rows | selectattr("budget_achievement", "ne", none)
+           | selectattr("budget_achievement", "ge", 1.0)
+           | sort(attribute="budget_achievement", reverse=true) | list %}
+        <div class="review-growth-panel">
+          <h4>超過預算 <span class="badge status-ok">{{ bud_above | length }}</span></h4>
+          {% if bud_above %}
+          <ul class="review-growth-list">
+            {% for row in bud_above[:10] %}
+            <li>
+              <span>{{ row.customer_name }} / {{ row.product_code }}</span>
+              <span class="success-text">{{ "{:.1f}%".format(row.budget_achievement * 100) }}</span>
+            </li>
+            {% endfor %}
+          </ul>
+          {% else %}<p class="muted">無</p>{% endif %}
+        </div>
+
+      </div>
+    </section>
+
+    {# ── 完整明細 ── #}
+    <section class="workbench-panel review-section" aria-labelledby="review-detail-title">
+      <h3 id="review-detail-title" class="review-section-title">完整明細</h3>
+      <div class="table-wrap workbench-table-shell">
+        <table class="review-table">
+          <thead>
+            <tr>
+              <th>客戶</th><th>品項</th>
+              <th class="num">實際數量</th>
+              <th class="num">最終預估</th>
+              <th class="num">預估 GAP</th>
+              <th class="num">去年同期</th>
+              <th class="num">YoY</th>
+              <th class="num">預算</th>
+              <th class="num">達成率</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in summary.rows %}
+            <tr>
+              <td>{{ row.customer_name }}</td>
+              <td>{{ row.product_code }}</td>
+              <td class="num">{{ "{:,.0f}".format(row.actual_quantity) }}</td>
+              <td class="num">{{ "{:,.0f}".format(row.forecast_quantity) if row.forecast_quantity > 0 else "-" }}</td>
+              <td class="num">
+                {% if row.forecast_quantity > 0 %}
+                  <span class="gap-value {% if row.forecast_gap < 0 %}falling{% elif row.forecast_gap > 0 %}rising{% endif %}">
+                    {{ "{:+,.0f}".format(row.forecast_gap) }}
+                  </span>
+                {% else %}<span class="muted">-</span>{% endif %}
+              </td>
+              <td class="num">{{ "{:,.0f}".format(row.last_year_quantity) if row.last_year_quantity > 0 else "-" }}</td>
+              <td class="num">
+                {% if row.yoy_growth is not none %}
+                  {% set yoy = (row.yoy_growth - 1) * 100 %}
+                  <span class="gap-value {% if yoy < 0 %}falling{% elif yoy > 0 %}rising{% endif %}">
+                    {{ "{:+.1f}%".format(yoy) }}
+                  </span>
+                {% else %}<span class="muted">-</span>{% endif %}
+              </td>
+              <td class="num">{{ "{:,.0f}".format(row.budget_quantity) if row.budget_quantity > 0 else "-" }}</td>
+              <td class="num">
+                {% if row.budget_achievement is not none %}
+                  {% set ba = row.budget_achievement * 100 %}
+                  <span class="{% if ba >= 100 %}success-text{% elif ba >= 90 %}rate-warning{% else %}danger-text{% endif %}">
+                    {{ "{:.1f}%".format(ba) }}
+                  </span>
+                {% else %}<span class="muted">-</span>{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    {% endif %}{# end if summary #}
   </main>
 </body>
 </html>
