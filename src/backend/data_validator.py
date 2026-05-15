@@ -34,5 +34,19 @@ def validate_health(health) -> list[DataIssue]:
     return issues
 
 
+def validate_budget_coverage(
+    sales_product_codes: "set[str]",
+    budget_product_codes: "set[str]",
+) -> list[DataIssue]:
+    """Check for budget products with no matching sales history."""
+    unmapped = budget_product_codes - sales_product_codes
+    if unmapped:
+        return [DataIssue(
+            "warning",
+            f"有 {len(unmapped)} 個預算品項在業績明細中無對應紀錄，GAP 計算可能不完整",
+        )]
+    return []
+
+
 def _zero_price_issue(count: int) -> DataIssue:
     return DataIssue("warning", f"有 {count} 筆單價為 0，金額估算可能不準確")

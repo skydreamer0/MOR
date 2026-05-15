@@ -261,6 +261,8 @@ def create_app(config: dict | None = None) -> Flask:
         month = request.form.get("month", type=int)
         if year is None or month is None:
             return Response("Missing year/month", status=400)
+        if not (1 <= month <= 12) or not (2000 <= year <= 2100):
+            return Response("Invalid year/month range", status=400)
         reason = request.form.get("note", request.form.get(f"adjustment_reason__{row_id}", ""))
         try:
             qty = request.form.get("qty", request.form.get(f"manual_adjustment__{row_id}"))
@@ -344,6 +346,8 @@ def create_app(config: dict | None = None) -> Flask:
         note = request.form.get("note", "").strip() or None
         if not year or not month:
             return redirect(url_for("product_monitor", import_error="缺少年月資訊。"))
+        if not (1 <= month <= 12) or not (2000 <= year <= 2100):
+            return redirect(url_for("product_monitor", import_error="年月範圍不合法。"))
         try:
             snapshot_id = _find_or_create_close_snapshot(year, month)
             close_month(db, year, month, snapshot_id=snapshot_id, note=note)
@@ -537,6 +541,8 @@ def create_app(config: dict | None = None) -> Flask:
 
         if not row_id or year is None or month is None:
             return Response("Missing required fields", status=400)
+        if not (1 <= month <= 12) or not (2000 <= year <= 2100):
+            return Response("Invalid year/month range", status=400)
 
         try:
             _save_row_override(row_id, manual_qty, reason, year, month)
@@ -554,6 +560,8 @@ def create_app(config: dict | None = None) -> Flask:
 
         if not year or not month:
             return Response("Missing year/month", status=400)
+        if not (1 <= month <= 12) or not (2000 <= year <= 2100):
+            return Response("Invalid year/month range", status=400)
         if not snapshot_name:
             snapshot_name = f"{'定稿' if snapshot_type == 'Final' else '草稿'} {year}/{month:02d}"
 

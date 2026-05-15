@@ -143,6 +143,55 @@ Issues identified from architecture review on 2026-05-11. Work top-to-bottom wit
 
 ---
 
+## Backend Improvement Plan — Round 2
+
+Issues identified from audit on 2026-05-15. Continue top-to-bottom within each phase.
+
+### Phase 4 — Reliability & Data Integrity `priority: high`
+
+- [x] **`sync_excel_to_db` 無交易回滾。**
+  目前依序執行：刪除並寫入 sales_records → 寫入 item configs → 同步 budget。
+  若 budget sync 在第三步失敗，前兩步已 commit，造成資料不一致。
+  Fix: 將整個 sync 包在單一 `BEGIN / ROLLBACK` transaction 中。
+
+- [x] **`etl.py` 用 `print()` 取代 logging。**
+  Lines 161, 186, 209, 211, 317 使用 `print()`，錯誤訊息不會進 app log。
+  Fix: 改為 `logging.getLogger(__name__).info()` / `.error()`，與 `app.py` 的 logger 風格一致。
+
+- [x] **`etl.py` hardcode `default_year=2026`。**
+  `normalize_budget_targets(df_budget, default_year=2026)` 在 2027 年後會靜默產出錯誤年份。
+  Fix: 從 budget_rows["year"].unique() 提取實際年份清單，DELETE 和 log 皆使用動態年份。
+
+### Phase 5 — Testing Coverage `priority: medium`
+
+- [x] **`exporter.py` 缺少測試。**
+  Excel 匯出邏輯無對應測試檔，任何欄位調整都無保護。
+  Fix: 新增 `tests/test_exporter.py`，覆蓋回傳型別、三個 sheet 存在、欄位名稱、排除 sheet 篩選邏輯。
+
+- [x] **`analytics.py` 缺少測試。**
+  彙總計算邏輯未被任何 test 覆蓋。
+  Fix: 新增 `tests/test_analytics.py`，驗證 YTD 計算、budget rate、trend_direction、slice builder。
+
+- [x] **`history_service.py` 缺少測試。**
+  Lookback 與 supplemental 資料讀取邏輯無測試。
+  Fix: 新增 `tests/test_history_service.py`，含純函式測試與 DB-backed 整合測試。
+
+### Phase 6 — Validation & Configuration `priority: medium`
+
+- [x] **年份 / 月份 form input 無範圍驗證。**
+  `app.py` 路由接受 `year` / `month` 參數，僅檢查 `None`，未驗證合理範圍。
+  Fix: 四個寫入路由加入 `1 <= month <= 12` 與 `2000 <= year <= 2100` 範圍檢查，回傳 400。
+
+- [x] **Budget-to-product 對應無驗證。**
+  `data_validator.py` 未偵測預算中存在但無對應銷售紀錄的品項，導致 GAP 計算不完整。
+  Fix: 新增 `validate_budget_coverage(sales_codes, budget_codes)` 函式，未對應品項列為 warning。
+
+- [x] **`requirements.txt` 無版本鎖定。**
+  `Flask`、`pandas`、`openpyxl` 等皆無版本號，跨環境安裝可能拿到不相容版本。
+  Fix: 鎖定目前已知可用版本（Flask==2.3.2、pandas==2.2.3 等）。
+
+---
+
 ## Working Rules
 
 - Do one task at a time.

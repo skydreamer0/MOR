@@ -20,12 +20,15 @@ current_month_records 中相同月份的記錄會被自動清除。
     兩者語意相同，合算後寫入 `quantity`。
 """
 import json
+import logging
 from pathlib import Path
 
 import pandas as pd
 
 from src.backend.data_loader import normalize_product_code
 from src.backend.database import MORDatabase
+
+logger = logging.getLogger(__name__)
 
 
 SALES_FILE_PATTERN = "業績明細*.xlsx"
@@ -151,24 +154,35 @@ def sync_excel_to_db(db: MORDatabase, project_root: Path, config_file: str = "ex
 
     同步完成後會自動清除 current_month_records 中已被業績明細涵蓋的月份，
     確保不留下過時的 SHPB 資料。
+    所有 DB 寫入包在單一 transaction 中，任一步驟失敗則全部 rollback。
     """
+    # ── Step 1: Read all data from Excel before any DB writes ─────────────────
+    sales_rows = None
     sales_file = _find_first_file(project_root, SALES_FILE_PATTERN)
     if sales_file:
         sales_rows = normalize_sales_records(pd.read_excel(sales_file, sheet_name=SALES_SHEET_NAME))
-        with db.get_connection() as conn:
-            conn.execute("DELETE FROM sales_records")
-            sales_rows.to_sql("sales_records", conn, if_exists="append", index=False)
-            print(f"Synced {len(sales_rows)} sales records.")
 
-        # 清除 current_month_records 中已被業績明細覆蓋的月份
-        # 業績明細是確定版，SHPB 的當月資料此時已無效
-        _clear_covered_current_month_records(db, sales_rows)
-
+    excluded_ids: list = []
     json_path = project_root / config_file
     if json_path.exists():
         with open(json_path, "r", encoding="utf-8") as f:
             excluded_ids = json.load(f)
-        with db.get_connection() as conn:
+
+    budget_rows = None
+    budget_file = _find_first_file(project_root, BUDGET_FILE_PATTERN)
+    if budget_file:
+        xl = pd.ExcelFile(budget_file)
+        df_budget = pd.read_excel(budget_file, sheet_name=xl.sheet_names[0])
+        budget_rows = normalize_budget_targets(df_budget, default_year=2026)
+
+    # ── Step 2: All DB writes in one transaction; rollback on any failure ──────
+    with db.get_connection() as conn:
+        if sales_rows is not None:
+            conn.execute("DELETE FROM sales_records")
+            sales_rows.to_sql("sales_records", conn, if_exists="append", index=False)
+            logger.info("Synced %d sales records.", len(sales_rows))
+
+        if excluded_ids:
             for pid in excluded_ids:
                 product_code = normalize_product_code(pid)
                 conn.execute(
@@ -183,32 +197,31 @@ def sync_excel_to_db(db: MORDatabase, project_root: Path, config_file: str = "ex
                     "UPDATE item_configs SET is_excluded = 1 WHERE product_code = ?",
                     (product_code,),
                 )
-            print(f"Migrated {len(excluded_ids)} exclusions from JSON.")
+            logger.info("Migrated %d exclusions from JSON.", len(excluded_ids))
 
-    budget_file = _find_first_file(project_root, BUDGET_FILE_PATTERN)
-    if budget_file:
-        try:
-            xl = pd.ExcelFile(budget_file)
-            target_sheet = xl.sheet_names[0]
-            df_budget = pd.read_excel(budget_file, sheet_name=target_sheet)
-            budget_rows = normalize_budget_targets(df_budget, default_year=2026)
+        if budget_rows is not None:
+            budget_years = budget_rows["year"].unique().tolist()
+            placeholders = ",".join("?" * len(budget_years))
+            conn.execute(
+                f"DELETE FROM budget_targets WHERE year IN ({placeholders})",
+                budget_years,
+            )
+            budget_rows[
+                [
+                    "year",
+                    "month",
+                    "customer_name",
+                    "product_code",
+                    "target_quantity",
+                    "target_amount",
+                    "base_target_quantity",
+                ]
+            ].to_sql("budget_targets", conn, if_exists="append", index=False)
+            logger.info("Synced budget for years: %s.", budget_years)
 
-            with db.get_connection() as conn:
-                conn.execute("DELETE FROM budget_targets WHERE year = 2026")
-                budget_rows[
-                    [
-                        "year",
-                        "month",
-                        "customer_name",
-                        "product_code",
-                        "target_quantity",
-                        "target_amount",
-                        "base_target_quantity",
-                    ]
-                ].to_sql("budget_targets", conn, if_exists="append", index=False)
-                print("Synced budget for 2026.")
-        except Exception as e:
-            print(f"Error syncing budgets: {e}")
+    # ── Step 3: Post-commit cleanup (best-effort, outside transaction) ─────────
+    if sales_rows is not None:
+        _clear_covered_current_month_records(db, sales_rows)
 
 
 def normalize_sales_records(df_sales: pd.DataFrame) -> pd.DataFrame:
@@ -314,7 +327,7 @@ def _clear_covered_current_month_records(db: MORDatabase, sales_rows: pd.DataFra
             (latest.strftime("%Y-%m"),),
         ).rowcount
     if deleted:
-        print(f"Cleared {deleted} current_month_records rows covered by sales sync.")
+        logger.info("Cleared %d current_month_records rows covered by sales sync.", deleted)
 
 
 def _find_first_file(project_root: Path, pattern: str) -> "Path | None":
