@@ -5,3 +5,5 @@ __pycache__/
 *.py[cod]
 *.log
 ~$*.xlsx
+.DS_Store
+.claude/worktrees/
