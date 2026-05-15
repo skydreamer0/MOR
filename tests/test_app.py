@@ -953,7 +953,7 @@ def test_dashboard_omits_zero_budget_notice_but_keeps_price_warning():
     assert "有 1 筆缺少預算目標" not in dashboard
     assert "有 1 筆單價為 0" in dashboard
     assert "有 1 筆缺少預算目標" not in settings
-    assert "有 1 筆單價為 0" not in settings
+    assert "有 1 筆單價為 0" in settings  # settings now displays data_issues
 
 
 def test_items_route_redirects_to_settings():

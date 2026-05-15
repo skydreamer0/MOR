@@ -11,7 +11,7 @@ import pandas as pd
 from flask import Flask, Response, redirect, render_template, request, send_file, url_for
 from flask_caching import Cache
 
-from src.backend.data_validator import validate_health
+from src.backend.data_validator import validate_budget_coverage, validate_health
 from src.backend.monthly_review import build_monthly_review, list_reviewable_months
 from src.backend.data_loader import default_target_from_data, default_target_from_db, latest_closed_month_from_data, load_sales_detail, normalize_product_code
 from src.backend.exporter import export_forecast
@@ -431,6 +431,14 @@ def create_app(config: dict | None = None) -> Flask:
             items = context.items
             health = context.health
             data_issues = validate_health(health)
+            with db.get_connection() as conn:
+                budget_rows = conn.execute(
+                    "SELECT DISTINCT product_code FROM budget_targets WHERE year = ?",
+                    (context.target.year,),
+                ).fetchall()
+            budget_codes = {r["product_code"] for r in budget_rows}
+            sales_codes = {item["product_code"] for item in items}
+            data_issues += validate_budget_coverage(sales_codes, budget_codes)
             error_message = None
         except (FileNotFoundError, ValueError, FormValidationError) as exc:
             context = None

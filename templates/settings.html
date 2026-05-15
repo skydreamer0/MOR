@@ -61,6 +61,14 @@
       </details>
       {% endif %}
 
+      {% if data_issues %}
+      <div class="settings-issues">
+        {% for issue in data_issues %}
+        <div class="alert alert-info">⚠ {{ issue.message }}</div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
       <div class="table-wrap settings-table-wrap workbench-table-shell">
         <table class="management-table">
           <thead>
