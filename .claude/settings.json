@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 *)",
+      "Bash(python *)",
+      "Bash(pip show *)",
+      "Bash(pip install *)",
+      "Bash(git *)",
+      "Bash(sqlite3 *)",
+      "Bash(find . *)",
+      "Bash(grep *)",
+      "Bash(wc -l *)"
+    ]
+  }
+}
