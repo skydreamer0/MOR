@@ -16,7 +16,7 @@ MOR 是一個緊湊的多頁業務操作工具，供業務團隊在月底執行�
 
 ### 技術債（唯一剩餘）
 
-- [ ] **`build_forecast_page_context` god function 重構**
+- [x] **`build_forecast_page_context` god function 重構**
   `operational_views.py` 中單一函式包含資料載入、預測建立、調整套用、dashboard 計算、monitor rows、projections、items 共 60+ 行，呼叫 10+ 個 service。無法對單一步驟寫單元測試。
   **Fix**: 拆成 `_build_summary()`、`_build_monitor()`、`_build_health()` 等獨立步驟，`build_forecast_page_context` 變成純組裝函式。
   **注意**: 這是較大規模重構，需先在 branch 上完成再合入。
