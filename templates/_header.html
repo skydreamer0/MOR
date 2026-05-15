@@ -5,8 +5,8 @@
     </div>
     <nav class="app-nav" aria-label="主要導覽">
       <a href="/" {% if active_page == "dashboard" %}aria-current="page"{% endif %}>業績總覽</a>
+      <a href="/customers" {% if active_page == "customers" %}aria-current="page"{% endif %}>客戶分析</a>
       <a href="/forecast" {% if active_page == "forecast" %}aria-current="page"{% endif %}>預估調整</a>
-      <a href="/monthly-review" {% if active_page == "monthly_review" %}aria-current="page"{% endif %}>月底檢討</a>
       <a href="/monitor/products" {% if active_page == "product_monitor" %}aria-current="page"{% endif %}>產品跳單監控</a>
       <a href="/monthly-review" {% if active_page == "monthly_review" %}aria-current="page"{% endif %}>月底檢討</a>
       <a href="/settings" {% if active_page == "settings" %}aria-current="page"{% endif %}>系統設定</a>

@@ -1,12 +1,13 @@
 """UI smoke tests — operation flows and boundary validation.
 
 Covers gaps not addressed by test_app.py:
-1. All four pages load end-to-end with seeded data
+1. All four pages load end-to-end with seeded data (incl. customers page)
 2. Year/month range validation (400 on out-of-range inputs)
 3. Budget coverage warning shown when unmapped products exist
 4. Settings shows no issues when data is clean
 5. Period param flows correctly across pages
 6. Complete adjust → export flow
+7. Customer view page — loads, shows per-customer data, empty state
 """
 from __future__ import annotations
 
@@ -206,6 +207,52 @@ class TestBudgetCoverageWarning:
 
 
 # ── 4. Period param flows across pages ────────────────────────────────────────
+
+# ── 5. Customer view page ─────────────────────────────────────────────────────
+
+class TestCustomerView:
+
+    def test_page_loads_with_seeded_data(self):
+        base = _isolated_base()
+        _seed_sales(base, _sales_rows())
+        client = _client(base)
+
+        r = client.get("/customers?year=2026&month=5")
+
+        assert r.status_code == 200
+        html = r.get_data(as_text=True)
+        assert "客戶分析" in html
+        assert "cust-tbody" in html
+
+    def test_page_embeds_customer_slices_as_json(self):
+        base = _isolated_base()
+        _seed_sales(base, _sales_rows())
+        client = _client(base)
+
+        html = client.get("/customers?year=2026&month=5").get_data(as_text=True)
+
+        # Slices are embedded as JSON for JS rendering
+        assert "SLICES =" in html
+        assert '"entity_label"' in html   # JSON keys are always ASCII
+
+    def test_page_shows_empty_state_without_data(self):
+        client = _client()
+
+        html = client.get("/customers?year=2026&month=5").get_data(as_text=True)
+
+        assert "尚無客戶資料" in html
+
+    def test_page_in_nav_across_all_pages(self):
+        base = _isolated_base()
+        _seed_sales(base, _sales_rows())
+        client = _client(base)
+
+        for path in ["/", "/forecast", "/customers", "/settings"]:
+            html = client.get(f"{path}?year=2026&month=5").get_data(as_text=True)
+            assert 'href="/customers"' in html, f"customers nav link missing on {path}"
+
+
+# ── 6. Period param flows across pages ────────────────────────────────────────
 
 def test_period_params_reflected_in_forecast_form():
     base = _isolated_base()

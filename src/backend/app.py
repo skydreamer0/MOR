@@ -424,6 +424,26 @@ def create_app(config: dict | None = None) -> Flask:
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
+    @app.get("/customers")
+    def customers() -> str:
+        try:
+            context = _load_context_from_request()
+            slices = aggregate_to_analytics(context.summary.rows, "customer", context.target)
+            year, month = context.target.year, context.target.month
+            error_message = None
+        except (FileNotFoundError, ValueError, FormValidationError) as exc:
+            slices = []
+            year = request.args.get("year", "")
+            month = request.args.get("month", "")
+            error_message = f"無法載入客戶分析：{exc}"
+        return render_template(
+            "customers.html",
+            slices=slices,
+            year=year,
+            month=month,
+            error_message=error_message,
+        )
+
     @app.get("/settings")
     def settings() -> str:
         try:
