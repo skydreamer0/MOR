@@ -23,10 +23,13 @@ MOR 是一個緊湊的多頁業務操作工具，供業務團隊在月底執行�
 
 ### 功能 Backlog（依優先度排序）
 
-1. **Browser 端多頁 UI 完整驗收** — 確認 forecast / monitor / dashboard / settings 四頁在實際操作流程下無邊界 bug
-2. **Budget coverage warning 串入 UI** — `validate_budget_coverage()` 已建好，需接到 settings 頁的 health check 顯示區
-3. **Customer view page** — 以客戶為維度的業績彙總，待 monitor 規則穩定後開始
-4. **Product view page** — 以品項為維度的業績彙總，待 customer view 完成後開始
+1. **Product view page** — 以品項為維度的業績彙總，架構與 Customer View 相同
+
+### 已完成功能
+
+- [x] **Browser 端多頁 UI 驗收** — 19 個 smoke tests 覆蓋四頁操作流程與邊界情況
+- [x] **Budget coverage warning 串入 UI** — settings 頁以 `alert-info` 顯示未對應預算品項
+- [x] **Customer view page** (`/customers`) — 以客戶為維度，含 YTD 彙總、月別展開、趨勢 sparkline
 
 ---
 
