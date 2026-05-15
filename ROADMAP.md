@@ -1,209 +1,100 @@
 # MOR Roadmap
 
-## Current Focus
+## Product Vision
 
-Make MOR a compact multi-page operating tool:
+MOR 是一個緊湊的多頁業務操作工具，供業務團隊在月底執行預測、審查跳單、匯出報表。
 
-1. Dashboard for quick business overview.
-2. Product drop monitor for daily risk review.
-3. Forecast adjustment page for manual overrides and export.
-4. Settings and data checks page for item rules and source-data health.
-
-## Small Task Queue
-
-1. Finish multi-page UI verification in browser.
-2. Improve data health checks for missing budget mappings.
-3. Add customer view page after monitor rules stabilize.
-4. Add product view page after customer view is useful.
+核心四頁：
+1. **Dashboard** — 快速業績總覽（YTD、GAP、預算達成）
+2. **Product Monitor** — 每日跳單風險審查
+3. **Forecast** — 月度預測調整與 Excel 匯出
+4. **Settings** — 品項規則與資料健康檢查
 
 ---
 
-## Frontend Improvement Plan
+## What's Next
 
-Staged fixes identified from architecture review on 2026-05-09. Do not start a later phase before completing the current one.
+### 技術債（唯一剩餘）
 
-### Phase 1 — Correctness (Bug Risk) `priority: high`
+- [ ] **`build_forecast_page_context` god function 重構**
+  `operational_views.py` 中單一函式包含資料載入、預測建立、調整套用、dashboard 計算、monitor rows、projections、items 共 60+ 行，呼叫 10+ 個 service。無法對單一步驟寫單元測試。
+  **Fix**: 拆成 `_build_summary()`、`_build_monitor()`、`_build_health()` 等獨立步驟，`build_forecast_page_context` 變成純組裝函式。
+  **注意**: 這是較大規模重構，需先在 branch 上完成再合入。
 
-These have actual incorrect behaviour under normal usage.
+### 功能 Backlog（依優先度排序）
 
-- [x] **Unify row visibility into one mechanism.**
-  Currently three competing systems exist in the forecast table:
-  `row.hidden` (search/status filter in `recalculate`),
-  `tr.style.display` (customer dropdown in `filterRows`), and
-  `.forecast-table__row--collapsed` (anomaly view toggle in `applyViewMode`).
-  They can layer in unpredictable order; total and count displays show wrong values when more than one filter is active simultaneously.
-  Fix: fold `filterRows` into `recalculate` state using a `data-customer` dataset check, and fold `applyViewMode` into the same visible-flag logic, so a single `row.hidden = !visible` pass controls everything.
-
-- [x] **Replace positional `nth-child` column-group borders with class selectors.**
-  `mor.css` lines 921–926 use `tbody td:nth-child(9)` and `tbody td:nth-child(13)` for group dividers.
-  Adding or removing any column silently shifts the borders to the wrong columns.
-  Fix: add `col-group-start` class to the relevant `<td>` cells in `_forecast_row.html` (already applied to `<th>` in the header) and remove the `nth-child` rules.
-
-### Phase 2 — Consistency (Design System Integrity) `priority: medium`
-
-These do not break behaviour but will cause agent and dev errors over time.
-
-- [x] **Sync DESIGN.md token values with `mor.css`.**
-  `DESIGN.md` lists `--ink: #16202a` but `mor.css` uses `#0f172a`. Several tokens in the
-  "Recommended additions" block have since been implemented in CSS but the doc still marks them as suggestions.
-  Fix: update `DESIGN.md` Section 2 to reflect the actual token values in `mor.css`; remove the split between "current" and "recommended" since all tokens now exist.
-
-- [x] **Move hardcoded hover colour into design token.**
-  `mor.css` line 511: `background-color: #eef6ff` (blue tint) is the only hardcoded colour
-  outside the token system. It conflicts with the teal accent identity.
-  Fix: add `--row-hover: #eef6ff` (or convert to an accent-based tint) to `:root` and reference it in the hover rule.
-
-### Phase 3 — Maintainability `priority: low`
-
-Clean-up that makes future changes safer and faster.
-
-- [x] **Unify customer dropdown with the main filter path.**
-  The customer `<select>` fires `filterRows()` which bypasses `recalculate()`.
-  After Phase 1 is done, fold the customer value into the unified visibility check so search,
-  status, customer, and anomaly-only all go through one pass.
-
-- [x] **Extract `<thead>` into a shared partial.**
-  Created `templates/_forecast_thead.html`; both main and discontinued tables now include it.
-  Also fixed a latent bug: the discontinued thead was missing `col-group-start` on 最後預估 (Phase 1
-  replace_all missed it due to different indentation depth).
-
-- [x] **Audit HTMX usage; remove if not actively used.**
-  HTMX is actively used in two places — keep the script tag on all pages:
-  1. `_forecast_row.html` — `hx-patch` on qty/reason inputs replaces the row `outerHTML` on `change`.
-  2. `_header.html` — `hx-get="/dashboard/metrics"` refreshes the metrics zone when the period selector changes.
-  3. `_dashboard_metrics.html` — `htmx-indicator` shows a loading state during the metrics fetch.
-
-  Follow-up fixed on 2026-05-10: `forecast-table.js` now binds row events through an idempotent
-  `bindForecastRow()` path and rebinds swapped rows via `htmx:afterSwap`, so `hx-swap="outerHTML"`
-  keeps input recalculation, row detail, and restore interactions working after replacement.
-
----
-
-## Backend Improvement Plan
-
-Issues identified from architecture review on 2026-05-11. Work top-to-bottom within each phase.
-
-### Phase 1 — Correctness & Reliability `priority: high`
-
-- [x] **`product_monitor` 路由繞過 cache。**
-  `product_monitor()` 直接呼叫 `build_forecast_page_context()` 而不走 `_build_cached_context()`，
-  使跳單監控頁每次都重跑完整計算，沒有享受到任何 cache 效益。
-  Fix: 讓 `product_monitor` 改呼叫 `_load_context_from_request()`（或 `_build_cached_context()`），
-  與 dashboard / forecast 路由保持一致。
-
-- [x] **`_find_or_create_close_snapshot` 靜默吞掉例外。**
-  `except Exception: snapshot_rows = []` 把任何錯誤都轉成空快照存入 DB，
-  無 log 也無回饋，可能留下靜默的資料錯誤。
-  Fix: 至少 log 錯誤，或讓例外往上拋讓路由回傳 500。
-
-### Phase 2 — Performance `priority: medium`
-
-- [x] **`_make_cache_key` 每次請求打 DB 兩次。**
-  即使 cache hit，每個請求仍執行兩條 `SELECT`（`sales_records` count/max、
-  `current_month_records` max）才能算出 key。
-  Fix: 改用穩定 key + etag 比對，或在 write path 主動讓 key 失效，
-  讓 hot-path 不需要先查 DB 才能決定要不要查 DB。
-
-- [x] **`cache.clear()` 太粗暴。**
-  每次任何寫入（品項、調整、匯入）都清掉所有月份的快取，但不同月份的
-  key 彼此獨立。Fix: 寫一個 `_invalidate_context_cache(year, month)` 只清
-  當月的 key；跨月的品項設定異動才全清。
-
-- [x] **`_init_db` 每次啟動都跑 migration 探測。**
-  每次 app 啟動都對每個欄位執行 `PRAGMA table_info()` 再決定是否 `ALTER TABLE`。
-  Fix: 加入 `schema_version` 表，記錄已套用的版本號，啟動時只比對版本跳過已完成的 migration。
-
-### Phase 3 — Maintainability `priority: low`
-
-- [ ] **`build_forecast_page_context` 是 god function。** (intentionally deferred — requires larger refactor)
-  單一函式包含：載入資料、建立預測、套用調整、計算 dashboard、計算 monitor rows、
-  計算 projections、取得 items，共 60+ 行呼叫 10+ 個函式，幾乎無法對單一步驟寫單元測試。
-  Fix: 拆成 `_build_summary()`、`_build_monitor()`、`_build_health()` 等獨立步驟，
-  `build_forecast_page_context` 變成純組裝。
-
-- [x] **`export` 路由保留無文件的 legacy 欄位名稱相容邏輯。**
-  `legacy_manual_adjustments` 的 merge 路徑沒有說明是誰在用，造成兩條平行的
-  form 解析路徑。Fix: 確認前端不再送舊格式後移除 legacy merge 邏輯。
-
-- [x] **`save_items` 路由直接內嵌 SQL 邏輯。**
-  與「routes 薄、邏輯在 service」的設計方向不一致，若之後要加測試會是瓶頸。
-  Fix: 抽出 `update_item_configs(db, items)` service function，路由只解 form 和呼叫它。
-
-- [x] **`upload_current_month` 有 inline import。**
-  `from src.backend.etl import import_current_month` 在函式體內才 import，
-  與其他路由的 top-level import 不一致。Fix: 移至檔案頂部。
-
-- [x] **`monthly_review` 的 except 是冗餘的。**
-  `except (ValueError, Exception)` 中 `Exception` 已涵蓋 `ValueError`，多寫反而誤導。
-  Fix: 改為 `except Exception`。
-
-- [x] **`load_item_configs` 迴圈跑兩次 rows。**
-  先建 dict，再對同一個 `rows` 第二次迴圈補 normalized code alias，可以合在一個 pass。
-  Fix: 在第一個迴圈內同時處理 normalized key。
-
----
-
-## Backend Improvement Plan — Round 2
-
-Issues identified from audit on 2026-05-15. Continue top-to-bottom within each phase.
-
-### Phase 4 — Reliability & Data Integrity `priority: high`
-
-- [x] **`sync_excel_to_db` 無交易回滾。**
-  目前依序執行：刪除並寫入 sales_records → 寫入 item configs → 同步 budget。
-  若 budget sync 在第三步失敗，前兩步已 commit，造成資料不一致。
-  Fix: 將整個 sync 包在單一 `BEGIN / ROLLBACK` transaction 中。
-
-- [x] **`etl.py` 用 `print()` 取代 logging。**
-  Lines 161, 186, 209, 211, 317 使用 `print()`，錯誤訊息不會進 app log。
-  Fix: 改為 `logging.getLogger(__name__).info()` / `.error()`，與 `app.py` 的 logger 風格一致。
-
-- [x] **`etl.py` hardcode `default_year=2026`。**
-  `normalize_budget_targets(df_budget, default_year=2026)` 在 2027 年後會靜默產出錯誤年份。
-  Fix: 從 budget_rows["year"].unique() 提取實際年份清單，DELETE 和 log 皆使用動態年份。
-
-### Phase 5 — Testing Coverage `priority: medium`
-
-- [x] **`exporter.py` 缺少測試。**
-  Excel 匯出邏輯無對應測試檔，任何欄位調整都無保護。
-  Fix: 新增 `tests/test_exporter.py`，覆蓋回傳型別、三個 sheet 存在、欄位名稱、排除 sheet 篩選邏輯。
-
-- [x] **`analytics.py` 缺少測試。**
-  彙總計算邏輯未被任何 test 覆蓋。
-  Fix: 新增 `tests/test_analytics.py`，驗證 YTD 計算、budget rate、trend_direction、slice builder。
-
-- [x] **`history_service.py` 缺少測試。**
-  Lookback 與 supplemental 資料讀取邏輯無測試。
-  Fix: 新增 `tests/test_history_service.py`，含純函式測試與 DB-backed 整合測試。
-
-### Phase 6 — Validation & Configuration `priority: medium`
-
-- [x] **年份 / 月份 form input 無範圍驗證。**
-  `app.py` 路由接受 `year` / `month` 參數，僅檢查 `None`，未驗證合理範圍。
-  Fix: 四個寫入路由加入 `1 <= month <= 12` 與 `2000 <= year <= 2100` 範圍檢查，回傳 400。
-
-- [x] **Budget-to-product 對應無驗證。**
-  `data_validator.py` 未偵測預算中存在但無對應銷售紀錄的品項，導致 GAP 計算不完整。
-  Fix: 新增 `validate_budget_coverage(sales_codes, budget_codes)` 函式，未對應品項列為 warning。
-
-- [x] **`requirements.txt` 無版本鎖定。**
-  `Flask`、`pandas`、`openpyxl` 等皆無版本號，跨環境安裝可能拿到不相容版本。
-  Fix: 鎖定目前已知可用版本（Flask==2.3.2、pandas==2.2.3 等）。
+1. **Browser 端多頁 UI 完整驗收** — 確認 forecast / monitor / dashboard / settings 四頁在實際操作流程下無邊界 bug
+2. **Budget coverage warning 串入 UI** — `validate_budget_coverage()` 已建好，需接到 settings 頁的 health check 顯示區
+3. **Customer view page** — 以客戶為維度的業績彙總，待 monitor 規則穩定後開始
+4. **Product view page** — 以品項為維度的業績彙總，待 customer view 完成後開始
 
 ---
 
 ## Working Rules
 
-- Do one task at a time.
-- Read `AGENTS.md`, this roadmap, and only the necessary active docs.
-- Keep Flask routes thin.
-- Keep calculation rules in testable backend services.
-- Update docs when workflows, forecast rules, Excel shape, or UI structure change.
-- Run the focused tests first, then the full suite when backend/routes/templates change.
+- 一次只做一個任務。
+- 讀 `AGENTS.md`、本 roadmap、以及當下任務所需的最少文件。
+- Flask routes 保持薄；計算規則放在可測試的 backend service。
+- 工作流程、預測規則、Excel 格式、UI 結構有異動時同步更新文件。
+- 改動 backend / routes / templates 時：先跑聚焦測試，再跑完整 suite。
 
-## Recommended Verification
+### Verification
 
-```powershell
-D:\AI\python.exe -m pytest -q --basetemp=.test-dbs\pytest-tmp
-D:\AI\python.exe -m py_compile app.py src\backend\app.py src\backend\sales_forecast.py src\backend\forecast_config.py src\backend\forecast_models.py src\backend\data_loader.py src\backend\forecast_engine.py src\backend\exporter.py src\backend\web\form_parser.py src\backend\web\forecast_presenter.py src\backend\operational_views.py
+```bash
+python3 -m pytest -q
+python3 -m py_compile src/backend/app.py src/backend/etl.py src/backend/operational_views.py src/backend/forecast_engine.py src/backend/exporter.py src/backend/analytics.py src/backend/history_service.py
 ```
+
+---
+
+## Completed Work
+
+### Frontend — 2026-05-09 to 2026-05-10
+
+**Phase 1 — Correctness**
+- [x] 統一 row visibility 為單一機制（`row.hidden` 單一 pass，消除三套 filter 互相覆蓋）
+- [x] 欄位群組分隔線改用 `col-group-start` class，移除 `nth-child` 位置依賴
+
+**Phase 2 — Design System**
+- [x] DESIGN.md token 值與 `mor.css` 同步
+- [x] 唯一 hardcode 顏色 `#eef6ff` 移入 `--row-hover` design token
+
+**Phase 3 — Maintainability**
+- [x] Customer dropdown 統一進 `recalculate()` 單一 visibility pass
+- [x] `<thead>` 抽出為 `_forecast_thead.html` shared partial
+- [x] HTMX 使用審查（確認 `hx-patch`、`hx-get` 均有效使用，`htmx:afterSwap` 重綁 row events）
+
+### Backend Round 1 — 2026-05-11
+
+**Phase 1 — Correctness & Reliability**
+- [x] `product_monitor` 路由改走 `_load_context_from_request()`，享受 cache
+- [x] `_find_or_create_close_snapshot` 例外改為 log + re-raise
+
+**Phase 2 — Performance**
+- [x] Cache key 改用版本計數器（`_month_versions`），hot-path 不再打 DB
+- [x] `cache.clear()` 改為 `_invalidate_context_cache(year, month)` 精準清除
+- [x] `_init_db` 改用 `schema_migrations` 版本表，啟動時跳過已套用的 migration
+
+**Phase 3 — Maintainability**
+- [x] `export` 路由移除 legacy `manual_adjustments` 相容層
+- [x] `save_items` 路由抽出 `update_item_configs(db, items)` service function
+- [x] `upload_current_month` inline import 移至檔案頂部
+- [x] `monthly_review` 冗餘的 `except (ValueError, Exception)` 改為 `except Exception`
+- [x] `load_item_configs` 迴圈合為單一 pass
+
+### Backend Round 2 — 2026-05-15
+
+**Phase 4 — Reliability & Data Integrity**
+- [x] `sync_excel_to_db` 全部 DB 寫入改為單一 transaction，任一步驟失敗全部 rollback
+- [x] `etl.py` 5 處 `print()` 改為 `logging.getLogger(__name__)`
+- [x] Budget DELETE 年份從 hardcode `2026` 改為從資料動態提取
+
+**Phase 5 — Testing Coverage**（測試數：184 → 201）
+- [x] 新增 `tests/test_exporter.py`（4 tests）
+- [x] 新增 `tests/test_analytics.py`（5 tests）
+- [x] 新增 `tests/test_history_service.py`（8 tests）
+
+**Phase 6 — Validation & Configuration**
+- [x] 4 個寫入路由加入 `1 <= month <= 12` 與 `2000 <= year <= 2100` 範圍驗證
+- [x] `data_validator.py` 新增 `validate_budget_coverage()` 函式
+- [x] `requirements.txt` 所有依賴鎖定版本（Flask==2.3.2、pandas==2.2.3 等）
