@@ -133,6 +133,21 @@ class ForecastPageContext:
         return self.summary.rows
 
 
+@dataclass
+class _ForecastInputs:
+    """All raw data loaded from DB before any forecast computation."""
+    data: pd.DataFrame
+    item_configs: dict
+    excluded_item_ids: frozenset
+    manual_adjustments: dict
+    adjustment_reasons: dict
+    budget_targets: dict
+    budget_year_map: dict
+    budget_year_amount_map: dict
+    budget_months: list
+    daily_actuals: dict
+
+
 @dataclass(frozen=True)
 class MonthlyReviewRow:
     customer: str
@@ -178,36 +193,46 @@ class MonthlyReviewReport:
     rows: list[MonthlyReviewRow]
 
 
-def build_forecast_page_context(
-    data_base_path: Path,
-    forecast_config: ForecastConfig,
-    db,
-    target_source: Mapping[str, object],
-) -> ForecastPageContext:
+def _load_inputs(db, target: ForecastTarget) -> _ForecastInputs:
+    """Load all raw data from DB needed to build a forecast page context."""
     data = load_sales_detail_from_db(db)
-    default_target = default_target_from_db(db)
-    target = parse_target_period(target_source, default_target)
     item_configs = load_item_configs(db)
-    excluded_item_ids = {pid for pid, cfg in item_configs.items() if cfg["is_excluded"]}
+    excluded_item_ids = frozenset(pid for pid, cfg in item_configs.items() if cfg["is_excluded"])
     manual_adjustments, adjustment_reasons = load_adjustments(db, target.year, target.month)
-    budget_targets         = load_budgets(db, target.year, target.month)
-    budget_year_map        = load_budget_year(db, target.year)
-    budget_year_amount_map = load_budget_year_amounts(db, target.year)
+    return _ForecastInputs(
+        data=data,
+        item_configs=item_configs,
+        excluded_item_ids=excluded_item_ids,
+        manual_adjustments=manual_adjustments,
+        adjustment_reasons=adjustment_reasons,
+        budget_targets=load_budgets(db, target.year, target.month),
+        budget_year_map=load_budget_year(db, target.year),
+        budget_year_amount_map=load_budget_year_amounts(db, target.year),
+        budget_months=list_budget_months(db),
+        daily_actuals=fetch_daily_actuals_by_row_id(db, target.year, target.month),
+    )
 
+
+def _build_summary(
+    inputs: _ForecastInputs,
+    db,
+    target: ForecastTarget,
+    forecast_config: ForecastConfig,
+) -> ForecastSummary:
+    """Build and enrich the forecast summary through all transformation passes."""
     summary = build_forecast(
-        data,
+        inputs.data,
         target,
         ForecastOptions(
             include_all=True,
             max_cycle_interval_days=forecast_config.max_cycle_interval_days,
-            excluded_item_ids=excluded_item_ids,
+            excluded_item_ids=inputs.excluded_item_ids,
         ),
         forecast_config,
     )
     visible_rows = [
-        row
-        for row in summary.rows
-        if item_configs.get(row.product_code, {}).get("is_visible", True)
+        row for row in summary.rows
+        if inputs.item_configs.get(row.product_code, {}).get("is_visible", True)
     ]
     summary = replace(
         summary,
@@ -215,36 +240,54 @@ def build_forecast_page_context(
         total=sum(row.estimated_amount for row in visible_rows if not row.excluded),
     )
     summary = replace(summary, rows=enrich_rows_with_history(summary.rows, db, target.year, target.month))
-    daily_actuals = fetch_daily_actuals_by_row_id(db, target.year, target.month)
-    summary = _patch_latest_order_dates(summary, daily_actuals)
-    summary = apply_user_adjustments(summary, manual_adjustments=manual_adjustments, excluded_ids=set())
+    summary = _patch_latest_order_dates(summary, inputs.daily_actuals)
+    summary = apply_user_adjustments(summary, manual_adjustments=inputs.manual_adjustments, excluded_ids=set())
     summary = _apply_reasons_and_budgets(
-        summary, adjustment_reasons, budget_targets,
-        item_configs, budget_year_map, budget_year_amount_map,
+        summary, inputs.adjustment_reasons, inputs.budget_targets,
+        inputs.item_configs, inputs.budget_year_map, inputs.budget_year_amount_map,
     )
-    summary = replace(summary, total=forecast_amount_total(summary.rows))
+    return replace(summary, total=forecast_amount_total(summary.rows))
 
-    budget_months = list_budget_months(db)
-    today = date.today()
+
+def _build_projections(
+    db,
+    summary: ForecastSummary,
+    daily_actuals: Mapping[str, DailyActualAggregate],
+    today: date,
+    target: ForecastTarget,
+) -> "dict[str, ProjectionResult]":
+    """Compute end-of-month projections for all forecast rows."""
     ensure_calendar_year(db, today.year)
-    projections = batch_project_eom(
-        db, summary.rows, daily_actuals, today, target.year, target.month,
-    )
+    return batch_project_eom(db, summary.rows, daily_actuals, today, target.year, target.month)
+
+
+def build_forecast_page_context(
+    data_base_path: Path,
+    forecast_config: ForecastConfig,
+    db,
+    target_source: Mapping[str, object],
+) -> ForecastPageContext:
+    default_target = default_target_from_db(db)
+    target = parse_target_period(target_source, default_target)
+    inputs = _load_inputs(db, target)
+    summary = _build_summary(inputs, db, target, forecast_config)
+    today = date.today()
+    projections = _build_projections(db, summary, inputs.daily_actuals, today, target)
     return ForecastPageContext(
         target=target,
-        sales_data=data,
+        sales_data=inputs.data,
         summary=summary,
-        dashboard=build_dashboard_metrics(summary.rows, budget_targets.values(), projections, daily_actuals),
+        dashboard=build_dashboard_metrics(summary.rows, inputs.budget_targets.values(), projections, inputs.daily_actuals),
         monitor_rows=build_product_monitor_rows(
             summary.rows,
-            daily_actuals=daily_actuals,
+            daily_actuals=inputs.daily_actuals,
             db=db,
             today=today,
             projections=projections,
             target_month=target.month,
         ),
-        health=build_data_health_summary(data, summary, budget_months),
-        items=build_items_from_sales_data(data, db),
+        health=build_data_health_summary(inputs.data, summary, inputs.budget_months),
+        items=build_items_from_sales_data(inputs.data, db),
     )
 
 
