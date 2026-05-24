@@ -1626,6 +1626,30 @@ details[open] .discontinued-toggle {
   box-shadow: none;
 }
 
+.customer-analytics-main {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: var(--sp-3);
+}
+
+.customer-analytics-main > .workbench-panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.customer-analytics-main .section-header {
+  flex: 0 0 auto;
+}
+
+.customer-analytics-table {
+  flex: 1;
+  min-height: 240px;
+  max-height: none;
+}
+
 .compact-table table,
 .monitor-table {
   min-width: 960px;

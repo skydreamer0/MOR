@@ -12,7 +12,7 @@
   {% set show_period_toolbar = true %}
   {% include "_header.html" %}
 
-  <main class="workbench-main">
+  <main class="workbench-main customer-analytics-main">
     {% if error_message %}
       <section class="alert" role="alert">{{ error_message }}</section>
     {% endif %}
@@ -26,7 +26,7 @@
       </div>
 
       {% if slices %}
-      <div class="table-wrap compact-table workbench-table-shell">
+      <div class="table-wrap compact-table customer-analytics-table workbench-table-shell">
         <table id="cust-table" class="dash-analytics-table management-table">
           <thead>
             <tr>
@@ -51,6 +51,17 @@
 
   <script src="{{ url_for('static', filename='js/analytics-renderer.js') }}"></script>
   <script>
+  (function () {
+    const header = document.querySelector("header");
+    const main = document.querySelector(".customer-analytics-main");
+    if (!header || !main) return;
+    function resize() {
+      main.style.height = (window.innerHeight - header.offsetHeight) + "px";
+    }
+    resize();
+    window.addEventListener("resize", resize);
+  })();
+
   (function () {
     const SLICES = {{ slices | tojson }};
     const TARGET_MONTH = {{ month | int }};

@@ -222,6 +222,8 @@ class TestCustomerView:
         assert r.status_code == 200
         html = r.get_data(as_text=True)
         assert "客戶分析" in html
+        assert "customer-analytics-main" in html
+        assert "customer-analytics-table" in html
         assert "cust-tbody" in html
 
     def test_page_embeds_customer_slices_as_json(self):
