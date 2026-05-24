@@ -260,7 +260,7 @@
   // 客戶表：純金額
   function buildCustomerRows(data, tbody) {
     if (!tbody) return;
-    data.forEach(d => {
+    data.forEach((d, index) => {
       const amtM = AnalyticsRenderer.computeMetrics(
         d.ly_monthly_amount, d.ty_monthly_amount, d.budget_monthly_amount,
         TARGET_MONTH, d.last_actual_month
@@ -271,7 +271,7 @@
       const [budTxt, budCls]   = _budRateTxt(tyAmt, budAmt);
 
       const tr = document.createElement("tr");
-      const canvasId = `spark-${d.entity_type}-${d.entity_id}`.replace(/[^a-z0-9-]/gi, "_");
+      const canvasId = `spark-customer-${index}`;
       tr.innerHTML = `
         <td class="dash-entity-label">${d.entity_label}</td>
         <td class="num">${lyAmt > 0 ? fmt0.format(lyAmt) : "—"}</td>
@@ -295,7 +295,7 @@
   // 品項表：金額為主 + 量YoY 洞察欄
   function buildProductRows(data, tbody) {
     if (!tbody) return;
-    data.forEach(d => {
+    data.forEach((d, index) => {
       const amtM = AnalyticsRenderer.computeMetrics(
         d.ly_monthly_amount, d.ty_monthly_amount, d.budget_monthly_amount,
         TARGET_MONTH, d.last_actual_month
@@ -312,7 +312,7 @@
       const [budTxt, budCls]       = _budRateTxt(tyAmt, budAmt);
 
       const tr = document.createElement("tr");
-      const canvasId = `spark-${d.entity_type}-${d.entity_id}`.replace(/[^a-z0-9-]/gi, "_");
+      const canvasId = `spark-product-${index}`;
       tr.innerHTML = `
         <td class="dash-entity-label">${d.entity_label}</td>
         <td class="num">${lyAmt > 0 ? fmt0.format(lyAmt) : "—"}</td>

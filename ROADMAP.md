@@ -1,5 +1,137 @@
 # MOR Roadmap
 
+## MOR Architecture Refactor Roadmap
+
+### Current Architecture Status
+
+The architecture refactor is being executed one seam at a time. The current backend keeps Flask routes as request/response adapters while moving forecast workflow complexity into deeper modules.
+
+Completed seams:
+
+1. Forecast workbench context module.
+2. Forecast write workflow refactor.
+3. Export summary preparation.
+4. Snapshot row serialization.
+5. Item/settings write workflow form parsing.
+6. Dashboard analytics template context.
+
+Current module boundaries:
+
+- `src/backend/forecast_workbench_context.py` builds the workbench-ready forecast context.
+- `src/backend/forecast_write_workflow.py` owns forecast row override persistence.
+- `src/backend/forecast_export_workflow.py` owns export summary preparation.
+- `src/backend/snapshot_service.py` owns snapshot persistence and forecast-row snapshot serialization.
+- `src/backend/item_settings_workflow.py` owns item/settings request-form parsing and item config payload normalization.
+- `src/backend/dashboard_analytics_workflow.py` owns dashboard analytics/template context assembly.
+- `src/backend/operational_views.py` still owns view models and operational presentation helpers.
+- `src/backend/app.py` still owns Flask request parsing, response rendering, redirects, cache invalidation, and remaining route-local workflow glue.
+
+### Refactor Principles
+
+- Small seams only.
+- Characterization tests before refactor.
+- Preserve external behaviour.
+- Routes handle request/response only.
+- Deep modules own workflow complexity.
+- No broad rewrite.
+- No unrelated feature work.
+
+### Completed Work
+
+#### `forecast_workbench_context.py`
+
+- What moved inward: target resolution, DB input loading, forecast enrichment, projection pass, dashboard metrics, monitor rows, data health, and settings items.
+- Public interface: `build(forecast_config, db, target_source, *, today=None)`.
+- Tests protecting it: `test_forecast_workbench_context_build_matches_legacy_context_contract`, plus `tests/test_operational_views.py` and `tests/test_app.py`.
+- Validation used: `D:\AI\python.exe -m pytest tests\test_operational_views.py -q`, `D:\AI\python.exe -m pytest tests\test_app.py -q`, and `py_compile` for touched backend modules.
+
+#### `forecast_write_workflow.py`
+
+- What moved inward: forecast row override quantity coercion and `forecast_adjustments` persistence.
+- Public interface: `save_row_override(db, row_id, manual_qty, reason, year, month, *, updated_by="User")`.
+- Tests protecting it: `test_forecast_write_workflow_save_row_override_persists_adjustment`, adjustment save route tests, and stale export signature tests.
+- Validation used: `D:\AI\python.exe -m pytest tests\test_operational_views.py -q`, `D:\AI\python.exe -m pytest tests\test_app.py -q`, and `py_compile` for touched backend modules.
+
+#### `forecast_export_workflow.py`
+
+- What moved inward: submitted manual adjustment application, adjustment reason overlay, row amount recalculation, and export summary total rebuild.
+- Public interface: `prepare_export_summary(summary, manual_adjustments, adjustment_reasons)`.
+- Tests protecting it: `test_prepare_export_summary_applies_adjustments_reasons_and_totals`, export route tests, and `tests/test_exporter.py`.
+- Validation used: `D:\AI\python.exe -m pytest tests\test_exporter.py -q`, `D:\AI\python.exe -m pytest tests\test_operational_views.py -q`, `D:\AI\python.exe -m pytest tests\test_app.py -q`, and `py_compile` for touched backend modules.
+
+#### `snapshot_service.py`
+
+- What moved inward: forecast row to snapshot row serialization for close-month and manual snapshot saves.
+- Public interface: `serialize_forecast_rows_for_snapshot(rows)`.
+- Tests protecting it: `test_serialize_forecast_rows_for_snapshot_preserves_snapshot_row_contract`, snapshot service persistence tests, and snapshot/close-month route tests.
+- Validation used: `D:\AI\python.exe -m pytest tests\test_snapshot_service.py -q --basetemp=.pytest-tmp`, `D:\AI\python.exe -m pytest tests\test_app.py -q -k "snapshot or close_month" --basetemp=.pytest-tmp`, and `py_compile` for touched backend modules.
+
+#### `item_settings_workflow.py`
+
+- What moved inward: `POST /items/save` request-form parsing for `product_codes`, per-product checkbox flags, `price_quantity_*`, and `item_status_*`.
+- Extraction boundary: `src/backend/item_settings_workflow.py` returns normalized payload dictionaries; `src/backend/app.py` still calls `update_item_configs(db, items)`, invalidates cache, and returns settings HTML.
+- Public interface: `build_item_config_payloads_from_form(form)`.
+- Tests protecting it: `test_build_item_config_payloads_from_form_preserves_item_settings_payload_shape`, plus item/settings route characterization tests in `tests/test_app.py`.
+- Validation used: `D:\AI\python.exe -m pytest tests\test_item_settings_workflow.py -q --basetemp=.pytest-tmp`, `D:\AI\python.exe -m pytest tests\test_app.py -q -k "item_settings or items_route or exclusions_page_redirects or item_management_exclusion" --basetemp=.pytest-tmp`, and `py_compile` for touched backend modules.
+
+#### `dashboard_analytics_workflow.py`
+
+- What moved inward: dashboard template context assembly for remaining days, monitor status distribution, customer risk ranking, high-risk monitor rows, data issue labels, and analytics slices.
+- Extraction boundary: `src/backend/dashboard_analytics_workflow.py` builds the existing template-key dictionary; `src/backend/app.py` still owns route error handling, fallback empty context, and template rendering.
+- Public interface: `build_dashboard_template_context(context, *, today=None)`.
+- Tests protecting it: `test_build_dashboard_template_context_preserves_dashboard_analytics_contract`, plus dashboard/homepage route tests in `tests/test_app.py`.
+- Validation used: `D:\AI\python.exe -m pytest tests\test_dashboard_analytics_workflow.py -q --basetemp=.pytest-tmp`, `D:\AI\python.exe -m pytest tests\test_app.py -q -k "dashboard or homepage" --basetemp=.pytest-tmp`, and `py_compile` for touched backend modules.
+
+### Remaining Refactor Plan
+
+#### 1. Product view
+
+Purpose: build product view only after reusable analytics/view-model boundaries are stable.
+
+Boundary: do not start product view before analytics slice construction is understood.
+
+Next smallest implementation seam:
+
+- Inspect current product-related entrypoints and add characterization tests before any product view extraction or UI work.
+
+### Execution Order
+
+1. Product view.
+
+### Per-Seam Execution Template
+
+For every seam:
+
+1. Architecture phase.
+2. Parallel subagent inspection.
+3. Characterization tests.
+4. Small extraction.
+5. Route simplification.
+6. Targeted validation.
+7. Update `ROADMAP.md`.
+
+### Validation Matrix
+
+```powershell
+D:\AI\python.exe -m pytest tests\test_operational_views.py -q
+D:\AI\python.exe -m pytest tests\test_app.py -q
+D:\AI\python.exe -m pytest tests\test_exporter.py -q
+D:\AI\python.exe -m pytest tests\test_snapshot_service.py -q
+D:\AI\python.exe -m py_compile src\backend\forecast_workbench_context.py src\backend\forecast_write_workflow.py src\backend\forecast_export_workflow.py src\backend\snapshot_service.py src\backend\operational_views.py src\backend\app.py
+```
+
+### Stop Rules
+
+Stop and report before implementation if:
+
+- A seam touches analytics and write workflows at the same time.
+- More than three files need major changes.
+- Tests do not clearly describe current behaviour.
+- Route behaviour may change.
+- Existing dirty files may be overwritten.
+
+---
+
 ## Product Vision
 
 MOR 是一個緊湊的多頁業務操作工具，供業務團隊在月底執行預測、審查跳單、匯出報表。

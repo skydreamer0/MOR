@@ -605,6 +605,81 @@ def test_item_settings_save_price_quantity_and_forecast_uses_it():
     assert 'data-price=' in forecast
 
 
+def test_item_settings_save_persists_payload_shape_to_item_configs():
+    db_base_path = _isolated_db_base()
+    from src.backend.database import get_db
+    db = get_db(db_base_path)
+    with db.get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO sales_records
+            (order_date, customer_name, product_code, product_name, quantity, unit_price, amount)
+            VALUES ('2026-04-10', 'Hospital A', 'P1', 'Product One', 3, 100, 300)
+            """
+        )
+        conn.commit()
+    client = _client({"DB_BASE_PATH": db_base_path})
+
+    response = client.post(
+        "/items/save",
+        data={
+            "product_codes": ["P1"],
+            "is_excluded_P1": "1",
+            "is_visible_P1": "1",
+            "price_quantity_P1": "24.7",
+            "item_status_P1": "discontinued",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "settings-workspace" in response.get_data(as_text=True)
+    with sqlite3.connect(db_base_path / "mor_workbench.db") as conn:
+        saved = conn.execute(
+            """
+            SELECT is_excluded, is_budgeted, is_visible, price_quantity, item_status
+            FROM item_configs
+            WHERE product_code = 'P1'
+            """
+        ).fetchone()
+    assert saved == (1, 0, 1, 24.0, "discontinued")
+
+
+def test_item_settings_save_coerces_invalid_fields_to_existing_defaults():
+    db_base_path = _isolated_db_base()
+    from src.backend.database import get_db
+    db = get_db(db_base_path)
+    with db.get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO sales_records
+            (order_date, customer_name, product_code, product_name, quantity, unit_price, amount)
+            VALUES ('2026-04-10', 'Hospital A', 'P1', 'Product One', 3, 100, 300)
+            """
+        )
+        conn.commit()
+    client = _client({"DB_BASE_PATH": db_base_path})
+
+    response = client.post(
+        "/items/save",
+        data={
+            "product_codes": ["P1"],
+            "price_quantity_P1": "not-a-number",
+            "item_status_P1": "retired",
+        },
+    )
+
+    assert response.status_code == 200
+    with sqlite3.connect(db_base_path / "mor_workbench.db") as conn:
+        saved = conn.execute(
+            """
+            SELECT is_excluded, is_budgeted, is_visible, price_quantity, item_status
+            FROM item_configs
+            WHERE product_code = 'P1'
+            """
+        ).fetchone()
+    assert saved == (0, 0, 0, 0.0, "active")
+
+
 def test_item_settings_save_clears_forecast_context_cache():
     db_base_path = _isolated_db_base()
     data = pd.DataFrame([
@@ -706,6 +781,26 @@ def test_adjustment_save_migrates_old_database_without_updated_by():
             """
         ).fetchone()
     assert "updated_by" in columns
+    assert saved == (12, "Review", "User")
+
+
+def test_forecast_write_workflow_save_row_override_persists_adjustment():
+    from src.backend.database import get_db
+    from src.backend.forecast_write_workflow import save_row_override
+
+    db_base_path = _isolated_db_base()
+    db = get_db(db_base_path)
+
+    save_row_override(db, "Hospital A__P1", "12.7", "Review", 2026, 5)
+
+    with sqlite3.connect(db_base_path / "mor_workbench.db") as conn:
+        saved = conn.execute(
+            """
+            SELECT manual_quantity, adjustment_reason, updated_by
+            FROM forecast_adjustments
+            WHERE year = 2026 AND month = 5 AND customer_name = 'Hospital A' AND product_code = 'P1'
+            """
+        ).fetchone()
     assert saved == (12, "Review", "User")
 
 
@@ -835,6 +930,14 @@ def test_dashboard_css_uses_bem_class_names():
     assert "risk-panel__summary" in css + dashboard
     assert "risk-panel__customer-rank" in css + dashboard
     assert "forecast-table__row--collapsed" in css
+
+
+def test_dashboard_sparkline_canvas_ids_do_not_depend_on_entity_labels():
+    dashboard = Path("templates/_dashboard_metrics.html").read_text(encoding="utf-8")
+
+    assert "entity_id}`.replace" not in dashboard
+    assert "spark-customer-${index}" in dashboard
+    assert "spark-product-${index}" in dashboard
 
 
 def test_dashboard_progress_hero_uses_dense_metric_layout():

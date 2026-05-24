@@ -694,6 +694,27 @@ def test_build_forecast_page_context_uses_db_not_excel(tmp_path):
 # _patch_latest_order_dates — current-month daily actuals update ForecastRow
 # ---------------------------------------------------------------------------
 
+def test_forecast_workbench_context_build_matches_legacy_context_contract():
+    from src.backend.forecast_config import ForecastConfig
+    from src.backend.forecast_workbench_context import build
+    from src.backend.operational_views import build_forecast_page_context
+
+    db = _make_db_with_sales()
+    config = ForecastConfig()
+    target_source = {"year": "2026", "month": "5"}
+
+    workbench_context = build(config, db, target_source, today=date(2026, 5, 15))
+    legacy_context = build_forecast_page_context(None, config, db, target_source)
+
+    assert workbench_context.target == legacy_context.target
+    assert len(workbench_context.summary.rows) == len(legacy_context.summary.rows)
+    assert len(workbench_context.sales_data) == len(legacy_context.sales_data)
+    assert workbench_context.dashboard.forecast_quantity >= 0
+    assert workbench_context.monitor_rows
+    assert workbench_context.health.order_count == legacy_context.health.order_count
+    assert workbench_context.items
+
+
 def _summary_with_rows(rows: list) -> ForecastSummary:
     return ForecastSummary(year=2026, month=5, rows=rows, total=0.0)
 

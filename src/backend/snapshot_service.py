@@ -10,9 +10,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
+from typing import Iterable, Optional
 
 from src.backend.database import MORDatabase
+from src.backend.forecast_models import ForecastRow
 
 
 @dataclass(frozen=True)
@@ -36,6 +37,24 @@ class SnapshotItem:
     system_forecast: float
     manual_adjustment: Optional[float]
     final_forecast: float
+
+
+def serialize_forecast_rows_for_snapshot(rows: Iterable[ForecastRow]) -> list[dict]:
+    """Convert forecast rows into snapshot row dictionaries."""
+    return [
+        {
+            "customer_name": row.customer,
+            "product_code": row.product_code,
+            "system_forecast": row.system_forecast,
+            "manual_adjustment": row.manual_adjustment,
+            "final_forecast": row.final_forecast,
+            "product_name": row.product_name,
+            "base_forecast": row.system_forecast,
+            "current_forecast": row.final_forecast,
+            "adjustment_reason": row.adjustment_reason,
+        }
+        for row in rows
+    ]
 
 
 def save_snapshot(

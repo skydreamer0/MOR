@@ -1,15 +1,20 @@
 """Tests for snapshot_service — save, list, finalize, delete."""
 from __future__ import annotations
 
-import pytest
+from datetime import date
 from pathlib import Path
+
+import pytest
+
 from src.backend.database import MORDatabase
+from src.backend.forecast_models import ForecastRow
 from src.backend.snapshot_service import (
     delete_snapshot,
     is_finalized,
     list_snapshots,
     load_snapshot_items,
     save_snapshot,
+    serialize_forecast_rows_for_snapshot,
 )
 
 
@@ -34,6 +39,46 @@ def _sample_rows():
             "manual_adjustment": None,
             "final_forecast": 5.0,
         },
+    ]
+
+
+def _forecast_row() -> ForecastRow:
+    return ForecastRow(
+        row_id="A__P001",
+        customer="A客戶",
+        product_code="P001",
+        product_name="測試品",
+        latest_order_date=date(2026, 4, 10),
+        cycle_days=30,
+        next_order_date=date(2026, 5, 10),
+        auto_in_month=True,
+        last_year_same_month_qty=8.0,
+        this_year_same_month_qty=9.0,
+        latest_price=100.0,
+        system_forecast=10.0,
+        manual_adjustment=12.0,
+        final_forecast=12.0,
+        estimated_amount=1200.0,
+        forecast_basis="cycle",
+        adjustment_reason="customer confirmed",
+    )
+
+
+def test_serialize_forecast_rows_for_snapshot_preserves_snapshot_row_contract():
+    rows = serialize_forecast_rows_for_snapshot([_forecast_row()])
+
+    assert rows == [
+        {
+            "customer_name": "A客戶",
+            "product_code": "P001",
+            "system_forecast": 10.0,
+            "manual_adjustment": 12.0,
+            "final_forecast": 12.0,
+            "product_name": "測試品",
+            "base_forecast": 10.0,
+            "current_forecast": 12.0,
+            "adjustment_reason": "customer confirmed",
+        }
     ]
 
 

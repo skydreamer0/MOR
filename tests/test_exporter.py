@@ -25,6 +25,7 @@ def _make_row(*, excluded: bool = False) -> ForecastRow:
         final_forecast=12.0,
         estimated_amount=1200.0,
         forecast_basis="last_year",
+        budget_quantity=10.0,
         excluded=excluded,
     )
 
@@ -65,3 +66,22 @@ def test_export_excluded_sheet_only_has_excluded_rows():
     ws = wb["排除明細"]
     data_rows = [r for r in ws.iter_rows(min_row=2, values_only=True) if any(v is not None for v in r)]
     assert len(data_rows) == 1
+
+
+def test_prepare_export_summary_applies_adjustments_reasons_and_totals():
+    from src.backend.forecast_export_workflow import prepare_export_summary
+
+    summary = _make_summary()
+
+    prepared = prepare_export_summary(
+        summary,
+        manual_adjustments={"A__P1": 15},
+        adjustment_reasons={"A__P1": "Review"},
+    )
+
+    row = prepared.rows[0]
+    assert row.manual_adjustment == 15
+    assert row.final_forecast == 15
+    assert row.adjustment_reason == "Review"
+    assert row.estimated_amount == 1500
+    assert prepared.total == 1500

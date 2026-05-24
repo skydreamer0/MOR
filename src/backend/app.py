@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-import calendar
 import hashlib
 import logging
-from dataclasses import replace
-from datetime import date
 from pathlib import Path
 
 import pandas as pd
@@ -12,21 +9,21 @@ from flask import Flask, Response, redirect, render_template, request, send_file
 from flask_caching import Cache
 
 from src.backend.data_validator import validate_budget_coverage, validate_health
+from src.backend.dashboard_analytics_workflow import build_dashboard_template_context
 from src.backend.monthly_review import build_monthly_review, list_reviewable_months
-from src.backend.data_loader import default_target_from_data, default_target_from_db, latest_closed_month_from_data, load_sales_detail, normalize_product_code
+from src.backend.data_loader import default_target_from_data, default_target_from_db, latest_closed_month_from_data, load_sales_detail
 from src.backend.exporter import export_forecast
 from src.backend.forecast_config import ForecastConfig
-from src.backend.forecast_engine import apply_user_adjustments
+from src.backend.forecast_export_workflow import prepare_export_summary
 from src.backend.forecast_models import ForecastSummary
+from src.backend.forecast_write_workflow import save_row_override
+from src.backend.item_settings_workflow import build_item_config_payloads_from_form
 from src.backend.operational_views import (
     aggregate_to_analytics,
-    build_customer_risk_ranking,
     build_forecast_page_context,
     build_monthly_review_report,
     forecast_amount_total,
     last_year_amount_total,
-    recalculate_forecast_amounts,
-    build_status_distribution,
     update_item_configs,
 )
 from src.backend.web.form_parser import FormValidationError, parse_manual_quantities, parse_target_period
@@ -45,6 +42,7 @@ from src.backend.snapshot_service import (
     list_snapshots,
     load_snapshot_items,
     save_snapshot,
+    serialize_forecast_rows_for_snapshot,
 )
 
 
@@ -108,60 +106,8 @@ def create_app(config: dict | None = None) -> Flask:
         target = parse_target_period(request.args, default_target)
         return _build_cached_context(target.year, target.month)
 
-    def _dashboard_template_context(context) -> dict:
-        remaining_days = 0
-        today = date.today()
-        t_year, t_month = context.target.year, context.target.month
-        _, last_day = calendar.monthrange(t_year, t_month)
-        month_end = date(t_year, t_month, last_day)
-        month_start = date(t_year, t_month, 1)
-        if today > month_end:
-            remaining_days = 0
-        elif today < month_start:
-            remaining_days = last_day
-        else:
-            remaining_days = (month_end - today).days
-
-        all_monitor = context.monitor_rows
-        status_dist = build_status_distribution(all_monitor)
-        customer_ranking = build_customer_risk_ranking(all_monitor)
-        high_risk_rows = [row for row in all_monitor if row.status_key == "high"]
-        high_risk_rows.sort(key=lambda r: r.amount_impact)
-
-        rows = context.summary.rows
-        target = context.target
-        return {
-            "year": target.year,
-            "month": target.month,
-            "metrics": context.dashboard,
-            "health": context.health,
-            "monitor_rows": high_risk_rows[:15],
-            "remaining_days": remaining_days,
-            "status_dist": status_dist,
-            "customer_ranking": customer_ranking,
-            "data_issues": validate_health(context.health),
-            "analytics_total":     aggregate_to_analytics(rows, "total",    target),
-            "analytics_customers": aggregate_to_analytics(rows, "customer", target),
-            "analytics_products":  aggregate_to_analytics(rows, "product",  target),
-        }
-
     def _save_row_override(row_id: str, manual_qty: str | None, reason: str | None, year: int, month: int) -> None:
-        customer, product_code = row_id.split("__", 1)
-        try:
-            val = int(float(manual_qty)) if manual_qty and manual_qty.strip() else None
-        except ValueError as exc:
-            raise FormValidationError("Invalid quantity") from exc
-
-        with db.get_connection() as conn:
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO forecast_adjustments
-                (year, month, customer_name, product_code, manual_quantity, adjustment_reason, updated_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (year, month, customer, product_code, val, reason, "User"),
-            )
-            conn.commit()
+        save_row_override(db, row_id, manual_qty, reason, year, month)
         _invalidate_context_cache(year, month)
 
     def _find_forecast_row(row_id: str, year: int, month: int):
@@ -188,7 +134,7 @@ def create_app(config: dict | None = None) -> Flask:
             context = None
             error_message = f"無法產生預估：{exc}"
 
-        template_context = _dashboard_template_context(context) if context else {
+        template_context = build_dashboard_template_context(context) if context else {
             "year": request.args.get("year", ""),
             "month": request.args.get("month", ""),
             "metrics": None,
@@ -212,7 +158,7 @@ def create_app(config: dict | None = None) -> Flask:
     def dashboard_metrics() -> str:
         try:
             context = _load_context_from_request()
-            template_context = _dashboard_template_context(context)
+            template_context = build_dashboard_template_context(context)
         except (FileNotFoundError, ValueError, FormValidationError) as exc:
             return Response(f"無法更新預估：{exc}", status=400, mimetype="text/plain; charset=utf-8")
         return render_template("_dashboard_metrics.html", **template_context)
@@ -320,16 +266,7 @@ def create_app(config: dict | None = None) -> Flask:
                 data_base_path, forecast_config, db,
                 {"year": str(year), "month": str(month)},
             )
-            snapshot_rows = [
-                {
-                    "customer_name": r.customer,
-                    "product_code": r.product_code,
-                    "system_forecast": r.system_forecast,
-                    "manual_adjustment": r.manual_adjustment,
-                    "final_forecast": r.final_forecast,
-                }
-                for r in ctx.summary.rows
-            ]
+            snapshot_rows = serialize_forecast_rows_for_snapshot(ctx.summary.rows)
         except Exception as exc:
             logger.error("結月快照自動建立失敗 %d/%02d: %s", year, month, exc, exc_info=True)
             raise
@@ -401,17 +338,7 @@ def create_app(config: dict | None = None) -> Flask:
             _validate_submitted_row_ids(summary, set(manual_adjustments))
             _validate_forecast_signature(summary, request.form.get("forecast_signature", ""))
 
-            summary = apply_user_adjustments(
-                summary,
-                manual_adjustments=manual_adjustments,
-                excluded_ids=set(),
-            )
-            rows = [
-                replace(row, adjustment_reason=adjustment_reasons.get(row.row_id, row.adjustment_reason))
-                for row in summary.rows
-            ]
-            rows = recalculate_forecast_amounts(rows)
-            summary = replace(summary, rows=rows, total=forecast_amount_total(rows))
+            summary = prepare_export_summary(summary, manual_adjustments, adjustment_reasons)
         except (FileNotFoundError, ValueError, FormValidationError) as exc:
             return Response(f"無法匯出預估：{exc}", status=400, mimetype="text/plain; charset=utf-8")
 
@@ -504,22 +431,7 @@ def create_app(config: dict | None = None) -> Flask:
 
     @app.post("/items/save")
     def save_items() -> Response:
-        product_codes = request.form.getlist("product_codes")
-        items = []
-        for pid in product_codes:
-            pid = normalize_product_code(pid)
-            try:
-                price_quantity = int(float(request.form.get(f"price_quantity_{pid}") or 0))
-            except ValueError:
-                price_quantity = 0
-            items.append({
-                "product_code":  pid,
-                "is_excluded":   request.form.get(f"is_excluded_{pid}") == "1",
-                "is_budgeted":   request.form.get(f"is_budgeted_{pid}") == "1",
-                "is_visible":    request.form.get(f"is_visible_{pid}") == "1",
-                "price_quantity": price_quantity,
-                "item_status":   request.form.get(f"item_status_{pid}", "active"),
-            })
+        items = build_item_config_payloads_from_form(request.form)
         update_item_configs(db, items)
         _invalidate_all_context_cache()
         return settings()
@@ -602,16 +514,7 @@ def create_app(config: dict | None = None) -> Flask:
             )
             summary = context.summary
 
-            snapshot_rows = [
-                {
-                    "customer_name": r.customer,
-                    "product_code": r.product_code,
-                    "system_forecast": r.system_forecast,
-                    "manual_adjustment": r.manual_adjustment,
-                    "final_forecast": r.final_forecast,
-                }
-                for r in summary.rows
-            ]
+            snapshot_rows = serialize_forecast_rows_for_snapshot(summary.rows)
             snapshot_id = save_snapshot(db, year, month, snapshot_name, snapshot_type, snapshot_rows)
             return redirect(url_for("forecast", year=year, month=month))
         except ValueError as exc:

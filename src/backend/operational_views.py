@@ -8,20 +8,12 @@ from typing import Iterable, Mapping
 import pandas as pd
 
 from src.backend.analytics import AnalyticsSlice
-from src.backend.daily_sales_importer import DailyActualAggregate, fetch_daily_actuals_by_row_id
-from src.backend.data_loader import (
-    default_target_from_data,
-    default_target_from_db,
-    load_sales_detail_from_db,
-    normalize_product_code,
-)
+from src.backend.daily_sales_importer import DailyActualAggregate
+from src.backend.data_loader import normalize_product_code
 from src.backend.forecast_config import ForecastConfig
-from src.backend.forecast_engine import ForecastOptions, apply_user_adjustments, build_forecast
 from src.backend.forecast_models import ForecastRow, ForecastSummary, ForecastTarget
-from src.backend.history_service import enrich_rows_with_history
-from src.backend.web.form_parser import parse_target_period
-from src.backend.projection_engine import ProjectionResult, batch_project_eom
-from src.backend.workday_calendar import ensure_calendar_year, fetch_workday_set
+from src.backend.projection_engine import ProjectionResult
+from src.backend.workday_calendar import fetch_workday_set
 
 
 DROP_RISK_THRESHOLD = 0.9
@@ -193,102 +185,15 @@ class MonthlyReviewReport:
     rows: list[MonthlyReviewRow]
 
 
-def _load_inputs(db, target: ForecastTarget) -> _ForecastInputs:
-    """Load all raw data from DB needed to build a forecast page context."""
-    data = load_sales_detail_from_db(db)
-    item_configs = load_item_configs(db)
-    excluded_item_ids = frozenset(pid for pid, cfg in item_configs.items() if cfg["is_excluded"])
-    manual_adjustments, adjustment_reasons = load_adjustments(db, target.year, target.month)
-    return _ForecastInputs(
-        data=data,
-        item_configs=item_configs,
-        excluded_item_ids=excluded_item_ids,
-        manual_adjustments=manual_adjustments,
-        adjustment_reasons=adjustment_reasons,
-        budget_targets=load_budgets(db, target.year, target.month),
-        budget_year_map=load_budget_year(db, target.year),
-        budget_year_amount_map=load_budget_year_amounts(db, target.year),
-        budget_months=list_budget_months(db),
-        daily_actuals=fetch_daily_actuals_by_row_id(db, target.year, target.month),
-    )
-
-
-def _build_summary(
-    inputs: _ForecastInputs,
-    db,
-    target: ForecastTarget,
-    forecast_config: ForecastConfig,
-) -> ForecastSummary:
-    """Build and enrich the forecast summary through all transformation passes."""
-    summary = build_forecast(
-        inputs.data,
-        target,
-        ForecastOptions(
-            include_all=True,
-            max_cycle_interval_days=forecast_config.max_cycle_interval_days,
-            excluded_item_ids=inputs.excluded_item_ids,
-        ),
-        forecast_config,
-    )
-    visible_rows = [
-        row for row in summary.rows
-        if inputs.item_configs.get(row.product_code, {}).get("is_visible", True)
-    ]
-    summary = replace(
-        summary,
-        rows=visible_rows,
-        total=sum(row.estimated_amount for row in visible_rows if not row.excluded),
-    )
-    summary = replace(summary, rows=enrich_rows_with_history(summary.rows, db, target.year, target.month))
-    summary = _patch_latest_order_dates(summary, inputs.daily_actuals)
-    summary = apply_user_adjustments(summary, manual_adjustments=inputs.manual_adjustments, excluded_ids=set())
-    summary = _apply_reasons_and_budgets(
-        summary, inputs.adjustment_reasons, inputs.budget_targets,
-        inputs.item_configs, inputs.budget_year_map, inputs.budget_year_amount_map,
-    )
-    return replace(summary, total=forecast_amount_total(summary.rows))
-
-
-def _build_projections(
-    db,
-    summary: ForecastSummary,
-    daily_actuals: Mapping[str, DailyActualAggregate],
-    today: date,
-    target: ForecastTarget,
-) -> "dict[str, ProjectionResult]":
-    """Compute end-of-month projections for all forecast rows."""
-    ensure_calendar_year(db, today.year)
-    return batch_project_eom(db, summary.rows, daily_actuals, today, target.year, target.month)
-
-
 def build_forecast_page_context(
     data_base_path: Path,
     forecast_config: ForecastConfig,
     db,
     target_source: Mapping[str, object],
 ) -> ForecastPageContext:
-    default_target = default_target_from_db(db)
-    target = parse_target_period(target_source, default_target)
-    inputs = _load_inputs(db, target)
-    summary = _build_summary(inputs, db, target, forecast_config)
-    today = date.today()
-    projections = _build_projections(db, summary, inputs.daily_actuals, today, target)
-    return ForecastPageContext(
-        target=target,
-        sales_data=inputs.data,
-        summary=summary,
-        dashboard=build_dashboard_metrics(summary.rows, inputs.budget_targets.values(), projections, inputs.daily_actuals),
-        monitor_rows=build_product_monitor_rows(
-            summary.rows,
-            daily_actuals=inputs.daily_actuals,
-            db=db,
-            today=today,
-            projections=projections,
-            target_month=target.month,
-        ),
-        health=build_data_health_summary(inputs.data, summary, inputs.budget_months),
-        items=build_items_from_sales_data(inputs.data, db),
-    )
+    from src.backend.forecast_workbench_context import build
+
+    return build(forecast_config, db, target_source)
 
 
 def build_monthly_review_report(context: ForecastPageContext) -> MonthlyReviewReport:
