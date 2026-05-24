@@ -9,6 +9,7 @@ import pandas as pd
 from src.backend.data_loader import prepare_sales_data
 from src.backend.forecast_config import ForecastConfig
 from src.backend.forecast_models import ForecastOptions, ForecastRow, ForecastSummary, ForecastTarget
+from src.backend.row_identity import make_row_id
 
 __all__ = [
     "ForecastOptions",
@@ -191,4 +192,4 @@ def _recent_months_average(group: pd.DataFrame, target_year: int, target_month: 
 
 
 def _row_id(customer: object, product_code: object) -> str:
-    return f"{customer}__{product_code}"
+    return make_row_id(customer, product_code)

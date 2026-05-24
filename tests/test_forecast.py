@@ -4,6 +4,7 @@ import pandas as pd
 
 from src.backend.forecast_config import ForecastConfig
 from src.backend.forecast_engine import ForecastOptions, ForecastTarget, apply_user_adjustments, build_forecast
+from src.backend.row_identity import make_row_id
 
 
 def sample_sales_data() -> pd.DataFrame:
@@ -76,3 +77,17 @@ def test_excluded_item_ids_match_numeric_excel_product_codes():
     assert summary.rows[0].excluded is True
     assert summary.rows[0].estimated_amount == 0
     assert summary.total == 0
+
+
+def test_build_forecast_uses_canonical_row_identity_for_delimiter_values():
+    data = sample_sales_data()
+    data.iloc[:, 3] = "A__B"
+    data.iloc[:, 4] = "C"
+
+    summary = build_forecast(
+        data,
+        ForecastTarget(2026, 4),
+        ForecastOptions(include_all=True, max_cycle_interval_days=ForecastConfig().max_cycle_interval_days),
+    )
+
+    assert summary.rows[0].row_id == make_row_id("A__B", "C")

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from src.backend.row_identity import parse_row_id
 from src.backend.web.form_parser import FormValidationError
 
 
@@ -13,7 +14,9 @@ def save_row_override(
     *,
     updated_by: str = "User",
 ) -> None:
-    customer, product_code = row_id.split("__", 1)
+    identity = parse_row_id(row_id)
+    customer = identity.customer_name
+    product_code = identity.product_code
     try:
         val = int(float(manual_qty)) if manual_qty and manual_qty.strip() else None
     except ValueError as exc:
