@@ -150,9 +150,24 @@ For MOR-specific prompt and skill workflows, see:
 - `docs/workflows/codex-prompt-workflow.md`
 - `docs/workflows/mor-skills.md`
 
+## Skill Selection Rules
+
+Before starting non-trivial work, decide which skills apply and state them briefly.
+
+- Use the smallest useful skill set for the task.
+- Prefer MOR-specific skills when they fit: `mor-roadmap-planner`, `mor-code-editor`, or `mor-debug-checker`.
+- Add general engineering skills only when they change the workflow, such as TDD, debugging, planning, code review, or frontend design.
+- If no skill applies, say so briefly and continue with the normal MOR workflow.
+- Do not read archived or superseded docs while deciding skills.
+
 ## Subagent Rules
 
-Use subagents only when the user explicitly asks for parallel agents or when a large task clearly benefits from independent exploration and the user has approved that approach.
+Use subagents when a task has separable investigation or implementation tracks and the extra context cost is justified.
+
+- Prefer subagents for broad audits, noisy bug hunts, multi-area roadmap execution, or independent test/design/doc reviews.
+- Do not use subagents for small single-file edits, simple questions, or tasks where one agent can safely inspect and patch the relevant files.
+- If the user explicitly asks for subagents or parallel agents, use them unless the task is too small to benefit.
+- The main agent must choose the needed skills first, assign each subagent a narrow role, and integrate the final decision.
 
 Good MOR subagent roles:
 
@@ -201,4 +216,4 @@ Triage uses the default five-label vocabulary (`needs-triage`, `needs-info`, `re
 
 ### Domain docs
 
-This repo is configured as single-context; use root `CONTEXT.md` (when present) and `docs/adr/`. See `docs/agents/domain.md`.
+This repo is configured as single-context; use root `CONTEXT.md` (when present) and `infrastructure/adr/`. See `docs/agents/domain.md`.

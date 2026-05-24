@@ -2,6 +2,16 @@
 
 These repo-local skills document repeatable MOR workflows. They can be copied into the active Codex skills directory if global discovery is needed.
 
+## Before Work
+
+Before non-trivial MOR work, decide which skills apply and state them briefly.
+
+- Use the smallest useful skill set.
+- Prefer MOR-specific skills when they fit.
+- Add general skills only when they change the workflow.
+- If the task can be split into independent tracks, consider subagents and keep each role narrow.
+- The main agent owns final decisions, integration, edits, verification, and the final report.
+
 ## mor-roadmap-planner
 
 Use for turning broad MOR requests into small roadmap tasks.
