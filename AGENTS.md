@@ -188,3 +188,17 @@ For medium or large changes:
 - Never run destructive git commands without explicit approval.
 - Treat `.xlsx` files as source data; do not overwrite them unless explicitly requested.
 - If a generated dependency folder such as `.vendor/` exists, do not include it in architecture docs or commits unless the user asks.
+
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked in GitHub Issues for this repository (`skydreamer0/MOR`). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Triage uses the default five-label vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This repo is configured as single-context; use root `CONTEXT.md` (when present) and `docs/adr/`. See `docs/agents/domain.md`.
