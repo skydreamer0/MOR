@@ -14,6 +14,8 @@ Completed seams:
 4. Snapshot row serialization.
 5. Item/settings write workflow form parsing.
 6. Dashboard analytics template context.
+7. Product monitor template context.
+8. Forecast row identity helper foundation.
 
 Current module boundaries:
 
@@ -23,6 +25,8 @@ Current module boundaries:
 - `src/backend/snapshot_service.py` owns snapshot persistence and forecast-row snapshot serialization.
 - `src/backend/item_settings_workflow.py` owns item/settings request-form parsing and item config payload normalization.
 - `src/backend/dashboard_analytics_workflow.py` owns dashboard analytics/template context assembly.
+- `src/backend/product_monitor_workflow.py` owns product monitor template context assembly.
+- `src/backend/row_identity.py` owns the legacy forecast row identity make/parse helper surface.
 - `src/backend/operational_views.py` still owns view models and operational presentation helpers.
 - `src/backend/app.py` still owns Flask request parsing, response rendering, redirects, cache invalidation, and remaining route-local workflow glue.
 
@@ -82,21 +86,40 @@ Current module boundaries:
 - Tests protecting it: `test_build_dashboard_template_context_preserves_dashboard_analytics_contract`, plus dashboard/homepage route tests in `tests/test_app.py`.
 - Validation used: `D:\AI\python.exe -m pytest tests\test_dashboard_analytics_workflow.py -q --basetemp=.pytest-tmp`, `D:\AI\python.exe -m pytest tests\test_app.py -q -k "dashboard or homepage" --basetemp=.pytest-tmp`, and `py_compile` for touched backend modules.
 
+#### `product_monitor_workflow.py`
+
+- What moved inward: product monitor template context assembly for period, rows, import messages, latest import batch, and close-month record.
+- Extraction boundary: `src/backend/product_monitor_workflow.py` builds the existing template-key dictionary; `src/backend/app.py` still owns request loading, error capture, upload/import routes, close-month routes, cache invalidation, redirects, and template rendering.
+- Public interface: `build_product_monitor_template_context(context, db, *, fallback_year, fallback_month, error_message=None, import_message=None, import_error=None)`.
+- Tests protecting it: `test_build_product_monitor_template_context_uses_context_period_and_rows`, `test_build_product_monitor_template_context_preserves_fallback_when_context_missing`, plus product monitor route/import/close-month tests in `tests/test_app.py`.
+- Validation used: `D:\AI\python.exe -m pytest tests\test_product_monitor_workflow.py -q --basetemp=.pytest-tmp`, focused `tests\test_app.py` product monitor tests, and `py_compile` for touched backend modules.
+
+#### `row_identity.py`
+
+- What moved inward: legacy `customer__product_code` row identity creation/parsing helper surface.
+- Extraction boundary: `src/backend/row_identity.py` preserves the current readable row ID contract; `src/backend/monthly_review.py` uses the helper on a read-only merge path. Write/export/form paths still use the existing legacy IDs and should be migrated only after delimiter/collision characterization tests exist.
+- Public interface: `make_row_id(customer_name, product_code)` and `parse_row_id(row_id)`.
+- Tests protecting it: `test_make_and_parse_row_id_preserves_legacy_customer_product_contract`, `test_parse_row_id_preserves_legacy_missing_product_fallback`, plus `tests/test_monthly_review.py`.
+- Validation used: `D:\AI\python.exe -m pytest tests\test_row_identity.py tests\test_monthly_review.py -q --basetemp=.pytest-tmp`, plus route/export/snapshot focused tests and full suite.
+
 ### Remaining Refactor Plan
 
-#### 1. Product view
+#### 1. Forecast row identity migration
 
-Purpose: build product view only after reusable analytics/view-model boundaries are stable.
+Purpose: migrate remaining row identity builders/parsers to `row_identity.py` in small TDD slices before moving deeper product monitor row calculation or monthly review seams.
 
-Boundary: do not start product view before analytics slice construction is understood.
+Boundary: keep the readable legacy `customer__product_code` contract until route, export, snapshot, and monthly review characterization tests prove any delimiter/collision migration path.
 
 Next smallest implementation seam:
 
-- Inspect current product-related entrypoints and add characterization tests before any product view extraction or UI work.
+- Add delimiter/collision characterization tests, then migrate one remaining builder path such as `forecast_engine._row_id` or `daily_sales_importer.fetch_daily_actuals_by_row_id`.
 
 ### Execution Order
 
-1. Product view.
+1. Forecast row identity.
+2. Product monitor row calculation.
+3. Workbench context internals.
+4. Close-month workflow.
 
 ### Per-Seam Execution Template
 

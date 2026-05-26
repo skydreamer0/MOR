@@ -12,17 +12,19 @@ MOR 是一套本地端 Flask 應用程式，用於月度銷售業績預估。它
 - **結月檢討**：匯入每日業績、結月後鎖定實績與快照，並在月底檢討頁比較實績、預估、預算與去年同期。
 - **資料檢核**：設定頁集中管理品項規則，並顯示預算缺漏、零單價、去年同期缺資料等健康檢查。
 
-## 目前架構狀態（2026-05-10）
+## 目前架構狀態（2026-05-24）
 
 - MOR 目前是 Flask + Jinja + vanilla JS 的本地操作型工作台，資料密度與表格操作優先。
 - `src/backend/app.py` 是主要路由編排層；預估、呈現、匯入、快照、結月與檢討邏輯已拆到 backend service。
 - `mor_workbench.db` 是目前工作台狀態中心，保存歷史業績、當月累積、預算、品項規則、人工調整、快照、每日實績與結月紀錄。
-- 主流程是 `build_forecast_page_context()` 組合 Excel / SQLite 資料，產生 `ForecastSummary`，再供 Dashboard、產品監控、預估調整、匯出與 analytics 使用。
-- 主要技術債在 `ROADMAP.md`：完成多頁瀏覽器驗證、強化預算 mapping 資料健康檢查，並評估後續客戶 / 產品視角頁。
+- 主流程由 `forecast_workbench_context.py` 組合 SQLite、預估引擎、歷史補值、預算、每日實績與月底推估，產生 `ForecastPageContext` / `ForecastSummary`。
+- `operational_views.py` 保留 Dashboard、產品監控、資料健康與 analytics 的共用呈現模型；Dashboard 模板資料再由 `dashboard_analytics_workflow.py` 組裝。
+- 調整與匯出流程已拆成 `forecast_write_workflow.py` 與 `forecast_export_workflow.py`，讓 route 只負責驗證、呼叫 service、回應頁面或檔案。
+- 目前後續工作以 `ROADMAP.md` 為準；修改 UI、預估規則或 Excel schema 時需同步更新對應 docs。
 
 ## 系統架構
 
-此架構圖反映目前實作狀態。Excel 與上傳檔先經 ETL / importer 寫入或合併到 SQLite，`operational_views.py` 再把預估、預算、品項設定、每日實績、快照與工作日資料組成頁面上下文。Flask route 保持薄層，負責導頁、表單解析、服務呼叫與回應。
+此架構圖反映目前實作狀態。Excel 與上傳檔先經 ETL / importer 寫入 SQLite；`forecast_workbench_context.py` 再把預估、預算、品項設定、每日實績、歷史補值與工作日資料組成頁面上下文。Flask route 保持薄層，負責導頁、表單解析、服務呼叫與回應。
 
 ```mermaid
 flowchart TD
@@ -35,6 +37,8 @@ flowchart TD
         static["static/<br/>CSS + vanilla JS"]
         parser["web/form_parser.py<br/>表單解析"]
         presenter["web/forecast_presenter.py<br/>預估表格呈現"]
+        writeflow["forecast_write_workflow.py<br/>列調整儲存"]
+        exportflow["forecast_export_workflow.py<br/>匯出前整理"]
     end
 
     subgraph sources["Input Sources"]
@@ -55,6 +59,7 @@ flowchart TD
 
     subgraph core["Core Forecast Logic"]
         engine["forecast_engine.py<br/>預估計算"]
+        context["forecast_workbench_context.py<br/>頁面上下文組裝"]
         projection["projection_engine.py<br/>月底量推估"]
         models["forecast_models.py<br/>資料模型"]
         config["forecast_config.py<br/>檔名 / 欄位 / 參數"]
@@ -62,6 +67,7 @@ flowchart TD
 
     subgraph ops_layer["Operational + Review"]
         ops["operational_views.py<br/>Dashboard / Monitor / Settings"]
+        dashboardflow["dashboard_analytics_workflow.py<br/>Dashboard 模板資料"]
         analytics["analytics.py<br/>年度 / 客戶 / 品項分析"]
         review["monthly_review.py<br/>結月後檢討"]
     end
@@ -82,11 +88,14 @@ flowchart TD
     flask --> static
     flask --> parser
     flask --> presenter
-    flask --> engine
+    flask --> context
     flask --> ops
+    flask --> dashboardflow
     flask --> review
     flask --> daily
     flask --> history
+    flask --> writeflow
+    flask --> exportflow
     flask --> exporter
 
     historical --> loader
@@ -103,6 +112,12 @@ flowchart TD
     engine --> models
     engine --> config
     engine --> history
+    context --> loader
+    context --> engine
+    context --> ops
+    context --> daily
+    context --> history
+    context --> projection
     projection --> calendar
 
     ops --> loader
@@ -112,8 +127,12 @@ flowchart TD
     ops --> analytics
     ops --> validator
     ops --> db
+    dashboardflow --> ops
+    dashboardflow --> analytics
     review --> db
 
+    writeflow --> db
+    exportflow --> engine
     exporter --> workbook
     exporter --> models
 
@@ -217,6 +236,8 @@ flowchart TD
     backend --> backend_routes["app.py<br/>路由編排"]
     backend --> backend_data["data_loader.py / etl.py / data_validator.py<br/>資料載入、轉換、檢核"]
     backend --> backend_forecast["forecast_engine.py / forecast_models.py / forecast_config.py<br/>預估規則、模型、設定"]
+    backend --> backend_context["forecast_workbench_context.py<br/>預估工作台上下文組裝"]
+    backend --> backend_workflows["forecast_write_workflow.py / forecast_export_workflow.py / dashboard_analytics_workflow.py<br/>寫入、匯出、Dashboard 模板流程"]
     backend --> backend_ops["operational_views.py / analytics.py<br/>Dashboard、監控、設定與分析服務"]
     backend --> backend_history["database.py / history_service.py / snapshot_service.py<br/>SQLite、歷史紀錄與快照"]
     backend --> backend_import["daily_sales_importer.py / workday_calendar.py<br/>每日業績、結月與工作日"]
@@ -261,6 +282,10 @@ src/backend/                   核心預估與業務邏輯
   daily_sales_importer.py      每日業績匯入、累積實績與結月
   data_validator.py            資料健康檢查
   forecast_engine.py           預估計算核心邏輯
+  forecast_workbench_context.py 預估頁面上下文組裝，串接 DB、預估、預算、實績、歷史與推估
+  forecast_write_workflow.py    人工調整數量與備註寫入流程
+  forecast_export_workflow.py   匯出前套用送出狀態、備註與金額重算
+  dashboard_analytics_workflow.py Dashboard 模板資料與 analytics 區塊組裝
   projection_engine.py         基於工作日週期的月底量推估
   operational_views.py         Dashboard、跳單監控、設定、analytics 共用呈現服務
   analytics.py                 年度 / 客戶 / 品項分析資料結構
@@ -312,7 +337,7 @@ python -m pytest -q
 - `tests/test_app.py` — Flask 路由行為
 - `tests/test_etl.py` / `tests/test_current_month_integration.py` — Excel / SHPB 同步與當月資料合併
 - `tests/test_daily_sales_importer.py` — 每日業績匯入與結月
-- `tests/test_operational_views.py` — Dashboard、監控與資料健康上下文
+- `tests/test_operational_views.py` / `tests/test_dashboard_analytics_workflow.py` — Dashboard、監控、analytics 與資料健康上下文
 - `tests/test_projection_engine.py` / `tests/test_workday_calendar.py` — 月底推估與工作日計算
 - `tests/test_snapshot_service.py` / `tests/test_monthly_review.py` — 預估快照與結月後檢討
 - `tests/test_form_parser.py` — 表單解析
