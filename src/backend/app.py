@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
@@ -27,7 +28,7 @@ from src.backend.operational_views import (
     last_year_amount_total,
     update_item_configs,
 )
-from src.backend.web.form_parser import FormValidationError, parse_manual_quantities, parse_target_period
+from src.backend.web.form_parser import FormValidationError, parse_manual_quantities, parse_target_period, validate_target_period
 from src.backend.web.forecast_presenter import product_display_name
 from src.backend.daily_sales_importer import (
     close_month,
@@ -75,12 +76,15 @@ def create_app(config: dict | None = None) -> Flask:
     _month_versions: dict[tuple[int, int], int] = {}
     _global_version: list[int] = [0]
 
-    def _make_cache_key(year: int, month: int) -> str:
-        return (
+    def _make_cache_key(year: int, month: int, as_of: date | None = None) -> str:
+        key = (
             f"forecast-context:{year}:{month}"
             f":g{_global_version[0]}"
             f":m{_month_versions.get((year, month), 0)}"
         )
+        if as_of is not None:
+            key += f":d{as_of.isoformat()}"
+        return key
 
     def _invalidate_context_cache(year: int, month: int) -> None:
         _month_versions[(year, month)] = _month_versions.get((year, month), 0) + 1
@@ -89,7 +93,9 @@ def create_app(config: dict | None = None) -> Flask:
         _global_version[0] += 1
 
     def _build_cached_context(year: int, month: int):
-        key = _make_cache_key(year, month)
+        today = date.today()
+        as_of = today if (year, month) == (today.year, today.month) else None
+        key = _make_cache_key(year, month, as_of)
         context = cache.get(key)
         if context is None:
             context = build_forecast_page_context(
@@ -97,6 +103,7 @@ def create_app(config: dict | None = None) -> Flask:
                 forecast_config,
                 db,
                 {"year": str(year), "month": str(month)},
+                today=today,
             )
             cache.set(key, context)
         return context
@@ -207,7 +214,9 @@ def create_app(config: dict | None = None) -> Flask:
         month = request.form.get("month", type=int)
         if year is None or month is None:
             return Response("Missing year/month", status=400)
-        if not (1 <= month <= 12) or not (2000 <= year <= 2100):
+        try:
+            validate_target_period(year, month)
+        except FormValidationError:
             return Response("Invalid year/month range", status=400)
         reason = request.form.get("note", request.form.get(f"adjustment_reason__{row_id}", ""))
         try:
@@ -284,7 +293,9 @@ def create_app(config: dict | None = None) -> Flask:
         note = request.form.get("note", "").strip() or None
         if not year or not month:
             return redirect(url_for("product_monitor", import_error="缺少年月資訊。"))
-        if not (1 <= month <= 12) or not (2000 <= year <= 2100):
+        try:
+            validate_target_period(year, month)
+        except FormValidationError:
             return redirect(url_for("product_monitor", import_error="年月範圍不合法。"))
         try:
             snapshot_id = _find_or_create_close_snapshot(year, month)
@@ -482,7 +493,9 @@ def create_app(config: dict | None = None) -> Flask:
 
         if not row_id or year is None or month is None:
             return Response("Missing required fields", status=400)
-        if not (1 <= month <= 12) or not (2000 <= year <= 2100):
+        try:
+            validate_target_period(year, month)
+        except FormValidationError:
             return Response("Invalid year/month range", status=400)
 
         try:
@@ -501,7 +514,9 @@ def create_app(config: dict | None = None) -> Flask:
 
         if not year or not month:
             return Response("Missing year/month", status=400)
-        if not (1 <= month <= 12) or not (2000 <= year <= 2100):
+        try:
+            validate_target_period(year, month)
+        except FormValidationError:
             return Response("Invalid year/month range", status=400)
         if not snapshot_name:
             snapshot_name = f"{'定稿' if snapshot_type == 'Final' else '草稿'} {year}/{month:02d}"

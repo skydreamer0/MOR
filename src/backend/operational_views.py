@@ -190,10 +190,12 @@ def build_forecast_page_context(
     forecast_config: ForecastConfig,
     db,
     target_source: Mapping[str, object],
+    *,
+    today: "date | None" = None,
 ) -> ForecastPageContext:
     from src.backend.forecast_workbench_context import build
 
-    return build(forecast_config, db, target_source)
+    return build(forecast_config, db, target_source, today=today)
 
 
 def build_monthly_review_report(context: ForecastPageContext) -> MonthlyReviewReport:
