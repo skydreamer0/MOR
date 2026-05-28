@@ -8,3 +8,6 @@ __pycache__/
 ~$*.xlsx
 .DS_Store
 .claude/worktrees/
+mor_workbench.db
+*.sqlite
+*.sqlite3
