@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Iterable
 
 from src.backend.database import MORDatabase
+from src.backend.row_identity import make_row_id, parse_row_id
 
 
 # ---------------------------------------------------------------------------
@@ -119,7 +120,7 @@ def _get_close_record(db: MORDatabase, year: int, month: int) -> dict | None:
 
 
 def _load_actuals(db: MORDatabase, year: int, month: int) -> dict[str, dict]:
-    """key = customer_name__product_code"""
+    """key = row identity."""
     with db.get_connection() as conn:
         rows = conn.execute(
             """
@@ -133,7 +134,7 @@ def _load_actuals(db: MORDatabase, year: int, month: int) -> dict[str, dict]:
             (year, month),
         ).fetchall()
     return {
-        f"{r['customer_name']}__{r['product_code']}": {
+        make_row_id(r["customer_name"], r["product_code"]): {
             "customer_name": r["customer_name"],
             "product_code": r["product_code"],
             "qty": float(r["qty"] or 0),
@@ -159,7 +160,7 @@ def _load_forecasts(db: MORDatabase, snapshot_id: int | None) -> dict[str, dict]
             (snapshot_id,),
         ).fetchall()
     return {
-        f"{r['customer_name']}__{r['product_code']}": {
+        make_row_id(r["customer_name"], r["product_code"]): {
             "final_forecast": float(r["final_forecast"] or 0),
         }
         for r in rows
@@ -178,7 +179,7 @@ def _load_budgets(db: MORDatabase, year: int, month: int) -> dict[str, dict]:
             (year, month),
         ).fetchall()
     return {
-        f"{r['customer_name']}__{r['product_code']}": {
+        make_row_id(r["customer_name"], r["product_code"]): {
             "target_quantity": float(r["target_quantity"] or 0),
             "target_amount": float(r["target_amount"] or 0),
         }
@@ -225,7 +226,7 @@ def _load_last_year(db: MORDatabase, year: int, month: int) -> dict[str, dict]:
             ).fetchall()
 
     return {
-        f"{r['customer_name']}__{r['product_code']}": {
+        make_row_id(r["customer_name"], r["product_code"]): {
             "qty": float(r["qty"] or 0),
             "amount": float(r["amount"] or 0),
         }
@@ -252,10 +253,7 @@ def _merge_rows(
         b   = budgets.get(row_id, {})
         ly  = last_year.get(row_id, {})
 
-        # Parse customer / product from row_id
-        parts = row_id.split("__", 1)
-        customer = parts[0] if len(parts) == 2 else row_id
-        product  = parts[1] if len(parts) == 2 else ""
+        identity = parse_row_id(row_id)
 
         act_qty   = a.get("qty", 0.0)
         act_amt   = a.get("amount", 0.0)
@@ -265,8 +263,8 @@ def _merge_rows(
         ly_amt    = ly.get("amount", 0.0)
 
         rows.append(ReviewRow(
-            customer_name=a.get("customer_name", customer),
-            product_code=a.get("product_code", product),
+            customer_name=a.get("customer_name", identity.customer_name),
+            product_code=a.get("product_code", identity.product_code),
             product_name="",
             actual_quantity=act_qty,
             actual_amount=act_amt,

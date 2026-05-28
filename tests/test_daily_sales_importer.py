@@ -176,6 +176,23 @@ def test_fetch_daily_actuals_by_row_id_aggregates_quantity_and_latest_date(tmp_p
     assert str(row.latest_sales_date) == "2026-05-08"
 
 
+def test_fetch_daily_actuals_by_row_id_uses_canonical_row_identity(tmp_path: Path):
+    from src.backend.row_identity import make_row_id
+
+    db = MORDatabase(tmp_path / "mor_workbench.db")
+    stream = _workbook_bytes(
+        [
+            _daily_row("2026-05-04", "A__B", "C", 5, 1000),
+            _daily_row("2026-05-05", "A", "B__C", 2, 400),
+        ]
+    )
+
+    import_daily_sales_workbook(db, stream, "daily.xlsx")
+    actuals = fetch_daily_actuals_by_row_id(db, 2026, 5)
+
+    assert set(actuals) == {make_row_id("A__B", "C"), make_row_id("A", "B__C")}
+
+
 # ---------------------------------------------------------------------------
 # Phase 6: close_month / is_month_closed / guard on import
 # ---------------------------------------------------------------------------

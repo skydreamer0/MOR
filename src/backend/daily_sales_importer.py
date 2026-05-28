@@ -9,6 +9,7 @@ import pandas as pd
 
 from src.backend.data_loader import normalize_product_code
 from src.backend.database import MORDatabase
+from src.backend.row_identity import make_row_id
 
 
 # Maps internal field names → Chinese column headers in the workbook
@@ -168,7 +169,7 @@ def fetch_daily_actuals_by_row_id(
     year: int,
     month: int,
 ) -> dict[str, DailyActualAggregate]:
-    """Return per-row aggregates (customer__product) for the given month."""
+    """Return per-row aggregates keyed by canonical forecast row ID for the given month."""
     with db.get_connection() as conn:
         rows = conn.execute(
             """
@@ -184,7 +185,7 @@ def fetch_daily_actuals_by_row_id(
             (year, month),
         ).fetchall()
     return {
-        f"{row['customer_name']}__{row['product_code']}": DailyActualAggregate(
+        make_row_id(row["customer_name"], row["product_code"]): DailyActualAggregate(
             actual_quantity=float(row["actual_quantity"] or 0),
             taxed_amount=float(row["taxed_amount"] or 0),
             latest_sales_date=row["latest_sales_date"],

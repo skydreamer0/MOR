@@ -18,6 +18,7 @@ from src.backend.forecast_export_workflow import prepare_export_summary
 from src.backend.forecast_models import ForecastSummary
 from src.backend.forecast_write_workflow import save_row_override
 from src.backend.item_settings_workflow import build_item_config_payloads_from_form
+from src.backend.product_monitor_workflow import build_product_monitor_template_context
 from src.backend.operational_views import (
     aggregate_to_analytics,
     build_forecast_page_context,
@@ -31,7 +32,6 @@ from src.backend.web.forecast_presenter import product_display_name
 from src.backend.daily_sales_importer import (
     close_month,
     get_close_record,
-    get_latest_import_batch,
     import_daily_sales_workbook,
 )
 from src.backend.database import get_db
@@ -237,14 +237,15 @@ def create_app(config: dict | None = None) -> Flask:
         month = context.target.month if context else request.args.get("month", type=int) or 0
         return render_template(
             "product_monitor.html",
-            year=year,
-            month=month,
-            rows=context.monitor_rows if context else [],
-            error_message=error_message,
-            import_message=request.args.get("import_message"),
-            import_error=request.args.get("import_error"),
-            latest_batch=get_latest_import_batch(db, year, month) if year and month else None,
-            close_record=get_close_record(db, year, month) if year and month else None,
+            **build_product_monitor_template_context(
+                context,
+                db,
+                fallback_year=year,
+                fallback_month=month,
+                error_message=error_message,
+                import_message=request.args.get("import_message"),
+                import_error=request.args.get("import_error"),
+            ),
         )
 
     def _find_or_create_close_snapshot(year: int, month: int) -> int | None:
