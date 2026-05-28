@@ -1149,7 +1149,7 @@ input.qty:focus {
 /* ── 最後預估 — 最終決策數字，加重視覺量 ────────────────────── */
 td[data-final-forecast] {
   font-weight: 700;
-  color: var(--text);       /* 確保不被繼承的 muted 色蓋掉 */
+  color: var(--ink);        /* 確保不被繼承的 muted 色蓋掉 */
 }
 
 /* ── Product cell — two-line: name + inline sparkline ────────── */
@@ -3023,7 +3023,7 @@ details[open] .discontinued-toggle {
   font-size: var(--text-base);
   font-weight: 600;
   padding: var(--sp-3) var(--sp-4) var(--sp-2);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--line);
   margin: 0;
 }
 
@@ -3039,9 +3039,9 @@ details[open] .discontinued-toggle {
   flex-direction: column;
   gap: var(--sp-1);
   padding: var(--sp-3);
-  background: var(--surface-2, #f9fafb);
+  background: var(--surface-subtle);
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
 }
 
 .review-metric-label {
@@ -3102,14 +3102,14 @@ details[open] .discontinued-toggle {
 .review-table th,
 .review-table td {
   padding: var(--sp-2) var(--sp-3);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--line);
   white-space: nowrap;
 }
 
 .review-table th {
   text-align: left;
   font-weight: 600;
-  background: var(--surface-2, #f9fafb);
+  background: var(--surface-subtle);
   position: sticky;
   top: 0;
 }
