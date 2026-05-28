@@ -9,15 +9,17 @@ class FormValidationError(ValueError):
     pass
 
 
+def validate_target_period(year: int, month: int) -> None:
+    if not 2000 <= year <= 2100:
+        raise FormValidationError("年份必須介於 2000 到 2100。")
+    if not 1 <= month <= 12:
+        raise FormValidationError("月份必須介於 1 到 12。")
+
+
 def parse_target_period(values: Mapping[str, object], default_target: ForecastTarget) -> ForecastTarget:
     year = _parse_int(values.get("year", default_target.year), "年份")
     month = _parse_int(values.get("month", default_target.month), "月份")
-
-    if not 1 <= month <= 12:
-        raise FormValidationError("月份必須介於 1 到 12。")
-    if year < 1900:
-        raise FormValidationError("年份格式不正確。")
-
+    validate_target_period(year, month)
     return ForecastTarget(year, month)
 
 

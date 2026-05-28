@@ -13,6 +13,25 @@ def test_parse_target_period_rejects_invalid_month():
         parse_target_period({"year": "2026", "month": "13"}, ForecastTarget(2026, 5))
 
 
+def test_parse_target_period_rejects_month_zero():
+    with pytest.raises(FormValidationError, match="月份"):
+        parse_target_period({"year": "2026", "month": "0"}, ForecastTarget(2026, 5))
+
+
+def test_parse_target_period_rejects_nonnumeric():
+    with pytest.raises(FormValidationError, match="年份"):
+        parse_target_period({"year": "abc", "month": "5"}, ForecastTarget(2026, 5))
+    with pytest.raises(FormValidationError, match="月份"):
+        parse_target_period({"year": "2026", "month": ""}, ForecastTarget(2026, 5))
+
+
+def test_parse_target_period_rejects_year_out_of_range():
+    with pytest.raises(FormValidationError, match="年份"):
+        parse_target_period({"year": "1999", "month": "5"}, ForecastTarget(2026, 5))
+    with pytest.raises(FormValidationError, match="年份"):
+        parse_target_period({"year": "2101", "month": "5"}, ForecastTarget(2026, 5))
+
+
 def test_parse_manual_quantities_accepts_blank_and_positive_numbers():
     parsed = parse_manual_quantities(
         {

@@ -690,6 +690,19 @@ def test_build_forecast_page_context_uses_db_not_excel(tmp_path):
     assert len(ctx.sales_data) > 0
 
 
+def test_build_forecast_page_context_accepts_today_parameter(tmp_path):
+    """build_forecast_page_context must thread an explicit today to the projection engine."""
+    from src.backend.forecast_config import ForecastConfig
+    from src.backend.operational_views import build_forecast_page_context
+
+    db = _make_db_with_sales()
+    config = ForecastConfig()
+    specific_today = date(2026, 5, 15)
+    ctx = build_forecast_page_context(tmp_path, config, db, {"year": "2026", "month": "5"}, today=specific_today)
+    assert ctx.target.year == 2026
+    assert ctx.target.month == 5
+
+
 # ---------------------------------------------------------------------------
 # _patch_latest_order_dates — current-month daily actuals update ForecastRow
 # ---------------------------------------------------------------------------
