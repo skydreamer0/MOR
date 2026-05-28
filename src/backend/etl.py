@@ -221,7 +221,10 @@ def sync_excel_to_db(db: MORDatabase, project_root: Path, config_file: str = "ex
 
     # ── Step 3: Post-commit cleanup (best-effort, outside transaction) ─────────
     if sales_rows is not None:
-        _clear_covered_current_month_records(db, sales_rows)
+        try:
+            _clear_covered_current_month_records(db, sales_rows)
+        except Exception:
+            logger.warning("current_month_records cleanup failed; stale rows may remain.", exc_info=True)
 
 
 def normalize_sales_records(df_sales: pd.DataFrame) -> pd.DataFrame:
