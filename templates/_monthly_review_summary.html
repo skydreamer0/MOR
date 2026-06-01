@@ -1,0 +1,42 @@
+{# ── 月度總覽（含稅淨額為主） ── #}
+{% import "_monthly_review_macros.html" as review_ui %}
+<section class="workbench-panel review-section" aria-labelledby="review-overview-title">
+  <h3 id="review-overview-title" class="review-section-title">月度總覽（金額為含稅淨額）</h3>
+  <div class="review-overview-grid">
+    <div class="review-metric-card">
+      <span class="review-metric-label">實際金額</span>
+      <strong class="review-metric-value">{{ "{:,.0f}".format(summary.actual_amount_total) }}</strong>
+      <span class="review-metric-sub">{{ summary.rows | length }} 筆客戶品項</span>
+    </div>
+
+    <div class="review-metric-card {% if summary.budget_amount_achievement_total is not none and summary.budget_amount_achievement_total < 1 %}review-metric-card--risk{% elif summary.budget_amount_achievement_total is not none and summary.budget_amount_achievement_total >= 1 %}review-metric-card--ok{% endif %}">
+      <span class="review-metric-label">預算達成</span>
+      <strong class="review-metric-value">{{ review_ui.achievement(summary.budget_amount_achievement_total) }}</strong>
+      {% if summary.budget_amount_achievement_total is not none %}
+        <span class="review-metric-sub">預算 {{ "{:,.0f}".format(summary.budget_amount_total) }}</span>
+      {% else %}
+        <span class="review-metric-sub">預算 -</span>
+      {% endif %}
+    </div>
+
+    <div class="review-metric-card {% if summary.yoy_amount_growth_total is not none and summary.yoy_amount_growth_total < 1 %}review-metric-card--risk{% elif summary.yoy_amount_growth_total is not none and summary.yoy_amount_growth_total >= 1 %}review-metric-card--ok{% endif %}">
+      <span class="review-metric-label">YoY</span>
+      <strong class="review-metric-value">{{ review_ui.yoy(summary.yoy_amount_growth_total) }}</strong>
+      {% if summary.yoy_amount_growth_total is not none %}
+        <span class="review-metric-sub">去年 {{ "{:,.0f}".format(summary.last_year_amount_total) }}</span>
+      {% else %}
+        <span class="review-metric-sub">去年 -</span>
+      {% endif %}
+    </div>
+
+    <div class="review-metric-card {% if summary.forecast_amount_accuracy_total is not none and (summary.forecast_amount_accuracy_total < 0.85 or summary.forecast_amount_accuracy_total > 1.15) %}review-metric-card--risk{% elif summary.forecast_amount_accuracy_total is not none and summary.forecast_amount_accuracy_total >= 0.95 and summary.forecast_amount_accuracy_total <= 1.05 %}review-metric-card--ok{% endif %}">
+      <span class="review-metric-label">預估準確率</span>
+      <strong class="review-metric-value">{{ review_ui.accuracy(summary.forecast_amount_accuracy_total) }}</strong>
+      {% if summary.forecast_amount_total > 0 %}
+        <span class="review-metric-sub">預估 {{ "{:,.0f}".format(summary.forecast_amount_total) }}</span>
+      {% else %}
+        <span class="review-metric-sub">預估 -</span>
+      {% endif %}
+    </div>
+  </div>
+</section>

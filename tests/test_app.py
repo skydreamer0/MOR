@@ -45,6 +45,110 @@ def _client_with_sales(config: dict | None = None):
     return app.create_app(app_config).test_client()
 
 
+def _seed_monthly_review_route_data(db_base: Path) -> None:
+    from src.backend.database import get_db
+
+    db = get_db(db_base)
+
+    def insert_actuals(year: int, month: int, rows: list[dict]) -> None:
+        with db.get_connection() as conn:
+            conn.execute(
+                """INSERT INTO daily_import_batches
+                (source_filename, source_hash, sales_year, sales_month,
+                 row_count, quantity_total, taxed_amount_total, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'success')""",
+                (
+                    f"{year}-{month:02d}.xlsx", f"route-{year}-{month}",
+                    year, month, len(rows),
+                    sum(r["qty"] for r in rows),
+                    sum(r["amount"] for r in rows),
+                ),
+            )
+            batch_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+            for row in rows:
+                conn.execute(
+                    """INSERT INTO daily_sales_actuals
+                    (sales_year, sales_month, sales_date, customer_name, product_code,
+                     actual_quantity, taxed_amount, bonus_basis_amount, net_unit_price,
+                     import_batch_id, customer_code, product_name, sales_quantity, gift_quantity)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, '', ?, ?, 0)""",
+                    (
+                        year, month, f"{year}-{month:02d}-10",
+                        row["customer"], row["product"], row["qty"], row["amount"],
+                        row["amount"] / row["qty"], batch_id, row["name"], row["qty"],
+                    ),
+                )
+            conn.commit()
+
+    def close_month(year: int, month: int, snapshot_rows: list[dict]) -> None:
+        with db.get_connection() as conn:
+            cursor = conn.execute(
+                """INSERT INTO forecast_snapshots
+                (snapshot_name, snapshot_type, year, month, created_by)
+                VALUES (?, 'CloseMonth', ?, ?, 'test')""",
+                (f"close {year}/{month:02d}", year, month),
+            )
+            snapshot_id = cursor.lastrowid
+            for row in snapshot_rows:
+                conn.execute(
+                    """INSERT INTO snapshot_items
+                    (snapshot_id, customer_name, product_code, system_forecast, final_forecast)
+                    VALUES (?, ?, ?, ?, ?)""",
+                    (snapshot_id, row["customer"], row["product"], row["forecast"], row["forecast"]),
+                )
+            conn.execute(
+                """INSERT INTO month_close_records
+                (year, month, actual_row_count, actual_quantity_total,
+                 actual_amount_total, final_snapshot_id)
+                VALUES (?, ?, ?, ?, ?, ?)""",
+                (
+                    year, month, len(snapshot_rows),
+                    sum(r["forecast"] for r in snapshot_rows),
+                    0.0, snapshot_id,
+                ),
+            )
+            conn.commit()
+
+    insert_actuals(2026, 3, [
+        {"customer": "Hospital A", "product": "P1", "name": "Product One", "qty": 300, "amount": 30000},
+    ])
+    close_month(2026, 3, [{"customer": "Hospital A", "product": "P1", "forecast": 280}])
+    insert_actuals(2026, 4, [
+        {"customer": "Hospital A", "product": "P1", "name": "Product One", "qty": 200, "amount": 20000},
+    ])
+    close_month(2026, 4, [{"customer": "Hospital A", "product": "P1", "forecast": 210}])
+    insert_actuals(2025, 5, [
+        {"customer": "Hospital A", "product": "P1", "name": "Product One", "qty": 120, "amount": 12000},
+        {"customer": "Dormant C", "product": "P4", "name": "Product Four", "qty": 40, "amount": 4000},
+    ])
+    close_month(2025, 5, [
+        {"customer": "Hospital A", "product": "P1", "forecast": 120},
+        {"customer": "Dormant C", "product": "P4", "forecast": 40},
+    ])
+    insert_actuals(2026, 5, [
+        {"customer": "Hospital A", "product": "P1", "name": "Product One", "qty": 80, "amount": 8000},
+        {"customer": "Hospital A", "product": "P2", "name": "Product Two", "qty": 20, "amount": 2000},
+        {"customer": "Clinic B", "product": "P3", "name": "Product Three", "qty": 50, "amount": 5000},
+    ])
+    close_month(2026, 5, [
+        {"customer": "Hospital A", "product": "P1", "forecast": 90},
+        {"customer": "Hospital A", "product": "P2", "forecast": 10},
+        {"customer": "Clinic B", "product": "P3", "forecast": 40},
+    ])
+    with db.get_connection() as conn:
+        conn.execute(
+            """INSERT INTO budget_targets
+            (year, month, customer_name, product_code, target_quantity, target_amount)
+            VALUES (2026, 5, 'Hospital A', 'P1', 100, 12000)"""
+        )
+        conn.execute(
+            """INSERT INTO budget_targets
+            (year, month, customer_name, product_code, target_quantity, target_amount)
+            VALUES (2026, 5, 'Clinic B', 'P3', 50, 5000)"""
+        )
+        conn.commit()
+
+
 def _seed_sales_from_legacy_df(db_base: Path, data: pd.DataFrame) -> None:
     """Seed sales_records from a Chinese-column DataFrame (converts legacy test data to DB rows)."""
     from src.backend.database import get_db
@@ -197,6 +301,45 @@ def test_monthly_review_defaults_to_latest_closed_sales_month(monkeypatch):
     assert '<a href="/monthly-review" aria-current="page">月底檢討</a>' in html
     assert "2026/04" in html   # latest month shown in picker
     assert "840" in html       # actual_amount_total (含稅淨額) rendered in overview cards
+
+
+def test_monthly_review_renders_real_sections_with_closed_month_data():
+    db_base_path = _isolated_db_base()
+    _seed_monthly_review_route_data(db_base_path)
+    client = _client({"DB_BASE_PATH": db_base_path})
+
+    response = client.get("/monthly-review?year=2026&month=5")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "月度總覽（金額為含稅淨額）" in html
+    assert "近 12 個月趨勢（金額）" in html
+    assert '<svg class="review-trend-svg"' in html
+    assert 'points="' in html
+    assert "行動清單" in html
+    assert "本月優先處理" in html
+    assert "review-priority-board" in html
+    assert "老闆報告摘要" in html
+    assert "預估模型檢討" in html
+    assert "客戶面總覽" in html
+    assert "品項 Top" in html
+    assert "預估準確度" in html
+    assert "完整明細" in html
+    assert "review-detail-filter" in html
+    assert "review-detail-search" in html
+    assert "Hospital A" in html
+    assert "Product One" in html
+    assert "Clinic B" in html
+    assert "Dormant C" in html
+    assert "準確率" in html
+    assert "達成率" in html
+    assert "YoY" in html
+    assert "66.7%" in html
+    assert "83.3%" in html
+    assert '本月失準 <span class="badge status-high">2</span>' in html
+    assert 'data-search="hospital a p1 product one"' in html
+    assert "data-anomaly=\"1\"" in html
+    assert 'src="/static/js/monthly-review.js"' in html
 
 
 def test_frontend_pages_load_htmx_assets():
@@ -1324,6 +1467,29 @@ def test_monthly_review_page_loads_without_data():
     assert response.status_code == 200
     assert "月底檢討" in html
     assert "尚無結月資料" in html
+    assert 'js/monthly-review.js' in html
+    assert "querySelectorAll('tbody tr')" not in html
+
+
+def test_monthly_review_template_uses_section_partials():
+    template = Path("templates/monthly_review.html").read_text(encoding="utf-8")
+    summary_partial = Path("templates/_monthly_review_summary.html").read_text(encoding="utf-8")
+    tables_partial = Path("templates/_monthly_review_tables.html").read_text(encoding="utf-8")
+    detail_partial = Path("templates/_monthly_review_detail.html").read_text(encoding="utf-8")
+    macros = Path("templates/_monthly_review_macros.html").read_text(encoding="utf-8")
+    assert '{% include "_monthly_review_summary.html" %}' in template
+    assert '{% include "_monthly_review_insights.html" %}' in template
+    assert '{% include "_monthly_review_tables.html" %}' in template
+    assert '{% include "_monthly_review_detail.html" %}' in template
+    assert template.count("workbench-panel review-section") <= 1
+    assert "namespace(" not in summary_partial
+    assert "chart_w" not in summary_partial
+    assert "{% macro yoy(" in macros
+    assert "_monthly_review_macros.html" in summary_partial
+    assert "_monthly_review_macros.html" in tables_partial
+    assert "_monthly_review_macros.html" in detail_partial
+    assert "{% set y =" not in tables_partial
+    assert "{% set yoy =" not in detail_partial
 
 
 def test_close_month_auto_saves_forecast_snapshot():

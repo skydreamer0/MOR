@@ -1,0 +1,74 @@
+{# ── 完整明細 ── #}
+{% import "_monthly_review_macros.html" as review_ui %}
+<section class="workbench-panel review-section" aria-labelledby="review-detail-title">
+  <div class="workbench-toolbar review-detail-toolbar">
+    <h3 id="review-detail-title" class="review-section-title">完整明細</h3>
+    <div class="review-detail-controls">
+      <label>
+        搜尋
+        <input type="search" id="review-detail-search" placeholder="客戶或品項">
+      </label>
+      <label>
+        篩選
+        <select id="review-detail-filter">
+          <option value="all">全部</option>
+          <option value="anomaly">只看異常</option>
+          <option value="yoy">YoY 下滑</option>
+          <option value="budget">低於預算</option>
+          <option value="forecast">預估失準</option>
+        </select>
+      </label>
+      <label class="review-anomaly-toggle">
+        <input type="checkbox" id="review-only-anomalies"> 只看異常
+      </label>
+      <span id="review-detail-count" class="review-detail-count">{{ summary.rows | length }} 筆</span>
+    </div>
+  </div>
+  <div class="table-wrap workbench-table-shell">
+    <table class="review-table" id="review-detail-table">
+      <thead>
+        <tr>
+          <th>客戶</th><th>品項</th>
+          <th class="num">實際數量</th>
+          <th class="num">實際金額</th>
+          <th class="num">預估金額</th>
+          <th class="num">預估 GAP</th>
+          <th class="num">去年同期</th>
+          <th class="num">YoY</th>
+          <th class="num">預算</th>
+          <th class="num">達成率</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in summary.rows %}
+        {% set is_anomaly = (row.yoy_amount_growth is not none and row.yoy_amount_growth < 0.8)
+                          or (row.budget_amount_achievement is not none and row.budget_amount_achievement < 0.9)
+                          or (row.forecast_amount_accuracy is not none and (row.forecast_amount_accuracy < 0.85 or row.forecast_amount_accuracy > 1.15)) %}
+        {% set is_yoy_risk = row.yoy_amount_growth is not none and row.yoy_amount_growth < 1 %}
+        {% set is_budget_risk = row.budget_amount_achievement is not none and row.budget_amount_achievement < 1 %}
+        {% set is_forecast_risk = row.forecast_amount_accuracy is not none and (row.forecast_amount_accuracy < 0.85 or row.forecast_amount_accuracy > 1.15) %}
+        <tr data-anomaly="{{ '1' if is_anomaly else '0' }}"
+            data-yoy-risk="{{ '1' if is_yoy_risk else '0' }}"
+            data-budget-risk="{{ '1' if is_budget_risk else '0' }}"
+            data-forecast-risk="{{ '1' if is_forecast_risk else '0' }}"
+            data-search="{{ (row.customer_name ~ ' ' ~ row.product_code ~ ' ' ~ row.product_name) | lower | e }}">
+          <td>{{ row.customer_name }}</td>
+          <td>{{ row.product_name or row.product_code }}</td>
+          <td class="num">{{ "{:,.0f}".format(row.actual_quantity) }}</td>
+          <td class="num">{{ "{:,.0f}".format(row.actual_amount) }}</td>
+          <td class="num">{{ "{:,.0f}".format(row.forecast_amount) if row.forecast_amount > 0 else "-" }}</td>
+          <td class="num">
+            {% if row.forecast_amount > 0 %}
+              {{ review_ui.signed_amount_gap(row.forecast_amount_gap) }}
+            {% else %}<span class="muted">-</span>{% endif %}
+          </td>
+          <td class="num">{{ "{:,.0f}".format(row.last_year_amount) if row.last_year_amount > 0 else "-" }}</td>
+          <td class="num">{{ review_ui.yoy(row.yoy_amount_growth) }}</td>
+          <td class="num">{{ "{:,.0f}".format(row.budget_amount) if row.budget_amount > 0 else "-" }}</td>
+          <td class="num">{{ review_ui.achievement(row.budget_amount_achievement) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>

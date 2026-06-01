@@ -535,10 +535,6 @@ table {
   min-width: 980px;
 }
 
-.monthly-review-table {
-  min-width: 1080px;
-}
-
 .forecast-table__row--collapsed {
   display: none;
 }
@@ -613,18 +609,6 @@ tr[data-row].row-detail-active td {
 tbody tr:last-child td {
   border-bottom: none;
 }
-
-.monthly-review-table tfoot th,
-.monthly-review-table tfoot td {
-  position: sticky;
-  bottom: 0;
-  z-index: 2;
-  border-top: 1px solid var(--line);
-  border-bottom: none;
-  background: var(--panel);
-  font-weight: 700;
-}
-
 
 /* ── Phase 3: Row states — clear visual hierarchy ──────────── */
 tr.excluded td {
@@ -3044,6 +3028,16 @@ details[open] .discontinued-toggle {
   border: 1px solid var(--line);
 }
 
+.review-metric-card--risk {
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
+}
+
+.review-metric-card--ok {
+  background: var(--success-bg);
+  border-color: var(--success-border);
+}
+
 .review-metric-label {
   font-size: var(--text-xs);
   color: var(--muted);
@@ -3119,13 +3113,13 @@ details[open] .discontinued-toggle {
 
 .review-secondary-metrics {
   margin-top: 16px;
-  border-top: 1px dashed var(--mor-border, #e5e7eb);
+  border-top: 1px dashed var(--line);
   padding-top: 12px;
 }
 .review-secondary-metrics > summary {
   cursor: pointer;
   font-size: 13px;
-  color: var(--mor-muted, #6b7280);
+  color: var(--muted);
   margin-bottom: 8px;
   user-select: none;
 }
@@ -3139,7 +3133,7 @@ details[open] .discontinued-toggle {
 }
 .review-anomaly-toggle {
   font-size: 13px;
-  color: var(--mor-muted, #6b7280);
+  color: var(--muted);
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -3147,11 +3141,159 @@ details[open] .discontinued-toggle {
 }
 .review-growth-panel .small { font-size: 12px; margin: -4px 0 6px; }
 
+.review-main .gap-value.falling { color: var(--danger); }
+.review-main .gap-value.rising { color: var(--success-text); }
+
+.review-priority-board {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+}
+
+.review-priority-column {
+  border: 1px solid var(--line);
+  background: var(--surface-elevated);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-3);
+  min-width: 0;
+}
+
+.review-priority-column h4 {
+  margin: 0 0 var(--sp-2);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--text-sm);
+}
+
+.review-priority-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.review-priority-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+  padding-bottom: var(--sp-2);
+  border-bottom: 1px dashed var(--line-subtle);
+}
+
+.review-priority-list li:last-child { border-bottom: 0; padding-bottom: 0; }
+
+.review-priority-main {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review-priority-reason {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.review-priority-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+.review-priority-tag--risk {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border: 1px solid var(--danger-border);
+}
+
+.review-priority-tag--model {
+  background: var(--warning-bg);
+  color: var(--warning-text);
+  border: 1px solid var(--warning-border);
+}
+
+.review-report-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 1.4fr) minmax(220px, 1fr) minmax(220px, 1fr);
+  gap: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+}
+
+.review-report-note {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+}
+
+.review-report-note strong {
+  font-size: var(--text-base);
+  color: var(--ink);
+}
+
+.review-report-note span {
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+.review-report-points h4 {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--text-sm);
+}
+
+.review-detail-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+.review-detail-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.review-detail-controls input,
+.review-detail-controls select {
+  height: var(--control-compact-h);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--ink);
+  padding: 0 var(--sp-2);
+  font-size: var(--text-sm);
+}
+
+.review-detail-count {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
 .review-customer-drill > summary {
   cursor: pointer;
   user-select: none;
 }
-.review-customer-drill[open] > summary { color: var(--mor-accent, #2563eb); }
+.review-customer-drill[open] > summary { color: var(--accent); }
 .review-customer-products {
   margin-top: 8px;
   width: 100%;
@@ -3161,9 +3303,9 @@ details[open] .discontinued-toggle {
 .review-customer-products th,
 .review-customer-products td {
   padding: 4px 6px;
-  border-bottom: 1px dashed var(--mor-border, #e5e7eb);
+  border-bottom: 1px dashed var(--line);
 }
-.review-customer-products th { color: var(--mor-muted, #6b7280); font-weight: 500; }
+.review-customer-products th { color: var(--muted); font-weight: 500; }
 .review-customer-products td.num,
 .review-customer-products th.num { text-align: right; }
 
@@ -3172,7 +3314,7 @@ details[open] .discontinued-toggle {
 .review-trend-svg { width: 100%; height: auto; max-height: 260px; }
 .review-chart-legend {
   display: flex; gap: 16px; align-items: center;
-  font-size: 12px; color: var(--mor-muted, #6b7280); margin: 4px 0 8px;
+  font-size: 12px; color: var(--muted); margin: 4px 0 8px;
 }
 .review-chart-legend .swatch {
   display: inline-block; width: 18px; height: 3px; vertical-align: middle;
@@ -3195,4 +3337,6 @@ details[open] .discontinued-toggle {
 @media (max-width: 768px) {
   .review-overview-grid { grid-template-columns: 1fr 1fr; }
   .review-growth-grid   { grid-template-columns: 1fr; }
+  .review-priority-board,
+  .review-report-grid { grid-template-columns: 1fr; }
 }
