@@ -170,14 +170,24 @@ def test_monthly_review_defaults_to_latest_closed_sales_month(monkeypatch):
 
     stub_summary = MonthlyReviewSummary(
         year=2026, month=4, closed_at="2026-05-01T00:00:00",
-        actual_quantity_total=8.0, actual_amount_total=840.0,
-        forecast_quantity_total=8.0, budget_quantity_total=8.0,
-        last_year_quantity_total=6.0, last_year_amount_total=567.0,
+        actual_quantity_total=8.0, forecast_quantity_total=8.0,
+        budget_quantity_total=8.0, last_year_quantity_total=6.0,
+        actual_amount_total=840.0, forecast_amount_total=840.0,
+        budget_amount_total=840.0, last_year_amount_total=567.0,
         forecast_accuracy_total=1.0, yoy_growth_total=1.33,
-        budget_achievement_total=1.0, rows=[],
+        budget_achievement_total=1.0,
+        forecast_amount_accuracy_total=1.0,
+        yoy_amount_growth_total=1.48,
+        budget_amount_achievement_total=1.0,
+        rows=[],
     )
     monkeypatch.setattr(app, "list_reviewable_months", lambda db: [(2026, 4), (2026, 3)])
     monkeypatch.setattr(app, "build_monthly_review", lambda db, y, m: stub_summary)
+    monkeypatch.setattr(app, "build_action_lists", lambda db, y, m: None)
+    monkeypatch.setattr(app, "build_customer_summary", lambda db, y, m: None)
+    monkeypatch.setattr(app, "build_forecast_bias", lambda db, y, m: None)
+    monkeypatch.setattr(app, "build_product_summary", lambda db, y, m: None)
+    monkeypatch.setattr(app, "build_trend", lambda db, y, m: None)
 
     client = _client()
     response = client.get("/monthly-review")
@@ -186,7 +196,7 @@ def test_monthly_review_defaults_to_latest_closed_sales_month(monkeypatch):
     assert response.status_code == 200
     assert '<a href="/monthly-review" aria-current="page">月底檢討</a>' in html
     assert "2026/04" in html   # latest month shown in picker
-    assert "840" in html       # actual_amount_total rendered in overview cards
+    assert "840" in html       # actual_amount_total (含稅淨額) rendered in overview cards
 
 
 def test_frontend_pages_load_htmx_assets():
@@ -1344,6 +1354,29 @@ def test_close_month_auto_saves_forecast_snapshot():
     from src.backend.snapshot_service import load_snapshot_items
     items = load_snapshot_items(db, rec["final_snapshot_id"])
     assert len(items) >= 1  # at least one forecast row saved
+
+
+def test_forecast_page_labels_close_month_snapshot_and_hides_delete_action():
+    db_base_path = _isolated_db_base()
+    _seed_db_sales(db_base_path, _minimal_sales_rows())
+
+    from src.backend.database import get_db
+    from src.backend.snapshot_service import save_snapshot
+
+    db = get_db(db_base_path)
+    save_snapshot(db, 2026, 5, "Draft snapshot", "Draft", [])
+    save_snapshot(db, 2026, 5, "CloseMonth snapshot", "CloseMonth", [], created_by="close-month")
+    client = _client({"DB_BASE_PATH": db_base_path})
+
+    html = client.get("/forecast?year=2026&month=5").get_data(as_text=True)
+
+    assert "CloseMonth" in html
+    assert "Draft" in html
+    close_month_block = html.split("Draft snapshot", 1)[0]
+    draft_block = html.split("Draft snapshot", 1)[1]
+    assert "CloseMonth snapshot" in close_month_block
+    assert 'action="/snapshots/delete"' not in close_month_block
+    assert 'action="/snapshots/delete"' in draft_block
 
 
 def test_product_monitor_shows_close_button_after_import():

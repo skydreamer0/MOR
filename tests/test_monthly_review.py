@@ -38,11 +38,12 @@ def _insert_actuals(db: MORDatabase, year: int, month: int, rows: list[dict]) ->
                  actual_quantity, taxed_amount, import_batch_id,
                  customer_code, product_name, sales_quantity, gift_quantity,
                  net_unit_price, bonus_basis_amount)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', '', ?, 0, 0, 0)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, 0, ?, ?)
                 """,
                 (year, month, f"{year}-{month:02d}-10",
                  r["customer"], r["product"], r["qty"], r["amount"],
-                 batch_id, r["qty"]),
+                 batch_id, r.get("name", ""), r["qty"],
+                 r.get("price", 0), r.get("pretax", r["amount"])),
             )
         conn.commit()
 
@@ -172,6 +173,88 @@ def test_budget_achievement_computed_from_budget_targets(tmp_path: Path):
     assert row.budget_quantity == 100
     assert row.budget_achievement == pytest.approx(0.9)
     assert summary.budget_achievement_total == pytest.approx(0.9)
+
+
+def test_product_name_resolved_from_actuals(tmp_path: Path):
+    db = _db(tmp_path)
+    _insert_actuals(db, 2026, 5, [
+        {"customer": "A", "product": "P1", "qty": 100, "amount": 10000, "name": "蘋果汁"},
+    ])
+    sid = _insert_snapshot(db, 2026, 5, [{"customer": "A", "product": "P1", "fcst": 90}])
+    _close_month(db, 2026, 5, sid)
+
+    summary = build_monthly_review(db, 2026, 5)
+
+    assert summary.rows[0].product_name == "蘋果汁"
+
+
+def test_product_name_falls_back_to_sales_records_for_forecast_only_row(tmp_path: Path):
+    """Row in snapshot but no actuals this month: name should come from historical sales_records."""
+    db = _db(tmp_path)
+    _insert_actuals(db, 2026, 5, [
+        {"customer": "A", "product": "P1", "qty": 100, "amount": 10000, "name": "蘋果汁"},
+    ])
+    sid = _insert_snapshot(db, 2026, 5, [
+        {"customer": "A", "product": "P1", "fcst": 90},
+        {"customer": "B", "product": "P2", "fcst": 50},
+    ])
+    _close_month(db, 2026, 5, sid)
+    # P2 only appears historically in sales_records
+    with db.get_connection() as conn:
+        conn.execute(
+            "INSERT INTO sales_records (order_date, customer_name, product_code, product_name, quantity, unit_price, amount)"
+            " VALUES ('2025-10-01', 'B', 'P2', '葡萄汁', 30, 0, 0)",
+        )
+        conn.commit()
+
+    summary = build_monthly_review(db, 2026, 5)
+    by_product = {r.product_code: r for r in summary.rows}
+
+    assert by_product["P1"].product_name == "蘋果汁"
+    assert by_product["P2"].product_name == "葡萄汁"
+
+
+def test_last_year_amount_uses_daily_actuals_when_last_year_closed(tmp_path: Path):
+    db = _db(tmp_path)
+    # Current month
+    _insert_actuals(db, 2026, 5, [
+        {"customer": "A", "product": "P1", "qty": 120, "amount": 12000, "pretax": 11000},
+    ])
+    sid_cur = _insert_snapshot(db, 2026, 5, [{"customer": "A", "product": "P1", "fcst": 110}])
+    _close_month(db, 2026, 5, sid_cur)
+    # Last year same month — closed (so should use daily_sales_actuals not sales_records)
+    _insert_actuals(db, 2025, 5, [
+        {"customer": "A", "product": "P1", "qty": 100, "amount": 9000, "pretax": 8500},
+    ])
+    sid_ly = _insert_snapshot(db, 2025, 5, [{"customer": "A", "product": "P1", "fcst": 100}])
+    _close_month(db, 2025, 5, sid_ly)
+
+    summary = build_monthly_review(db, 2026, 5)
+    row = summary.rows[0]
+
+    assert row.last_year_quantity == 100
+    # taxed amount (current behavior — locked for now; may shift to pretax later)
+    assert row.last_year_amount == 9000
+
+
+def test_forecast_only_row_has_zero_actuals(tmp_path: Path):
+    """Row in snapshot but not in actuals: should appear with actual=0, forecast set."""
+    db = _db(tmp_path)
+    _insert_actuals(db, 2026, 5, [
+        {"customer": "A", "product": "P1", "qty": 50, "amount": 5000},
+    ])
+    sid = _insert_snapshot(db, 2026, 5, [
+        {"customer": "A", "product": "P1", "fcst": 60},
+        {"customer": "B", "product": "P2", "fcst": 40},
+    ])
+    _close_month(db, 2026, 5, sid)
+
+    summary = build_monthly_review(db, 2026, 5)
+    by_id = {(r.customer_name, r.product_code): r for r in summary.rows}
+
+    assert by_id[("B", "P2")].actual_quantity == 0
+    assert by_id[("B", "P2")].forecast_quantity == 40
+    assert by_id[("B", "P2")].forecast_gap == -40
 
 
 def test_list_reviewable_months_only_includes_snapshot_linked_months(tmp_path: Path):

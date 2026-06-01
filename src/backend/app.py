@@ -12,6 +12,12 @@ from flask_caching import Cache
 from src.backend.data_validator import validate_budget_coverage, validate_health
 from src.backend.dashboard_analytics_workflow import build_dashboard_template_context
 from src.backend.monthly_review import build_monthly_review, list_reviewable_months
+from src.backend.monthly_review_actions import build_action_lists
+from src.backend.monthly_review_customers import build_customer_summary
+from src.backend.monthly_review_export import export_monthly_review
+from src.backend.monthly_review_forecast_bias import build_forecast_bias
+from src.backend.monthly_review_products import build_product_summary
+from src.backend.monthly_review_trend import build_trend
 from src.backend.data_loader import default_target_from_data, default_target_from_db, latest_closed_month_from_data, load_sales_detail
 from src.backend.exporter import export_forecast
 from src.backend.forecast_config import ForecastConfig
@@ -422,10 +428,20 @@ def create_app(config: dict | None = None) -> Flask:
         year  = request.args.get("year",  type=int) or (reviewable[0][0] if reviewable else 0)
         month = request.args.get("month", type=int) or (reviewable[0][1] if reviewable else 0)
         summary = None
+        action_lists = None
+        customer_summary = None
+        product_summary = None
+        forecast_bias = None
+        trend_series = None
         error_message = None
         if year and month:
             try:
                 summary = build_monthly_review(db, year, month)
+                action_lists = build_action_lists(db, year, month)
+                customer_summary = build_customer_summary(db, year, month)
+                product_summary = build_product_summary(db, year, month)
+                forecast_bias = build_forecast_bias(db, year, month)
+                trend_series = build_trend(db, year, month)
             except Exception as exc:
                 error_message = str(exc)
         return render_template(
@@ -433,8 +449,38 @@ def create_app(config: dict | None = None) -> Flask:
             year=year,
             month=month,
             summary=summary,
+            action_lists=action_lists,
+            customer_summary=customer_summary,
+            product_summary=product_summary,
+            forecast_bias=forecast_bias,
+            trend_series=trend_series,
             reviewable_months=reviewable,
             error_message=error_message,
+        )
+
+    @app.get("/monthly-review/export.xlsx")
+    def monthly_review_export() -> Response:
+        year  = request.args.get("year",  type=int)
+        month = request.args.get("month", type=int)
+        if not (year and month):
+            return Response("missing year/month", status=400)
+        try:
+            summary = build_monthly_review(db, year, month)
+        except Exception as exc:
+            return Response(str(exc), status=400)
+        wb = export_monthly_review(
+            summary,
+            actions=build_action_lists(db, year, month),
+            customers=build_customer_summary(db, year, month),
+            products=build_product_summary(db, year, month),
+            bias=build_forecast_bias(db, year, month),
+            trend=build_trend(db, year, month),
+        )
+        filename = f"monthly_review_{year}-{month:02d}.xlsx"
+        return Response(
+            wb.getvalue(),
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
         )
 
     @app.get("/items")

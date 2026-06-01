@@ -3117,6 +3117,81 @@ details[open] .discontinued-toggle {
 .review-table td.num,
 .review-table th.num { text-align: right; }
 
+.review-secondary-metrics {
+  margin-top: 16px;
+  border-top: 1px dashed var(--mor-border, #e5e7eb);
+  padding-top: 12px;
+}
+.review-secondary-metrics > summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--mor-muted, #6b7280);
+  margin-bottom: 8px;
+  user-select: none;
+}
+.review-metric-card-sm .review-metric-value { font-size: 1.05rem; }
+
+.review-detail-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.review-anomaly-toggle {
+  font-size: 13px;
+  color: var(--mor-muted, #6b7280);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.review-growth-panel .small { font-size: 12px; margin: -4px 0 6px; }
+
+.review-customer-drill > summary {
+  cursor: pointer;
+  user-select: none;
+}
+.review-customer-drill[open] > summary { color: var(--mor-accent, #2563eb); }
+.review-customer-products {
+  margin-top: 8px;
+  width: 100%;
+  font-size: 12px;
+  border-collapse: collapse;
+}
+.review-customer-products th,
+.review-customer-products td {
+  padding: 4px 6px;
+  border-bottom: 1px dashed var(--mor-border, #e5e7eb);
+}
+.review-customer-products th { color: var(--mor-muted, #6b7280); font-weight: 500; }
+.review-customer-products td.num,
+.review-customer-products th.num { text-align: right; }
+
+.review-export-actions { display: inline-flex; gap: 8px; margin-left: auto; }
+
+.review-trend-svg { width: 100%; height: auto; max-height: 260px; }
+.review-chart-legend {
+  display: flex; gap: 16px; align-items: center;
+  font-size: 12px; color: var(--mor-muted, #6b7280); margin: 4px 0 8px;
+}
+.review-chart-legend .swatch {
+  display: inline-block; width: 18px; height: 3px; vertical-align: middle;
+  margin-right: 4px; border-radius: 2px;
+}
+.review-chart-legend .swatch-actual   { background: #2563eb; }
+.review-chart-legend .swatch-forecast { background: #f97316; }
+.review-chart-legend .swatch-budget   { background: #16a34a; }
+
+@media print {
+  .site-header, .site-nav, .toolbar-controls, .review-export-actions,
+  .review-anomaly-toggle { display: none !important; }
+  .workbench-panel { box-shadow: none; border: 1px solid #ddd; break-inside: avoid; }
+  .review-section { break-inside: avoid; }
+  .review-customer-drill > summary { list-style: none; }
+  .review-customer-drill[open] .review-customer-products { display: none; }
+  body { background: #fff; }
+}
+
 @media (max-width: 768px) {
   .review-overview-grid { grid-template-columns: 1fr 1fr; }
   .review-growth-grid   { grid-template-columns: 1fr; }
