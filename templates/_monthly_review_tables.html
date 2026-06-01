@@ -1,0 +1,129 @@
+{# ── 客戶面總覽 ── #}
+{% import "_monthly_review_macros.html" as review_ui %}
+{% if customer_summary and customer_summary.rows %}
+<section class="workbench-panel review-section" aria-labelledby="review-customer-title">
+  <h3 id="review-customer-title" class="review-section-title">客戶面總覽（Top {{ customer_summary.rows | length }}）</h3>
+  <div class="table-wrap workbench-table-shell">
+    <table class="review-table review-customer-table">
+      <thead>
+        <tr>
+          <th class="num" style="width:48px">#</th>
+          <th>客戶</th>
+          <th class="num">實際金額</th>
+          <th class="num">去年同期</th>
+          <th class="num">YoY</th>
+          <th class="num">預算</th>
+          <th class="num">達成率</th>
+          <th class="num">排名變化</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in customer_summary.rows %}
+        <tr>
+          <td class="num">{{ c.rank }}</td>
+          <td>
+            {% if c.products %}
+            <details class="review-customer-drill">
+              <summary>{{ c.customer_name }}</summary>
+              <table class="review-customer-products">
+                <thead><tr><th>品項</th><th class="num">數量</th><th class="num">金額</th><th class="num">去年</th><th class="num">YoY</th></tr></thead>
+                <tbody>
+                  {% for p in c.products %}
+                  <tr>
+                    <td>{{ p.product_name or p.product_code }}</td>
+                    <td class="num">{{ "{:,.0f}".format(p.actual_quantity) }}</td>
+                    <td class="num">{{ "{:,.0f}".format(p.actual_amount) }}</td>
+                    <td class="num">{{ "{:,.0f}".format(p.last_year_amount) if p.last_year_amount > 0 else "-" }}</td>
+                    <td class="num">{{ review_ui.yoy(p.yoy_growth) }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </details>
+            {% else %}{{ c.customer_name }}{% endif %}
+          </td>
+          <td class="num">{{ "{:,.0f}".format(c.actual_amount) }}</td>
+          <td class="num">{{ "{:,.0f}".format(c.last_year_amount) if c.last_year_amount > 0 else "-" }}</td>
+          <td class="num">{{ review_ui.yoy(c.yoy_growth) }}</td>
+          <td class="num">{{ "{:,.0f}".format(c.budget_amount) if c.budget_amount > 0 else "-" }}</td>
+          <td class="num">{{ review_ui.achievement(c.budget_achievement) }}</td>
+          <td class="num">{{ review_ui.rank_change(c.rank, c.last_year_rank) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{# ── 品項 Top 20 ── #}
+{% if product_summary and product_summary.rows %}
+<section class="workbench-panel review-section" aria-labelledby="review-product-title">
+  <h3 id="review-product-title" class="review-section-title">品項 Top {{ product_summary.rows | length }}（依金額）</h3>
+  <div class="table-wrap workbench-table-shell">
+    <table class="review-table">
+      <thead>
+        <tr>
+          <th class="num" style="width:48px">#</th>
+          <th>品項</th>
+          <th class="num">數量</th>
+          <th class="num">金額</th>
+          <th class="num">佔比</th>
+          <th class="num">去年同期</th>
+          <th class="num">YoY</th>
+          <th class="num">排名變化</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in product_summary.rows %}
+        <tr>
+          <td class="num">{{ p.rank }}</td>
+          <td>{{ p.product_name or p.product_code }}</td>
+          <td class="num">{{ "{:,.0f}".format(p.actual_quantity) }}</td>
+          <td class="num">{{ "{:,.0f}".format(p.actual_amount) }}</td>
+          <td class="num">{{ "{:.1f}%".format(p.revenue_share * 100) }}</td>
+          <td class="num">{{ "{:,.0f}".format(p.last_year_amount) if p.last_year_amount > 0 else "-" }}</td>
+          <td class="num">{{ review_ui.yoy(p.yoy_growth) }}</td>
+          <td class="num">{{ review_ui.rank_change(p.rank, p.last_year_rank) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{# ── 預估準確度（依金額誤差排序） ── #}
+{% if summary.rows | selectattr("forecast_amount", "gt", 0) | list %}
+<section class="workbench-panel review-section" aria-labelledby="review-accuracy-title">
+  <h3 id="review-accuracy-title" class="review-section-title">預估準確度（金額誤差最大 Top 20）</h3>
+  <div class="table-wrap workbench-table-shell">
+    <table class="review-table">
+      <thead>
+        <tr>
+          <th>客戶</th><th>品項</th>
+          <th class="num">實際金額</th>
+          <th class="num">預估金額</th>
+          <th class="num">GAP</th>
+          <th class="num">準確率</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set accuracy_rows = summary.rows
+           | selectattr("forecast_amount", "gt", 0)
+           | sort(attribute="forecast_amount_gap") | list %}
+        {% for row in (accuracy_rows[:10] + accuracy_rows[-10:]) | unique(attribute="product_code") %}
+        <tr>
+          <td>{{ row.customer_name }}</td>
+          <td>{{ row.product_name or row.product_code }}</td>
+          <td class="num">{{ "{:,.0f}".format(row.actual_amount) }}</td>
+          <td class="num">{{ "{:,.0f}".format(row.forecast_amount) }}</td>
+          <td class="num">{{ review_ui.signed_amount_gap(row.forecast_amount_gap) }}</td>
+          <td class="num">{{ review_ui.accuracy(row.forecast_amount_accuracy) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}

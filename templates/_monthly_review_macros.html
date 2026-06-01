@@ -1,0 +1,44 @@
+{% macro yoy(growth) -%}
+  {%- if growth is not none -%}
+    {%- set y = (growth - 1) * 100 -%}
+    <span class="gap-value {% if y < 0 %}falling{% elif y > 0 %}rising{% endif %}">{{ "{:+.1f}%".format(y) }}</span>
+  {%- else -%}
+    <span class="muted">-</span>
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro achievement(value) -%}
+  {%- if value is not none -%}
+    {%- set pct = value * 100 -%}
+    <span class="{% if pct >= 100 %}success-text{% elif pct >= 90 %}rate-warning{% else %}danger-text{% endif %}">{{ "{:.1f}%".format(pct) }}</span>
+  {%- else -%}
+    <span class="muted">-</span>
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro accuracy(value) -%}
+  {%- if value is not none -%}
+    {%- set pct = value * 100 -%}
+    <span class="{% if pct >= 95 %}success-text{% elif pct >= 85 %}rate-warning{% else %}danger-text{% endif %}">{{ "{:.1f}%".format(pct) }}</span>
+  {%- else -%}
+    <span class="muted">-</span>
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro rank_change(current_rank, last_year_rank) -%}
+  {%- if last_year_rank is none -%}
+    <span class="success-text">新進</span>
+  {%- elif last_year_rank == current_rank -%}
+    <span class="muted">—</span>
+  {%- elif last_year_rank > current_rank -%}
+    <span class="rising">↑{{ last_year_rank - current_rank }}</span>
+  {%- else -%}
+    <span class="falling">↓{{ current_rank - last_year_rank }}</span>
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro signed_amount_gap(value) -%}
+  <span class="gap-value {% if value < 0 %}falling{% elif value > 0 %}rising{% endif %}">
+    {{ "{:+,.0f}".format(value) }}
+  </span>
+{%- endmacro %}
