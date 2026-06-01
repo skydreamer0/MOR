@@ -22,7 +22,7 @@ We strictly follow Conventional Commits: `<type>(<scope>): <subject>`
 ## 3. Pull Request / Code Review Rules
 - **Testing:** No PR can be merged without passing tests (`pytest -q`).
 - **Context:** Every PR must include a description linking to the specific phase of the Implementation Plan.
-- **Documentation:** If the PR changes domain boundaries or APIs, the `infrastructure/` documentation MUST be updated simultaneously.
+- **Documentation:** If the PR changes domain boundaries or APIs, update the relevant `docs/architecture/`, `docs/design/`, or `docs/adr/` file at the same time.
 
 ## 4. Coding Standards
 - **Python:** Use Type Hints (`-> list[dict]`, `: str`). Ensure variables are `snake_case`.

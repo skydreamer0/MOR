@@ -8,7 +8,7 @@ Use this checklist before Codex changes MOR code, templates, tests, or docs. It 
 
 1. Restate the task in one sentence.
 2. List files to inspect or change before editing.
-3. Read only active docs in `docs/workflows/` and `infrastructure/` when workflow context is needed.
+3. Read only active docs in `docs/workflows/`, `docs/architecture/`, `docs/design/`, and `docs/adr/` when workflow context is needed.
 4. Never read `docs/archive/` or files prefixed with `superseded-` for implementation context.
 5. Check `git status --short` and do not touch unrelated user changes.
 

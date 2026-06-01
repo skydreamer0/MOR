@@ -8,7 +8,7 @@ This is a staged UI cleanup plan. Do not implement all phases in one batch.
 
 ## Current Status
 
-- Phase 0 inventory: completed in `docs/design/ui-design-system-phase-0-inventory.md`.
+- Phase 0 inventory: completed and archived; use this roadmap plus `DESIGN.md` for current UI work.
 - Phase 1 UI tokens: completed for font stack, control size tokens, app title size, and metric value scale.
 - Phase 2 buttons and form controls: completed for base controls, compact toolbar buttons, short inline action buttons, icon-only overrides, and Google Inter removal.
 - Phase 3 page toolbars: completed for forecast, monitor, and settings shared toolbar structure.

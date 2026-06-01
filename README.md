@@ -228,8 +228,7 @@ flowchart TD
     root --> templates_dir["templates<br/>多頁操作介面"]
     root --> static_dir["static<br/>CSS 與小型 JS 模組"]
     root --> tests_dir["tests<br/>回歸測試"]
-    root --> infra["infrastructure<br/>架構、ADR、規劃文件"]
-    root --> docs["docs<br/>設計、工作流程、驗證文件"]
+    root --> docs["docs<br/>架構、ADR、設計、工作流程、驗證文件"]
     root --> config_files["README.md / ROADMAP.md / DESIGN.md / AGENTS.md<br/>專案與開發指引"]
     root --> req["requirements.txt<br/>Python 相依套件"]
 
@@ -262,12 +261,8 @@ flowchart TD
     docs --> workflow_docs["workflows<br/>Codex 與操作流程"]
     docs --> design_docs["design<br/>資料模型、API、預估邏輯"]
     docs --> arch_docs["architecture<br/>專題架構紀錄"]
+    docs --> adr_docs["adr<br/>架構決策"]
     docs --> verification_docs["verification<br/>瀏覽器驗證紀錄"]
-
-    infra --> adr["adr<br/>架構決策"]
-    infra --> plans["plans<br/>實作與路線規劃"]
-    infra --> api["api<br/>API 規格"]
-    infra --> standards["standards<br/>Git workflow"]
 ```
 
 ```text
@@ -304,10 +299,10 @@ templates/settings.html        系統設定 / 資料檢核頁
 templates/monthly_review.html  結月後檢討頁
 static/                        靜態資源
 tests/                         單元測試與路由測試
-infrastructure/                目前架構、ADR、API、schema、規劃文件
 docs/workflows/                目前 Codex 與本地操作流程
 docs/design/                   前端 / 資料模型 / 預估邏輯參考文件
 docs/architecture/             專題架構紀錄
+docs/adr/                      架構決策紀錄
 DESIGN.md                      UI 設計系統規範
 AGENTS.md                      AI Agent 開發指引
 requirements.txt               Python 相依清單

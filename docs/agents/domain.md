@@ -7,7 +7,7 @@ How engineering skills should consume domain documentation in this repo.
 This repo is configured as **single-context**.
 
 - Read root `CONTEXT.md` when present.
-- Read relevant ADRs in `infrastructure/adr/` when present.
+- Read relevant ADRs in `docs/adr/` when present.
 - If these files are missing, proceed without blocking.
 
 ## Usage rules

@@ -5,14 +5,15 @@ Use this file to keep AI and human collaborators from reading stale plans by def
 ## Read First
 
 - `README.md` — current product and architecture overview.
-- `ROADMAP.md` — current work queue and near-term backlog.
+- `ROADMAP.md` — current work queue, near-term backlog, and active refactor order.
 - `AGENTS.md` — MOR-specific coding and documentation rules.
 
 ## Read By Task
 
-- Backend routes or forecast behavior: `src/backend/*`, `tests/*`, then `infrastructure/project_architecture_and_implementation_plan.md` only if architectural context is needed.
-- Database or DB-first request work: `infrastructure/backend/database_schema.md`.
-- UI work: `DESIGN.md`, `docs/design/frontend-logic-architecture.md`, and relevant templates/static files.
+- Planning or prioritization: `ROADMAP.md`.
+- Backend routes or forecast behavior: `src/backend/*`, `tests/*`, then `docs/architecture/current-architecture.md` only if architectural context is needed.
+- Database or DB-first request work: `docs/architecture/database_schema.md`.
+- UI work: `DESIGN.md`, `docs/design/ui-design-system-roadmap.md` when changing shared UI structure, and relevant templates/static files.
 - Local setup or browser verification: `docs/workflows/local-setup.md`.
 - Agent workflow: `docs/workflows/codex-operation-guardrails.md` and `docs/workflows/mor-skills.md`.
 
@@ -20,5 +21,6 @@ Use this file to keep AI and human collaborators from reading stale plans by def
 
 - `docs/archive/`
 - files prefixed with `superseded-`
+- old implementation plans not referenced by `ROADMAP.md`
 
-Historical implementation plans were moved to `docs/archive/plans/` after their useful decisions were absorbed into the active docs above.
+Historical implementation plans and one-off review artifacts are moved to `docs/archive/plans/` after their useful decisions are absorbed into `ROADMAP.md`.

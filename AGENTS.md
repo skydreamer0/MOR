@@ -128,7 +128,7 @@ requirements.txt               Python dependency list
 - Keep the UI compact, operational, and table-first.
 - Do not create landing pages, hero sections, decorative gradients, or marketing-style cards.
 - Preserve sticky table headers, right-aligned numbers, clear status badges, and the fixed export/total bar.
-- For frontend architecture guidance, read `docs/design/frontend-logic-architecture.md`.
+- For frontend design-system guidance, read `DESIGN.md` and `docs/design/ui-design-system-roadmap.md`.
 - For local setup and browser verification, read `docs/workflows/local-setup.md`.
 
 ## Documentation Rules
@@ -142,7 +142,7 @@ Update documentation when changing:
 - Agent workflow or testing instructions.
 
 Use concise Markdown. Prefer diagrams only when they clarify flow or ownership.
-**IMPORTANT:** Codex and AI subagents MUST ONLY read active docs in `infrastructure/` and `docs/workflows/`. They MUST NEVER read files in `docs/archive/` or any file prefixed with `superseded-` for implementation context.
+**IMPORTANT:** Codex and AI subagents MUST ONLY read active docs in `docs/architecture/`, `docs/adr/`, `docs/design/`, and `docs/workflows/`. They MUST NEVER read files in `docs/archive/` or any file prefixed with `superseded-` for implementation context.
 
 For MOR-specific prompt and skill workflows, see:
 
@@ -216,4 +216,4 @@ Triage uses the default five-label vocabulary (`needs-triage`, `needs-info`, `re
 
 ### Domain docs
 
-This repo is configured as single-context; use root `CONTEXT.md` (when present) and `infrastructure/adr/`. See `docs/agents/domain.md`.
+This repo is configured as single-context; use root `CONTEXT.md` (when present) and `docs/adr/`. See `docs/agents/domain.md`.

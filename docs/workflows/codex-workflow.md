@@ -151,10 +151,11 @@ Do not write code until the plan is approved.
 ## MOR-Specific Notes
 
 - For UI work, read `DESIGN.md` first.
-- For architecture and roadmap work, use `infrastructure/project_architecture_and_implementation_plan.md`.
-- For API behavior, use `infrastructure/api/api_spec.md`.
-- For data model and persistence decisions, use `infrastructure/backend/database_schema.md`.
-- For architecture decisions, use `infrastructure/adr/`.
+- For planning and roadmap work, use `ROADMAP.md`.
+- For architecture context, use `docs/architecture/current-architecture.md`.
+- For API behavior, use `docs/design/api-spec.md`.
+- For data model and persistence decisions, use `docs/architecture/database_schema.md`.
+- For architecture decisions, use `docs/adr/`.
 - For local setup, verification, and Codex operating rules, use `docs/workflows/`.
 - Do not use `docs/archive/` or any `superseded-*` file as implementation context.
 - For any Excel behavior change, add or update tests before implementation.
