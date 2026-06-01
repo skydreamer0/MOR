@@ -97,6 +97,11 @@ class TestSaveSnapshot:
         with pytest.raises(ValueError, match="已定稿"):
             save_snapshot(db, 2026, 5, "定稿 2", "Final", _sample_rows())
 
+    def test_prevents_duplicate_close_month(self, db):
+        save_snapshot(db, 2026, 5, "CloseMonth 1", "CloseMonth", _sample_rows())
+        with pytest.raises(ValueError):
+            save_snapshot(db, 2026, 5, "CloseMonth 2", "CloseMonth", _sample_rows())
+
 
 class TestListSnapshots:
     def test_empty(self, db):
@@ -148,4 +153,9 @@ class TestDeleteSnapshot:
     def test_prevents_deleting_final(self, db):
         sid = save_snapshot(db, 2026, 5, "定稿", "Final", _sample_rows())
         with pytest.raises(ValueError, match="無法刪除"):
+            delete_snapshot(db, sid)
+
+    def test_prevents_deleting_close_month(self, db):
+        sid = save_snapshot(db, 2026, 5, "CloseMonth", "CloseMonth", _sample_rows())
+        with pytest.raises(ValueError):
             delete_snapshot(db, sid)

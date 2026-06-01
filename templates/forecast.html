@@ -35,13 +35,13 @@
           {% for snap in snapshots %}
           <div class="snapshot-item">
             <div class="snapshot-info">
-              <span class="badge {% if snap.snapshot_type == 'Final' %}{% else %}off{% endif %}">
-                {{ 'Final' if snap.snapshot_type == 'Final' else 'Draft' }}
+              <span class="badge {% if snap.snapshot_type in ['Final', 'CloseMonth'] %}{% else %}off{% endif %}">
+                {{ snap.snapshot_type if snap.snapshot_type in ['Final', 'CloseMonth'] else 'Draft' }}
               </span>
               <strong>{{ snap.snapshot_name }}</strong>
               <span class="snapshot-meta">{{ snap.created_at[:16] }} · {{ snap.row_count }} 列 · {{ snap.created_by }}</span>
             </div>
-            {% if snap.snapshot_type != 'Final' %}
+            {% if snap.snapshot_type == 'Draft' %}
             <form action="/snapshots/delete" method="post" class="snapshot-action" onsubmit="return confirm('確定刪除此草稿？')">
               <input type="hidden" name="snapshot_id" value="{{ snap.id }}">
               <input type="hidden" name="year" value="{{ year }}">

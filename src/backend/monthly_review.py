@@ -114,12 +114,13 @@ def build_monthly_review(
 
     actuals    = _load_actuals(db, year, month)
     forecasts  = _load_forecasts(db, close_rec["final_snapshot_id"])
-    budgets    = _load_budgets(db, year, month)
-    last_year  = _load_last_year(db, year, month)
     name_map   = _load_product_names(db)
-    fb_prices  = _load_fallback_prices(db, year, month)
+    price_quantities = _load_price_quantities(db)
+    budgets    = _load_budgets(db, year, month)
+    last_year  = _load_last_year(db, year, month, price_quantities)
+    fb_prices  = _load_fallback_prices(db, year, month, price_quantities)
 
-    rows = _merge_rows(actuals, forecasts, budgets, last_year, name_map, fb_prices)
+    rows = _merge_rows(actuals, forecasts, budgets, last_year, name_map, fb_prices, price_quantities)
     return _make_summary(year, month, close_rec["closed_at"], rows)
 
 
@@ -201,7 +202,29 @@ def _load_product_names(db: MORDatabase) -> dict[str, str]:
     return name_map
 
 
-def _load_fallback_prices(db: MORDatabase, year: int, month: int) -> dict[str, float]:
+def _load_price_quantities(db: MORDatabase) -> dict[str, float]:
+    with db.get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT product_code, price_quantity
+            FROM   item_configs
+            WHERE  price_quantity > 0
+            """
+        ).fetchall()
+    return {r["product_code"]: float(r["price_quantity"] or 0) for r in rows if r["product_code"]}
+
+
+def _quantity_multiplier(product_code: str, price_quantities: dict[str, float]) -> float:
+    multiplier = price_quantities.get(product_code, 0.0)
+    return multiplier if multiplier > 0 else 1.0
+
+
+def _load_fallback_prices(
+    db: MORDatabase,
+    year: int,
+    month: int,
+    price_quantities: dict[str, float] | None = None,
+) -> dict[str, float]:
     """Most recent net unit price observed before the reviewed month.
 
     Used to derive a forecast amount for rows that had no actual sale this
@@ -209,6 +232,7 @@ def _load_fallback_prices(db: MORDatabase, year: int, month: int) -> dict[str, f
     Keyed by row identity (customer, product).
     """
     prices: dict[str, float] = {}
+    price_quantities = price_quantities or {}
     period_start = f"{year}-{month:02d}-01"
     with db.get_connection() as conn:
         # Closed months — weighted average 含稅淨額單價 over each row's history.
@@ -223,7 +247,7 @@ def _load_fallback_prices(db: MORDatabase, year: int, month: int) -> dict[str, f
             """,
             (period_start,),
         ).fetchall():
-            qty = float(r["qty"] or 0)
+            qty = float(r["qty"] or 0) * _quantity_multiplier(r["product_code"], price_quantities)
             amt = float(r["amt"] or 0)
             if qty > 0 and amt > 0:
                 prices[make_row_id(r["customer_name"], r["product_code"])] = amt / qty
@@ -292,12 +316,18 @@ def _load_budgets(db: MORDatabase, year: int, month: int) -> dict[str, dict]:
     }
 
 
-def _load_last_year(db: MORDatabase, year: int, month: int) -> dict[str, dict]:
+def _load_last_year(
+    db: MORDatabase,
+    year: int,
+    month: int,
+    price_quantities: dict[str, float] | None = None,
+) -> dict[str, dict]:
     """Prefer daily_sales_actuals for closed last-year months, fallback to sales_records.
 
     All amounts are 含稅淨額.
     """
     ly_year = year - 1
+    price_quantities = price_quantities or {}
 
     with db.get_connection() as conn:
         closed = conn.execute(
@@ -331,13 +361,17 @@ def _load_last_year(db: MORDatabase, year: int, month: int) -> dict[str, dict]:
                 (str(ly_year), f"{month:02d}"),
             ).fetchall()
 
-    return {
-        make_row_id(r["customer_name"], r["product_code"]): {
-            "qty":    float(r["qty"] or 0),
+    result = {}
+    for r in rows:
+        product_code = r["product_code"]
+        qty = float(r["qty"] or 0)
+        if closed:
+            qty *= _quantity_multiplier(product_code, price_quantities)
+        result[make_row_id(r["customer_name"], product_code)] = {
+            "qty":    qty,
             "amount": float(r["amount"] or 0),
         }
-        for r in rows
-    }
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -351,9 +385,11 @@ def _merge_rows(
     last_year: dict[str, dict],
     name_map: dict[str, str] | None = None,
     fallback_prices: dict[str, float] | None = None,
+    price_quantities: dict[str, float] | None = None,
 ) -> list[ReviewRow]:
     name_map = name_map or {}
     fallback_prices = fallback_prices or {}
+    price_quantities = price_quantities or {}
     all_ids = set(actuals) | set(forecasts) | set(budgets)
 
     rows = []
@@ -365,7 +401,8 @@ def _merge_rows(
 
         identity = parse_row_id(row_id)
 
-        act_qty  = a.get("qty", 0.0)
+        product_code = a.get("product_code", identity.product_code)
+        act_qty  = a.get("qty", 0.0) * _quantity_multiplier(product_code, price_quantities)
         act_amt  = a.get("amount", 0.0)
         fcst_qty = f.get("final_forecast", 0.0)
         bud_qty  = b.get("target_quantity", 0.0)
@@ -373,7 +410,6 @@ def _merge_rows(
         ly_qty   = ly.get("qty", 0.0)
         ly_amt   = ly.get("amount", 0.0)
 
-        product_code = a.get("product_code", identity.product_code)
         product_name = a.get("product_name") or name_map.get(product_code, "")
 
         # 含稅淨額單價 — used solely to derive forecast amount; never displayed.

@@ -53,6 +53,16 @@ def _close_with_snapshot(db, year, month, actuals, forecasts):
         conn.commit()
 
 
+def _set_price_quantity(db, product, price_quantity):
+    with db.get_connection() as conn:
+        conn.execute(
+            "INSERT INTO item_configs (product_code, price_quantity) VALUES (?, ?) "
+            "ON CONFLICT(product_code) DO UPDATE SET price_quantity = excluded.price_quantity",
+            (product, price_quantity),
+        )
+        conn.commit()
+
+
 def test_over_forecast_flagged_when_forecast_consistently_exceeds_actual(tmp_path):
     db = _db(tmp_path)
     # 3 months: forecast 100 qty * price 10 = 1000 forecast, actual 80 qty * price 10 = 800
@@ -98,3 +108,18 @@ def test_steady_forecast_not_flagged(tmp_path):
         if (r.customer_name, r.product_code) == ("C", "P3")
     ]
     assert flagged == []
+
+
+def test_pack_quantity_does_not_create_false_over_forecast_bias(tmp_path):
+    db = _db(tmp_path)
+    _set_price_quantity(db, "P4", 280)
+    _close_with_snapshot(
+        db, 2026, 5,
+        actuals=[{"customer": "D", "product": "P4", "qty": 10, "amount": 2800}],
+        forecasts=[{"customer": "D", "product": "P4", "fcst": 2800}],
+    )
+
+    bias = build_forecast_bias(db, 2026, 5, lookback=1)
+
+    assert bias.over_forecast == []
+    assert bias.under_forecast == []

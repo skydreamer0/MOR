@@ -81,6 +81,8 @@ def save_snapshot(
     """
     if snapshot_type == "Final" and is_finalized(db, year, month):
         raise ValueError(f"{year}/{month:02d} 已定稿，無法重複定稿。")
+    if snapshot_type == "CloseMonth" and _has_snapshot_type(db, year, month, "CloseMonth"):
+        raise ValueError(f"{year}/{month:02d} 已關帳，無法重複關帳。")
 
     with db.get_connection() as conn:
         cursor = conn.execute("""
@@ -169,12 +171,17 @@ def load_snapshot_items(
 
 def is_finalized(db: MORDatabase, year: int, month: int) -> bool:
     """Check whether a month has been marked as Final."""
+    return _has_snapshot_type(db, year, month, "Final")
+
+
+def _has_snapshot_type(db: MORDatabase, year: int, month: int, snapshot_type: str) -> bool:
+    """Check whether a month already has a snapshot of the given type."""
     with db.get_connection() as conn:
         row = conn.execute("""
             SELECT COUNT(*) AS cnt
             FROM forecast_snapshots
-            WHERE year = ? AND month = ? AND snapshot_type = 'Final'
-        """, (year, month)).fetchone()
+            WHERE year = ? AND month = ? AND snapshot_type = ?
+        """, (year, month, snapshot_type)).fetchone()
     return row["cnt"] > 0
 
 
@@ -186,7 +193,7 @@ def delete_snapshot(db: MORDatabase, snapshot_id: int) -> None:
             "SELECT snapshot_type FROM forecast_snapshots WHERE id = ?",
             (snapshot_id,)
         ).fetchone()
-        if meta and meta["snapshot_type"] == "Final":
+        if meta and meta["snapshot_type"] in {"Final", "CloseMonth"}:
             raise ValueError("無法刪除已定稿的快照。")
 
         conn.execute("DELETE FROM snapshot_items WHERE snapshot_id = ?", (snapshot_id,))

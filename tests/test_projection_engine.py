@@ -13,6 +13,7 @@ from src.backend.projection_engine import (
     _workdays_between,
     batch_project_eom,
 )
+from src.backend.row_identity import make_row_id
 
 
 # ---------------------------------------------------------------------------
@@ -231,7 +232,7 @@ def _insert_sales(db: MORDatabase, rows: list[dict]) -> None:
 def _forecast_row(customer: str, product: str, cycle: int = 20) -> "ForecastRow":
     from src.backend.forecast_models import ForecastRow
     return ForecastRow(
-        row_id=f"{customer}__{product}",
+        row_id=make_row_id(customer, product),
         customer=customer,
         product_code=product,
         product_name="Test",
@@ -403,3 +404,29 @@ def test_batch_project_eom_cycle_reflects_current_month_when_long_gap(tmp_path: 
     assert results_with["H__P1"].workday_cycle is not None
     # cycle should be greater than the tight 5-workday average because the long gap is included
     assert results_with["H__P1"].workday_cycle > 5
+
+
+def test_batch_project_eom_uses_canonical_row_identity_for_delimiter_collisions(tmp_path: Path):
+    db = _db(tmp_path)
+    first = make_row_id("A__B", "C")
+    second = make_row_id("A", "B__C")
+    history_dates = [date(2025, 11, 3) + timedelta(days=28 * i) for i in range(6)]
+    _insert_sales(db, [
+        {"date": d.isoformat(), "customer": "A__B", "product": "C", "qty": 10}
+        for d in history_dates
+    ] + [
+        {"date": d.isoformat(), "customer": "A", "product": "B__C", "qty": 20}
+        for d in history_dates
+    ])
+
+    results = batch_project_eom(
+        db,
+        [_forecast_row("A__B", "C"), _forecast_row("A", "B__C")],
+        {},
+        date(2026, 5, 10),
+        2026,
+        5,
+    )
+
+    assert results[first].typical_qty_per_shipment == 10
+    assert results[second].typical_qty_per_shipment == 20

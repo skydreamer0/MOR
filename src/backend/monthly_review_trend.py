@@ -128,9 +128,22 @@ def _forecast_amount(db: MORDatabase, year: int, month: int) -> float:
             GROUP BY customer_name, product_code""",
             (year, month),
         ).fetchall()
+        price_quantity_rows = conn.execute(
+            """SELECT product_code, price_quantity
+            FROM item_configs
+            WHERE price_quantity > 0"""
+        ).fetchall()
+    price_quantities = {
+        r["product_code"]: float(r["price_quantity"] or 0)
+        for r in price_quantity_rows
+        if r["product_code"]
+    }
     price = {
         (r["customer_name"], r["product_code"]):
-            (float(r["amt"] or 0) / float(r["qty"])) if r["qty"] else 0.0
+            (
+                float(r["amt"] or 0)
+                / (float(r["qty"]) * _quantity_multiplier(r["product_code"], price_quantities))
+            ) if r["qty"] else 0.0
         for r in price_rows
     }
     total = 0.0
@@ -140,3 +153,8 @@ def _forecast_amount(db: MORDatabase, year: int, month: int) -> float:
         if qty > 0 and p > 0:
             total += qty * p
     return total
+
+
+def _quantity_multiplier(product_code: str, price_quantities: dict[str, float]) -> float:
+    multiplier = price_quantities.get(product_code, 0.0)
+    return multiplier if multiplier > 0 else 1.0

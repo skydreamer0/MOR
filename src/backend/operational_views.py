@@ -1,33 +1,37 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
-from datetime import date, timedelta
+from dataclasses import dataclass, replace
+from datetime import date
 from pathlib import Path
 from typing import Iterable, Mapping
 
 import pandas as pd
 
 from src.backend.analytics import AnalyticsSlice
+from src.backend.amount_calculation import (
+    amount_for_quantity,
+    forecast_amount_total as _forecast_amount_total,
+    is_amount_included,
+    last_year_amount_total as _last_year_amount_total,
+    latest_price_quantity,
+    recalculate_forecast_amounts as _recalculate_forecast_amounts,
+)
 from src.backend.daily_sales_importer import DailyActualAggregate
 from src.backend.data_loader import normalize_product_code
 from src.backend.forecast_config import ForecastConfig
 from src.backend.forecast_models import ForecastRow, ForecastSummary, ForecastTarget
+from src.backend.forecast_workbench_inputs import BudgetTarget
+from src.backend.product_monitor_rows import (
+    ProductMonitorRow,
+    _cycle_status_info,
+    _fetch_monthly_history,
+    _three_axis_status,
+    _to_monitor_row as _build_product_monitor_row,
+    build_product_monitor_rows as _build_product_monitor_rows,
+    is_high_risk_drop,
+)
 from src.backend.projection_engine import ProjectionResult
-from src.backend.workday_calendar import fetch_workday_set
-
-
-DROP_RISK_THRESHOLD = 0.9
-
-# Phase 3 thresholds for cycle-delay risk
-_CYCLE_HIGH_MULTIPLIER = 1.2
-_CYCLE_CAUTION_MULTIPLIER = 0.8
-
-
-@dataclass(frozen=True)
-class BudgetTarget:
-    target_quantity: float
-    target_amount: float
-    base_target_quantity: float = 0.0
+from src.backend.row_identity import make_row_id
 
 
 @dataclass(frozen=True)
@@ -44,50 +48,6 @@ class DashboardMetrics:
     amount_gap: float
     high_risk_product_count: int
     high_risk_customer_count: int
-
-
-@dataclass(frozen=True)
-class ProductMonitorRow:
-    customer: str
-    product_code: str
-    product_name: str
-    last_year_quantity: float
-    last_month_quantity: float
-    current_quantity: float
-    forecast_quantity: float
-    diff_quantity: float
-    drop_rate: float | None
-    status: str
-    status_key: str
-    note: str
-    latest_price: float = 0.0
-    amount_impact: float = 0.0
-    # Phase 3: new monitoring axes
-    latest_order_date: date | None = None
-    days_since_last_shipment_workdays: int | None = None
-    estimated_eom_qty: float = 0.0         # system forecast (Phase 4 refines this)
-    yoy_growth_rate: float | None = None   # final_forecast / last_year (ratio)
-    budget_achievement_rate: float | None = None  # final_forecast / budget (ratio)
-    cycle_status: str = "no_cycle"         # "delayed" | "approaching" | "ok" | "no_cycle"
-    cycle_days: int | None = None
-    budget_quantity: float = 0.0
-    # Phase 4: projection model details
-    remaining_shipments: int = 0
-    typical_qty_per_shipment: float = 0.0
-    projection_confidence: str = "low"
-    # Phase 5: three-axis amount comparison
-    current_taxed_amount: float = 0.0   # 本月目前含稅淨額（daily actuals）
-    estimated_eom_amount: float = 0.0   # 推估月底金額
-    final_forecast_amount: float = 0.0  # 最終預估金額（= ForecastRow.estimated_amount）
-    last_year_amount: float = 0.0       # 去年同期金額（0 = 無資料，顯示 -）
-    budget_amount: float = 0.0          # 本月預算金額
-    # Phase 6: inter-shipment workday gap history
-    gap_history: list[int] = field(default_factory=list)  # workday gaps oldest→newest
-    gap_trend: str = "none"    # "rising" | "falling" | "stable" | "none"
-    gap_trend_delta: int = 0   # recent_avg − overall_avg (workdays, signed)
-    # Phase 7: last-N-months comparison table
-    monthly_history: list[dict] = field(default_factory=list)
-    # each dict: {year, month, label, actual, budget, last_year}
 
 
 @dataclass(frozen=True)
@@ -108,36 +68,6 @@ class DataHealthSummary:
     missing_budget_row_count: int
     zero_price_row_count: int
     no_last_year_row_count: int
-
-
-@dataclass(frozen=True)
-class ForecastPageContext:
-    target: ForecastTarget
-    sales_data: pd.DataFrame
-    summary: ForecastSummary
-    dashboard: DashboardMetrics
-    monitor_rows: list[ProductMonitorRow]
-    health: DataHealthSummary
-    items: list[dict]
-
-    @property
-    def rows(self) -> list[ForecastRow]:
-        return self.summary.rows
-
-
-@dataclass
-class _ForecastInputs:
-    """All raw data loaded from DB before any forecast computation."""
-    data: pd.DataFrame
-    item_configs: dict
-    excluded_item_ids: frozenset
-    manual_adjustments: dict
-    adjustment_reasons: dict
-    budget_targets: dict
-    budget_year_map: dict
-    budget_year_amount_map: dict
-    budget_months: list
-    daily_actuals: dict
 
 
 @dataclass(frozen=True)
@@ -196,6 +126,14 @@ def build_forecast_page_context(
     from src.backend.forecast_workbench_context import build
 
     return build(forecast_config, db, target_source, today=today)
+
+
+def __getattr__(name: str):
+    if name == "ForecastPageContext":
+        from src.backend.forecast_workbench_context import ForecastPageContext
+
+        return ForecastPageContext
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def build_monthly_review_report(context: ForecastPageContext) -> MonthlyReviewReport:
@@ -272,22 +210,19 @@ def build_dashboard_metrics(
 
 
 def forecast_amount_total(rows: Iterable[ForecastRow]) -> float:
-    return sum(_dashboard_amount(row.final_forecast, row) for row in rows if _is_amount_included(row))
+    return _forecast_amount_total(rows)
 
 
 def last_year_amount_total(rows: Iterable[ForecastRow]) -> float:
-    return sum(_dashboard_amount(row.last_year_same_month_qty, row) for row in rows if not row.excluded)
+    return _last_year_amount_total(rows)
 
 
 def recalculate_forecast_amounts(rows: Iterable[ForecastRow]) -> list[ForecastRow]:
-    return [
-        replace(row, estimated_amount=_dashboard_amount(row.final_forecast, row) if _is_amount_included(row) else 0.0)
-        for row in rows
-    ]
+    return _recalculate_forecast_amounts(rows)
 
 
 def _is_amount_included(row: ForecastRow) -> bool:
-    return not row.excluded and row.budget_quantity > 0
+    return is_amount_included(row)
 
 
 def _target_totals(
@@ -312,22 +247,15 @@ def _target_totals(
 
 
 def _dashboard_amount(quantity: float, row: ForecastRow) -> float:
-    return _amount_from_latest_order_price(quantity, row)
+    return amount_for_quantity(quantity, row)
 
 
 def _amount_from_latest_order_price(quantity: float, row: ForecastRow) -> float:
-    price_quantity = _latest_price_quantity(row)
-    if price_quantity <= 0:
-        return quantity * row.latest_price
-    return quantity / price_quantity * row.latest_price
+    return amount_for_quantity(quantity, row)
 
 
 def _latest_price_quantity(row: ForecastRow) -> float:
-    if row.price_quantity > 0:
-        return row.price_quantity
-    if row.budget_quantity > 0 and row.base_budget_quantity > 0:
-        return row.budget_quantity / row.base_budget_quantity
-    return 1.0
+    return latest_price_quantity(row)
 
 
 def _to_monthly_review_row(row: ForecastRow, month_index: int) -> MonthlyReviewRow:
@@ -367,37 +295,14 @@ def build_product_monitor_rows(
     projections: Mapping[str, ProjectionResult] | None = None,
     target_month: int = 0,
 ) -> list[ProductMonitorRow]:
-    today = today or date.today()
-    actuals = daily_actuals or {}
-    projs = projections or {}
-    workday_set = fetch_workday_set(db, today - timedelta(days=400), today) if db is not None else None
-
-    active_rows = [row for row in rows if not row.excluded]
-    monitor_rows = [
-        _to_monitor_row(row, actuals.get(row.row_id), workday_set, today, projs.get(row.row_id), target_month)
-        for row in active_rows
-    ]
-
-    # Attach last-6-month history (single batch query)
-    if db is not None:
-        closed_months = _get_last_closed_months(db, 6)
-        if closed_months:
-            row_ids = [(r.customer, r.product_code) for r in active_rows]
-            histories = _fetch_monthly_history(db, row_ids, closed_months)
-            monitor_rows = [
-                replace(r, monthly_history=histories.get(f"{r.customer}__{r.product_code}", []))
-                for r in monitor_rows
-            ]
-
-    status_order = {"high": 0, "caution": 1, "ok": 2, "no_history": 3}
-    return sorted(
-        monitor_rows,
-        key=lambda r: (
-            status_order.get(r.status_key, 3),
-            r.budget_achievement_rate if r.budget_achievement_rate is not None else float("inf"),
-            r.yoy_growth_rate if r.yoy_growth_rate is not None else float("inf"),
-            -(r.days_since_last_shipment_workdays or 0),
-        ),
+    return _build_product_monitor_rows(
+        rows,
+        daily_actuals=daily_actuals,
+        db=db,
+        today=today,
+        projections=projections,
+        target_month=target_month,
+        amount_for_quantity=_dashboard_amount,
     )
 
 
@@ -421,72 +326,22 @@ def build_data_health_summary(
     )
 
 
-def is_high_risk_drop(row: ForecastRow) -> bool:
-    return row.last_year_same_month_qty > 0 and row.final_forecast < row.last_year_same_month_qty * DROP_RISK_THRESHOLD
-
-
 def build_items_from_sales_data(data: pd.DataFrame, db) -> list[dict]:
-    unique_products = data[["商品號", "商品簡稱"]].drop_duplicates("商品號")
-    item_configs = load_item_configs(db)
-    items = []
-    for _, row in unique_products.iterrows():
-        product_code = normalize_product_code(row["商品號"])
-        config = item_configs.get(
-            product_code,
-            {
-                "is_excluded": False,
-                "is_budgeted": True,
-                "is_visible": True,
-                "price_quantity": 0.0,
-                "item_status": "active",
-            },
-        )
-        items.append(
-            {
-                "product_code": product_code,
-                "product_name": row["商品簡稱"],
-                **config,
-            }
-        )
-    return items
+    from src.backend.forecast_workbench_inputs import build_items_from_sales_data as _impl
+
+    return _impl(data, db)
 
 
 def load_item_configs(db) -> dict[str, dict]:
-    with db.get_connection() as conn:
-        rows = conn.execute("SELECT * FROM item_configs").fetchall()
-    configs: dict[str, dict] = {}
-    for row in rows:
-        entry = {
-            "is_excluded": bool(row["is_excluded"]),
-            "is_budgeted": bool(row["is_budgeted"]),
-            "is_visible": bool(row["is_visible"]),
-            "price_quantity": float(row["price_quantity"] or 0),
-            "item_status": _normalize_item_status(row["item_status"], row["status_label"]),
-        }
-        configs[row["product_code"]] = entry
-        configs.setdefault(normalize_product_code(row["product_code"]), entry)
-    return configs
+    from src.backend.forecast_workbench_inputs import load_item_configs as _impl
+
+    return _impl(db)
 
 
 def load_adjustments(db, year: int, month: int) -> tuple[dict[str, float], dict[str, str]]:
-    manual_adjustments = {}
-    adjustment_reasons = {}
-    with db.get_connection() as conn:
-        rows = conn.execute(
-            """
-            SELECT customer_name, product_code, manual_quantity, adjustment_reason
-            FROM forecast_adjustments
-            WHERE year = ? AND month = ?
-            """,
-            (year, month),
-        ).fetchall()
-    for row in rows:
-        row_id = f"{row['customer_name']}__{row['product_code']}"
-        if row["manual_quantity"] is not None:
-            manual_adjustments[row_id] = row["manual_quantity"]
-        if row["adjustment_reason"]:
-            adjustment_reasons[row_id] = row["adjustment_reason"]
-    return manual_adjustments, adjustment_reasons
+    from src.backend.forecast_workbench_inputs import load_adjustments as _impl
+
+    return _impl(db, year, month)
 
 
 def load_exclusions(db) -> set[str]:
@@ -501,70 +356,21 @@ def load_exclusions(db) -> set[str]:
 
 
 def load_budgets(db, year: int, month: int) -> dict[str, BudgetTarget]:
-    budgets = {}
-    with db.get_connection() as conn:
-        rows = conn.execute(
-            """
-            SELECT customer_name, product_code, target_quantity, target_amount, base_target_quantity
-            FROM budget_targets
-            WHERE year = ? AND month = ?
-            """,
-            (year, month),
-        ).fetchall()
-    for row in rows:
-        row_id = f"{row['customer_name']}__{row['product_code']}"
-        budgets[row_id] = BudgetTarget(
-            target_quantity=float(row["target_quantity"] or 0),
-            target_amount=float(row["target_amount"] or 0),
-            base_target_quantity=float(row["base_target_quantity"] or 0),
-        )
-    return budgets
+    from src.backend.forecast_workbench_inputs import load_budgets as _impl
+
+    return _impl(db, year, month)
 
 
 def load_budget_year(db, year: int) -> dict[str, list[float]]:
-    """Return a 12-element monthly quantity array per row_id for the given year."""
-    with db.get_connection() as conn:
-        rows = conn.execute(
-            """
-            SELECT customer_name, product_code, month, target_quantity
-            FROM budget_targets
-            WHERE year = ?
-            """,
-            (year,),
-        ).fetchall()
-    result: dict[str, list[float]] = {}
-    for row in rows:
-        row_id = f"{row['customer_name']}__{row['product_code']}"
-        if row_id not in result:
-            result[row_id] = [0.0] * 12
-        m = int(row["month"]) - 1          # 0-based index
-        if 0 <= m < 12:
-            result[row_id][m] = float(row["target_quantity"] or 0)
-    return result
+    from src.backend.forecast_workbench_inputs import load_budget_year as _impl
+
+    return _impl(db, year)
 
 
 def load_budget_year_amounts(db, year: int) -> dict[str, list[float]]:
-    """Return a 12-element monthly amount array per row_id for the given year.
-    Uses target_amount as originally set in the budget — not quantity × current price.
-    """
-    with db.get_connection() as conn:
-        rows = conn.execute(
-            """
-            SELECT customer_name, product_code, month, target_amount
-            FROM budget_targets
-            WHERE year = ?
-            """,
-            (year,),
-        ).fetchall()
-    result: dict[str, list[float]] = {}
-    for row in rows:
-        row_id = f"{row['customer_name']}__{row['product_code']}"
-        if row_id not in result:
-            result[row_id] = [0.0] * 12
-        m = int(row["month"]) - 1
-        if 0 <= m < 12:
-            result[row_id][m] = float(row["target_amount"] or 0)
-    return result
+    from src.backend.forecast_workbench_inputs import load_budget_year_amounts as _impl
+
+    return _impl(db, year)
 
 
 def update_item_configs(db, items: list[dict]) -> None:
@@ -597,16 +403,9 @@ def update_item_configs(db, items: list[dict]) -> None:
 
 
 def list_budget_months(db) -> list[tuple[int, int]]:
-    with db.get_connection() as conn:
-        rows = conn.execute(
-            """
-            SELECT year, month
-            FROM budget_targets
-            GROUP BY year, month
-            ORDER BY year, month
-            """
-        ).fetchall()
-    return [(int(row["year"]), int(row["month"])) for row in rows]
+    from src.backend.forecast_workbench_inputs import list_budget_months as _impl
+
+    return _impl(db)
 
 
 def _apply_reasons_and_budgets(
@@ -667,189 +466,13 @@ def _normalize_item_status(item_status: object, legacy_status_label: object = ""
     return "active"
 
 
-def _get_last_closed_months(db, n: int) -> list[tuple[int, int]]:
-    """Return the last n closed (year, month) pairs, newest first."""
-    with db.get_connection() as conn:
-        rows = conn.execute(
-            "SELECT year, month FROM month_close_records ORDER BY year DESC, month DESC LIMIT ?",
-            (n,),
-        ).fetchall()
-    return [(r["year"], r["month"]) for r in rows]
-
-
-def _fetch_monthly_history(
-    db,
-    row_ids: list[tuple[str, str]],
-    closed_months: list[tuple[int, int]],
-) -> dict[str, list[dict]]:
-    """Batch-fetch actual / budget / last-year qty for each (customer, product_code)
-    across the given closed months.  Returns a dict keyed by 'customer__product_code',
-    value is a list of month dicts ordered newest → oldest.
-    """
-    if not row_ids or not closed_months:
-        return {}
-
-    month_strs    = [f"{y}-{m:02d}" for y, m in closed_months]
-    ly_month_strs = [f"{y-1}-{m:02d}" for y, m in closed_months]
-
-    customers = list({r[0] for r in row_ids})
-    products  = list({r[1] for r in row_ids})
-    ph_c = ",".join("?" * len(customers))
-    ph_p = ",".join("?" * len(products))
-    ph_m  = ",".join("?" * len(month_strs))
-    ph_ly = ",".join("?" * len(ly_month_strs))
-
-    with db.get_connection() as conn:
-        actuals = conn.execute(
-            f"""SELECT CAST(strftime('%Y', order_date) AS INTEGER) AS yr,
-                       CAST(strftime('%m', order_date) AS INTEGER) AS mo,
-                       customer_name, product_code, SUM(quantity) AS qty
-                FROM   sales_records
-                WHERE  strftime('%Y-%m', order_date) IN ({ph_m})
-                  AND  customer_name IN ({ph_c})
-                  AND  product_code  IN ({ph_p})
-                GROUP  BY yr, mo, customer_name, product_code""",
-            month_strs + customers + products,
-        ).fetchall()
-
-        ly_actuals = conn.execute(
-            f"""SELECT CAST(strftime('%Y', order_date) AS INTEGER) + 1 AS yr,
-                       CAST(strftime('%m', order_date) AS INTEGER)     AS mo,
-                       customer_name, product_code, SUM(quantity) AS qty
-                FROM   sales_records
-                WHERE  strftime('%Y-%m', order_date) IN ({ph_ly})
-                  AND  customer_name IN ({ph_c})
-                  AND  product_code  IN ({ph_p})
-                GROUP  BY yr, mo, customer_name, product_code""",
-            ly_month_strs + customers + products,
-        ).fetchall()
-
-        budget_clauses = " OR ".join(["(year=? AND month=?)"] * len(closed_months))
-        budget_params  = [v for y, m in closed_months for v in (y, m)]
-        budgets = conn.execute(
-            f"""SELECT year, month, customer_name, product_code, target_quantity
-                FROM   budget_targets
-                WHERE  ({budget_clauses})
-                  AND  customer_name IN ({ph_c})
-                  AND  product_code  IN ({ph_p})""",
-            budget_params + customers + products,
-        ).fetchall()
-
-    actual_map = {
-        (r["customer_name"], r["product_code"], r["yr"], r["mo"]): float(r["qty"])
-        for r in actuals
-    }
-    ly_map = {
-        (r["customer_name"], r["product_code"], r["yr"], r["mo"]): float(r["qty"])
-        for r in ly_actuals
-    }
-    budget_map = {
-        (r["customer_name"], r["product_code"], r["year"], r["month"]): float(r["target_quantity"])
-        for r in budgets
-    }
-
-    result: dict[str, list[dict]] = {}
-    for customer, product_code in row_ids:
-        key = f"{customer}__{product_code}"
-        history = []
-        for y, m in closed_months:          # already newest → oldest
-            history.append({
-                "year":      y,
-                "month":     m,
-                "label":     f"{m:02d}月",
-                "actual":    actual_map.get((customer, product_code, y, m), 0.0),
-                "budget":    budget_map.get((customer, product_code, y, m), 0.0),
-                "last_year": ly_map.get((customer, product_code, y, m), 0.0),
-            })
-        result[key] = history
-    return result
-
-
 def _patch_latest_order_dates(
     summary: ForecastSummary,
     daily_actuals: Mapping[str, DailyActualAggregate],
 ) -> ForecastSummary:
-    """Update ForecastRow.latest_order_date using current-month daily actuals.
+    from src.backend.forecast_workbench_context import _patch_latest_order_dates as patch_latest_order_dates
 
-    build_forecast reads sales_records (historical only), so latest_order_date
-    may point to last month. If daily_actuals has a more recent date, use it.
-    """
-    patched = []
-    for row in summary.rows:
-        actual = daily_actuals.get(row.row_id)
-        if actual is not None and actual.latest_sales_date is not None:
-            new_date = date.fromisoformat(str(actual.latest_sales_date)[:10])
-            if row.latest_order_date is None or new_date > row.latest_order_date:
-                row = replace(row, latest_order_date=new_date)
-        patched.append(row)
-    return replace(summary, rows=patched)
-
-
-def _days_since_order(workday_set: frozenset[date], order_date: date, today: date) -> int:
-    """Count workdays strictly after order_date up to and including today."""
-    return sum(1 for d in workday_set if order_date < d <= today)
-
-
-def _compute_gap_trend(gaps: list[int]) -> tuple[str, int]:
-    """Compare the most recent 3 gaps to the overall average.
-
-    Returns (trend, delta) where trend is "rising"/"falling"/"stable"/"none"
-    and delta is recent_avg − overall_avg rounded to nearest workday.
-    Threshold: ±15% of overall average to classify as trending.
-    """
-    if len(gaps) < 3:
-        return "none", 0
-    overall_avg = sum(gaps) / len(gaps)
-    recent_avg = sum(gaps[-3:]) / 3
-    delta = round(recent_avg - overall_avg)
-    if overall_avg == 0:
-        return "none", 0
-    if recent_avg > overall_avg * 1.10:
-        return "rising", delta
-    if recent_avg < overall_avg * 0.90:
-        return "falling", delta
-    return "stable", delta
-
-
-def _cycle_status_info(days_since: int | None, cycle_days: int | None) -> tuple[str, bool, bool]:
-    """Return (cycle_status_key, is_high_risk, is_caution)."""
-    if days_since is None or cycle_days is None or cycle_days <= 0:
-        return "no_cycle", False, False
-    if days_since > cycle_days * _CYCLE_HIGH_MULTIPLIER:
-        return "delayed", True, False
-    if days_since >= cycle_days * _CYCLE_CAUTION_MULTIPLIER:
-        return "approaching", False, True
-    return "ok", False, False
-
-
-def _three_axis_status(
-    yoy_rate: float | None,
-    bud_rate: float | None,
-    cycle_high: bool,
-    cycle_caution: bool,
-    last_year_qty: float,
-    budget_qty: float,
-) -> tuple[str, str]:
-    """Derive (status_display, status_key) from the three monitoring axes."""
-    has_comparison = last_year_qty > 0 or budget_qty > 0
-    if not has_comparison and not cycle_high and not cycle_caution:
-        return "無去年同期", "no_history"
-
-    if (
-        (yoy_rate is not None and yoy_rate < DROP_RISK_THRESHOLD)
-        or (bud_rate is not None and bud_rate < DROP_RISK_THRESHOLD)
-        or cycle_high
-    ):
-        return "高風險", "high"
-
-    if (
-        (yoy_rate is not None and yoy_rate < 1.0)
-        or (bud_rate is not None and bud_rate < 1.0)
-        or cycle_caution
-    ):
-        return "注意", "caution"
-
-    return "正常/成長", "ok"
+    return patch_latest_order_dates(summary, daily_actuals)
 
 
 def _to_monitor_row(
@@ -860,108 +483,14 @@ def _to_monitor_row(
     projection: ProjectionResult | None = None,
     target_month: int = 0,
 ) -> ProductMonitorRow:
-    today = today or date.today()
-
-    # 每日業績匯入（actual）是最小包裝原始單位，需 × pack_factor 對齊歷史展示單位
-    # 歷史資料（this_year_same_month_qty）已是展示單位，不需再乘
-    pack_factor = row.price_quantity if row.price_quantity > 0 else 1.0
-    raw_current = actual.actual_quantity if actual is not None else None
-
-    # Workday distance — prefer current-month daily-actual date (Phase 4 fix)
-    days_since: int | None = None
-    if workday_set is not None:
-        reference_date: date | None = None
-        if actual is not None and actual.latest_sales_date is not None:
-            raw_ls = actual.latest_sales_date
-            reference_date = date.fromisoformat(str(raw_ls)[:10])
-        elif row.latest_order_date:
-            reference_date = row.latest_order_date
-        if reference_date is not None:
-            days_since = _days_since_order(workday_set, reference_date, today)
-
-    # Rates use raw quantities — pack_factor cancels in ratios, no adjustment needed
-    yoy_rate = (row.final_forecast / row.last_year_same_month_qty) if row.last_year_same_month_qty > 0 else None
-    bud_rate = (row.final_forecast / row.budget_quantity) if row.budget_quantity > 0 else None
-
-    cycle_status_key, cycle_high, cycle_caution = _cycle_status_info(days_since, row.cycle_days)
-    status, status_key = _three_axis_status(
-        yoy_rate, bud_rate, cycle_high, cycle_caution,
-        row.last_year_same_month_qty, row.budget_quantity,
-    )
-
-    diff_quantity = row.final_forecast - row.last_year_same_month_qty
-    drop_rate = (diff_quantity / row.last_year_same_month_qty * 100) if row.last_year_same_month_qty > 0 else None
-    amount_impact = _dashboard_amount(diff_quantity, row)
-
-    # Phase 4: projection model
-    if projection is not None:
-        raw_estimated_eom = projection.estimated_eom_qty      # in raw units
-        remaining_shipments = projection.remaining_shipments
-        raw_typical_qty = projection.typical_qty_per_shipment  # in raw units
-        proj_confidence = projection.confidence
-        projected_remaining_qty = projection.projected_remaining_qty  # raw units
-        gap_history = projection.gap_history
-    else:
-        raw_estimated_eom = row.system_forecast
-        remaining_shipments = 0
-        raw_typical_qty = 0.0
-        proj_confidence = "low"
-        projected_remaining_qty = 0.0
-        gap_history = []
-
-    gap_trend, gap_trend_delta = _compute_gap_trend(gap_history)
-
-    # Phase 5: amount fields — use raw_current for implied price so projected amount stays correct
-    current_taxed_amount = float(actual.taxed_amount) if actual is not None else 0.0
-    # display_current：本月目前展示數量（與歷史資料同單位，供金額推估用）
-    display_current = raw_current * pack_factor if raw_current is not None else row.this_year_same_month_qty
-    if display_current > 0 and current_taxed_amount > 0:
-        implied_unit_price = current_taxed_amount / display_current
-    else:
-        implied_unit_price = row.latest_price
-    estimated_eom_amount = current_taxed_amount + projected_remaining_qty * implied_unit_price
-    final_forecast_amount = float(row.estimated_amount)
-    last_year_amount = (
-        float(row.ly_monthly_amount[target_month - 1])
-        if 1 <= target_month <= 12 else 0.0
-    )
-    budget_amount = float(row.budget_amount)
-
-    return ProductMonitorRow(
-        customer=row.customer,
-        product_code=row.product_code,
-        product_name=row.product_name,
-        last_year_quantity=row.last_year_same_month_qty,
-        last_month_quantity=row.last_month_actual,
-        current_quantity=display_current,
-        forecast_quantity=row.final_forecast,
-        diff_quantity=diff_quantity,
-        drop_rate=drop_rate,
-        status=status,
-        status_key=status_key,
-        note=row.adjustment_reason or "",
-        latest_price=row.latest_price,
-        amount_impact=amount_impact,
-        latest_order_date=row.latest_order_date,
-        days_since_last_shipment_workdays=days_since,
-        estimated_eom_qty=raw_estimated_eom,
-        yoy_growth_rate=yoy_rate,
-        budget_achievement_rate=bud_rate,
-        cycle_status=cycle_status_key,
-        # Use projection's workday cycle for display — more meaningful than calendar-day average
-        cycle_days=projection.workday_cycle if projection is not None else row.cycle_days,
-        budget_quantity=row.budget_quantity,
-        remaining_shipments=remaining_shipments,
-        typical_qty_per_shipment=raw_typical_qty,
-        projection_confidence=proj_confidence,
-        current_taxed_amount=current_taxed_amount,
-        estimated_eom_amount=estimated_eom_amount,
-        final_forecast_amount=final_forecast_amount,
-        last_year_amount=last_year_amount,
-        budget_amount=budget_amount,
-        gap_history=gap_history,
-        gap_trend=gap_trend,
-        gap_trend_delta=gap_trend_delta,
+    return _build_product_monitor_row(
+        row,
+        actual,
+        workday_set,
+        today,
+        projection,
+        target_month,
+        amount_for_quantity=_dashboard_amount,
     )
 
 

@@ -13,6 +13,7 @@ from src.backend.data_validator import validate_budget_coverage, validate_health
 from src.backend.dashboard_analytics_workflow import build_dashboard_template_context
 from src.backend.monthly_review import build_monthly_review, list_reviewable_months
 from src.backend.monthly_review_actions import build_action_lists
+from src.backend.monthly_review_chart import build_trend_chart
 from src.backend.monthly_review_customers import build_customer_summary
 from src.backend.monthly_review_export import export_monthly_review
 from src.backend.monthly_review_forecast_bias import build_forecast_bias
@@ -432,7 +433,7 @@ def create_app(config: dict | None = None) -> Flask:
         customer_summary = None
         product_summary = None
         forecast_bias = None
-        trend_series = None
+        trend_chart = None
         error_message = None
         if year and month:
             try:
@@ -441,7 +442,7 @@ def create_app(config: dict | None = None) -> Flask:
                 customer_summary = build_customer_summary(db, year, month)
                 product_summary = build_product_summary(db, year, month)
                 forecast_bias = build_forecast_bias(db, year, month)
-                trend_series = build_trend(db, year, month)
+                trend_chart = build_trend_chart(build_trend(db, year, month))
             except Exception as exc:
                 error_message = str(exc)
         return render_template(
@@ -453,7 +454,7 @@ def create_app(config: dict | None = None) -> Flask:
             customer_summary=customer_summary,
             product_summary=product_summary,
             forecast_bias=forecast_bias,
-            trend_series=trend_series,
+            trend_chart=trend_chart,
             reviewable_months=reviewable,
             error_message=error_message,
         )

@@ -6,15 +6,21 @@ import pytest
 
 from src.backend.daily_sales_importer import DailyActualAggregate
 from src.backend.forecast_models import ForecastRow, ForecastSummary
+from src.backend.row_identity import make_row_id
 from src.backend.operational_views import (
     BudgetTarget,
     _apply_reasons_and_budgets,
+    _fetch_monthly_history,
     _patch_latest_order_dates,
     build_customer_risk_ranking,
     build_dashboard_metrics,
     build_data_health_summary,
     build_product_monitor_rows,
     build_status_distribution,
+    load_adjustments,
+    load_budget_year,
+    load_budget_year_amounts,
+    load_budgets,
 )
 
 
@@ -803,3 +809,98 @@ def test_patch_latest_order_dates_skips_row_when_actual_sales_date_is_none():
     patched = _patch_latest_order_dates(_summary_with_rows([row]), actuals)
 
     assert patched.rows[0].latest_order_date == date(2026, 4, 20)
+
+
+def test_operational_lookup_maps_use_canonical_row_identity_for_delimiter_collisions(tmp_path):
+    from src.backend.database import MORDatabase
+
+    db = MORDatabase(tmp_path / "mor_workbench.db")
+    first = make_row_id("A__B", "C")
+    second = make_row_id("A", "B__C")
+    with db.get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO forecast_adjustments
+            (year, month, customer_name, product_code, manual_quantity, adjustment_reason)
+            VALUES (2026, 5, 'A__B', 'C', 5, 'first')
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO forecast_adjustments
+            (year, month, customer_name, product_code, manual_quantity, adjustment_reason)
+            VALUES (2026, 5, 'A', 'B__C', 8, 'second')
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO budget_targets
+            (year, month, customer_name, product_code, target_quantity, target_amount, base_target_quantity)
+            VALUES (2026, 5, 'A__B', 'C', 50, 500, 5)
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO budget_targets
+            (year, month, customer_name, product_code, target_quantity, target_amount, base_target_quantity)
+            VALUES (2026, 5, 'A', 'B__C', 80, 800, 8)
+            """
+        )
+        conn.commit()
+
+    manual_adjustments, adjustment_reasons = load_adjustments(db, 2026, 5)
+    budgets = load_budgets(db, 2026, 5)
+    budget_year = load_budget_year(db, 2026)
+    budget_year_amounts = load_budget_year_amounts(db, 2026)
+
+    assert manual_adjustments[first] == 5
+    assert manual_adjustments[second] == 8
+    assert adjustment_reasons[first] == "first"
+    assert adjustment_reasons[second] == "second"
+    assert budgets[first].target_quantity == 50
+    assert budgets[second].target_amount == 800
+    assert budget_year[first][4] == 50
+    assert budget_year[second][4] == 80
+    assert budget_year_amounts[first][4] == 500
+    assert budget_year_amounts[second][4] == 800
+
+
+def test_monthly_history_uses_canonical_row_identity_for_delimiter_collisions(tmp_path):
+    from src.backend.database import MORDatabase
+
+    db = MORDatabase(tmp_path / "mor_workbench.db")
+    first = make_row_id("A__B", "C")
+    second = make_row_id("A", "B__C")
+    with db.get_connection() as conn:
+        for customer, product, qty, budget in [
+            ("A__B", "C", 5, 50),
+            ("A", "B__C", 8, 80),
+        ]:
+            conn.execute(
+                """
+                INSERT INTO sales_records
+                (order_date, customer_name, product_code, product_name, quantity, unit_price, amount)
+                VALUES ('2026-04-10', ?, ?, '', ?, 0, 0)
+                """,
+                (customer, product, qty),
+            )
+            conn.execute(
+                """
+                INSERT INTO budget_targets
+                (year, month, customer_name, product_code, target_quantity)
+                VALUES (2026, 4, ?, ?, ?)
+                """,
+                (customer, product, budget),
+            )
+        conn.commit()
+
+    histories = _fetch_monthly_history(
+        db,
+        [("A__B", "C"), ("A", "B__C")],
+        [(2026, 4)],
+    )
+
+    assert histories[first][0]["actual"] == 5
+    assert histories[first][0]["budget"] == 50
+    assert histories[second][0]["actual"] == 8
+    assert histories[second][0]["budget"] == 80

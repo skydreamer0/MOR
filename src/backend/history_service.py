@@ -1,7 +1,7 @@
 """History Service — batch SQL queries for last-month performance and 6-month trends.
 
 Reads from ``sales_records`` and ``budget_targets`` in ``mor_workbench.db``
-and returns look-up dicts keyed by ``{customer_name}__{product_code}`` (row_id).
+and returns look-up dicts keyed by canonical forecast row IDs.
 
 All queries use a single DB round-trip per data-set to avoid N+1.
 """
@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from src.backend.database import MORDatabase
+from src.backend.row_identity import make_row_id
 
 
 @dataclass(frozen=True)
@@ -61,7 +62,7 @@ def fetch_last_month_actuals(
         """, (str(prev_y), f"{prev_m:02d}")).fetchall()
 
     return {
-        f"{r['customer_name']}__{r['product_code']}": float(r['total_qty'] or 0)
+        make_row_id(r["customer_name"], r["product_code"]): float(r["total_qty"] or 0)
         for r in rows
     }
 
@@ -81,7 +82,7 @@ def fetch_last_month_budgets(
         """, (prev_y, prev_m)).fetchall()
 
     return {
-        f"{r['customer_name']}__{r['product_code']}": float(r['target_quantity'] or 0)
+        make_row_id(r["customer_name"], r["product_code"]): float(r["target_quantity"] or 0)
         for r in rows
     }
 
@@ -133,7 +134,7 @@ def fetch_trend_6m(
     # Build nested dict: row_id -> {(y,m): qty}
     raw: dict[str, dict[tuple[int, int], float]] = {}
     for r in rows:
-        row_id = f"{r['customer_name']}__{r['product_code']}"
+        row_id = make_row_id(r["customer_name"], r["product_code"])
         raw.setdefault(row_id, {})[(int(r['yr']), int(r['mo']))] = float(r['total_qty'] or 0)
 
     # Flatten to ordered list[float] of length 6

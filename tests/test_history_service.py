@@ -13,6 +13,7 @@ from src.backend.history_service import (
     fetch_last_month_performance,
     fetch_trend_6m,
 )
+from src.backend.row_identity import make_row_id
 
 
 @pytest.fixture
@@ -98,3 +99,32 @@ def test_fetch_trend_6m_returns_length_6(db: MORDatabase):
     assert len(result["A__P1"]) == 6
     # 6 months before May: Nov, Dec, Jan, Feb, Mar, Apr → March is index 4
     assert result["A__P1"][4] == 7.0
+
+
+def test_history_lookups_use_canonical_row_identity_for_delimiter_collisions(db: MORDatabase):
+    first = make_row_id("A__B", "C")
+    second = make_row_id("A", "B__C")
+    _insert_sales(db, [
+        {"order_date": "2026-04-10", "customer_name": "A__B", "product_code": "C", "quantity": 5.0},
+        {"order_date": "2026-04-11", "customer_name": "A", "product_code": "B__C", "quantity": 8.0},
+        {"order_date": "2026-03-10", "customer_name": "A__B", "product_code": "C", "quantity": 2.0},
+        {"order_date": "2026-03-11", "customer_name": "A", "product_code": "B__C", "quantity": 3.0},
+    ])
+    _insert_budgets(db, [
+        {"year": 2026, "month": 4, "customer_name": "A__B", "product_code": "C", "target_quantity": 50.0},
+        {"year": 2026, "month": 4, "customer_name": "A", "product_code": "B__C", "target_quantity": 80.0},
+    ])
+
+    actuals = fetch_last_month_actuals(db, target_year=2026, target_month=5)
+    budgets = fetch_last_month_budgets(db, target_year=2026, target_month=5)
+    perf = fetch_last_month_performance(db, target_year=2026, target_month=5)
+    trend = fetch_trend_6m(db, target_year=2026, target_month=5)
+
+    assert actuals[first] == 5.0
+    assert actuals[second] == 8.0
+    assert budgets[first] == 50.0
+    assert budgets[second] == 80.0
+    assert perf[first].actual == 5.0
+    assert perf[second].budget == 80.0
+    assert trend[first][4] == 2.0
+    assert trend[second][4] == 3.0

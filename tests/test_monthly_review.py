@@ -91,6 +91,16 @@ def _insert_budget(db: MORDatabase, year: int, month: int, customer: str, produc
         conn.commit()
 
 
+def _set_price_quantity(db: MORDatabase, product: str, price_quantity: float) -> None:
+    with db.get_connection() as conn:
+        conn.execute(
+            "INSERT INTO item_configs (product_code, price_quantity) VALUES (?, ?) "
+            "ON CONFLICT(product_code) DO UPDATE SET price_quantity = excluded.price_quantity",
+            (product, price_quantity),
+        )
+        conn.commit()
+
+
 def _insert_sales_record(db: MORDatabase, order_date: str, customer: str, product: str, qty: float) -> None:
     with db.get_connection() as conn:
         conn.execute(
@@ -143,6 +153,23 @@ def test_forecast_accuracy_computed_correctly(tmp_path: Path):
     assert row.forecast_gap == -20          # actual 80 - forecast 100
     assert row.forecast_accuracy == pytest.approx(0.8)
     assert summary.forecast_accuracy_total == pytest.approx(0.8)
+
+
+def test_monthly_review_converts_daily_actuals_to_snapshot_quantity_units(tmp_path: Path):
+    db = _db(tmp_path)
+    _set_price_quantity(db, "P1", 280)
+    _insert_actuals(db, 2026, 5, [{"customer": "A", "product": "P1", "qty": 30, "amount": 76356}])
+    sid = _insert_snapshot(db, 2026, 5, [{"customer": "A", "product": "P1", "fcst": 23100}])
+    _close_month(db, 2026, 5, sid)
+
+    summary = build_monthly_review(db, 2026, 5)
+    row = summary.rows[0]
+
+    assert row.actual_quantity == 8400
+    assert row.forecast_amount == pytest.approx(209979)
+    assert row.forecast_amount_accuracy == pytest.approx(76356 / 209979)
+    assert summary.forecast_amount_total == pytest.approx(209979)
+    assert summary.forecast_amount_accuracy_total == pytest.approx(76356 / 209979)
 
 
 def test_yoy_growth_uses_sales_records_when_last_year_not_closed(tmp_path: Path):

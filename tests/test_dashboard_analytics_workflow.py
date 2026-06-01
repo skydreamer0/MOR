@@ -4,10 +4,10 @@ import pandas as pd
 
 from src.backend.dashboard_analytics_workflow import build_dashboard_template_context
 from src.backend.forecast_models import ForecastRow, ForecastSummary, ForecastTarget
+from src.backend.forecast_workbench_context import ForecastPageContext
 from src.backend.operational_views import (
     DashboardMetrics,
     DataHealthSummary,
-    ForecastPageContext,
     ProductMonitorRow,
 )
 

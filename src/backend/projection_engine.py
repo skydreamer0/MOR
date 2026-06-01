@@ -24,6 +24,7 @@ from typing import Sequence
 from src.backend.daily_sales_importer import DailyActualAggregate
 from src.backend.database import MORDatabase
 from src.backend.forecast_models import ForecastRow
+from src.backend.row_identity import make_row_id
 from src.backend.workday_calendar import fetch_workday_set
 
 
@@ -125,13 +126,13 @@ def batch_project_eom(
     for h in history_rows:
         raw = h["order_date"]
         d = date.fromisoformat(str(raw)[:10])
-        key = f"{h['customer_name']}__{h['product_code']}"
+        key = make_row_id(h["customer_name"], h["product_code"])
         history_map.setdefault(key, []).append((d, float(h["qty"])))
 
     for h in curr_month_rows:
         raw = h["order_date"]
         d = date.fromisoformat(str(raw)[:10])
-        key = f"{h['customer_name']}__{h['product_code']}"
+        key = make_row_id(h["customer_name"], h["product_code"])
         # daily_sales_actuals stores raw (smallest-package) units; convert to
         # display units here so quantities are on the same scale as sales_records.
         pack = pack_map.get(key, 1.0)
