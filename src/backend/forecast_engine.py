@@ -35,7 +35,7 @@ def build_forecast(
     for (customer, product_code), group in prepared.groupby(["客戶簡稱", "商品號"], dropna=False):
         group = group.sort_values("order_date")
         product_name = _latest_nonempty(group["商品簡稱"])
-        
+
         # Global exclusion check
         is_item_excluded = bool(options and product_code in options.excluded_item_ids)
 
@@ -47,21 +47,31 @@ def build_forecast(
         cycle_days = _average_cycle_days(order_history["order_date"].tolist(), options.max_cycle_interval_days)
         next_order_date = latest_order_date + timedelta(days=cycle_days) if cycle_days else None
         auto_in_month = bool(next_order_date and target.start <= next_order_date <= target.end)
-        
+
+        # Build pivot tables once per group instead of ~48 individual DataFrame filters.
+        qty_pivot = group.groupby(["年", "月"])["銷+贈S量"].sum()
+        amt_pivot = group.groupby(["年", "月"])["含稅總額(淨)"].sum()
+
+        def _pqty(year: int, month: int) -> float:
+            return float(qty_pivot.get((year, month), 0.0))
+
+        def _pamt(year: int, month: int) -> float:
+            return float(amt_pivot.get((year, month), 0.0))
+
         # New Forecast Logic
-        lysm_qty = _month_quantity(group, target.year - 1, target.month)
+        lysm_qty = _pqty(target.year - 1, target.month)
         last_month_year = target.year if target.month > 1 else target.year - 1
         last_month_val = target.month - 1 if target.month > 1 else 12
-        lm_qty = _month_quantity(group, last_month_year, last_month_val)
+        lm_qty = _pqty(last_month_year, last_month_val)
 
-        avg_3m_qty = _recent_months_average(group, target.year, target.month, 3)
-        current_progress = _month_quantity(group, target.year, target.month)
+        avg_3m_qty = _recent_months_average_from_pivot(qty_pivot, target.year, target.month, 3)
+        current_progress = _pqty(target.year, target.month)
 
         # Full-year monthly breakdown for sidebar detail table and analytics
-        ly_monthly = [_month_quantity(group, target.year - 1, m) for m in range(1, 13)]
-        ty_monthly = [_month_quantity(group, target.year, m) for m in range(1, 13)]
-        ly_monthly_amount = [_month_amount(group, target.year - 1, m) for m in range(1, 13)]
-        ty_monthly_amount = [_month_amount(group, target.year, m) for m in range(1, 13)]
+        ly_monthly = [_pqty(target.year - 1, m) for m in range(1, 13)]
+        ty_monthly = [_pqty(target.year, m) for m in range(1, 13)]
+        ly_monthly_amount = [_pamt(target.year - 1, m) for m in range(1, 13)]
+        ty_monthly_amount = [_pamt(target.year, m) for m in range(1, 13)]
         ly_price = _month_price(group, target.year - 1, target.month)
 
         # Baseline: recent history only. LySM is retained for risk comparison.
@@ -174,8 +184,9 @@ def _latest_nonempty(values: pd.Series) -> str:
     return ""
 
 
-def _recent_months_average(group: pd.DataFrame, target_year: int, target_month: int, n: int) -> float:
-    # Calculate average of the last N months before target
+def _recent_months_average_from_pivot(
+    qty_pivot: pd.Series, target_year: int, target_month: int, n: int
+) -> float:
     total_qty = 0.0
     count = 0
     curr_y, curr_m = target_year, target_month
@@ -184,7 +195,7 @@ def _recent_months_average(group: pd.DataFrame, target_year: int, target_month: 
         if curr_m == 0:
             curr_m = 12
             curr_y -= 1
-        qty = _month_quantity(group, curr_y, curr_m)
+        qty = float(qty_pivot.get((curr_y, curr_m), 0.0))
         if qty > 0:
             total_qty += qty
             count += 1
