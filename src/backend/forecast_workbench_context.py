@@ -17,7 +17,7 @@ from src.backend.forecast_workbench_inputs import (
 )
 from src.backend.history_service import enrich_rows_with_history
 from src.backend.operational_views import (
-    _apply_reasons_and_budgets,
+    apply_reasons_and_budgets,
     build_dashboard_metrics,
     build_data_health_summary,
     build_items_from_sales_data,
@@ -131,7 +131,7 @@ def _build_summary(
     summary = replace(summary, rows=enrich_rows_with_history(summary.rows, db, target.year, target.month))
     summary = _patch_latest_order_dates(summary, inputs.daily_actuals)
     summary = apply_user_adjustments(summary, manual_adjustments=inputs.manual_adjustments, excluded_ids=set())
-    summary = _apply_reasons_and_budgets(
+    summary = apply_reasons_and_budgets(
         summary,
         inputs.adjustment_reasons,
         inputs.budget_targets,

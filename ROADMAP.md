@@ -1,6 +1,6 @@
 # MOR Roadmap
 
-Last reviewed: 2026-05-31
+Last reviewed: 2026-06-01
 
 This file is the active source of truth for MOR planning. Historical implementation plans and architecture review artifacts should not be used as implementation context unless this roadmap explicitly points to them.
 
@@ -51,6 +51,60 @@ Architecture direction:
 15. Amount calculation seam foundation.
 
 ## Active Refactor Queue
+
+### 0. Architecture Bug Fix Batch (prerequisite for remaining seams)
+
+架構審查發現的具體問題，按優先順序逐一修正。每個修正獨立 commit，可單獨驗證。
+
+#### BF-0: Werkzeug 版本釘選（測試環境修復）
+
+- 症狀：Flask 2.3.2 + Werkzeug 3.1.8 不相容，`test_app.py` 全數失敗。
+- 修正：`requirements.txt` 加入 `werkzeug>=2.3.3,<3.0`，恢復 53 個路由測試。
+- 涉及檔案：`requirements.txt`。
+
+#### BF-1: PRG 修正（`/items/save` 表單重複送出）
+
+- 症狀：`save_items()` POST 後直接 render 頁面，F5 重新整理觸發重複 POST。
+- 修正：`return settings()` → `return redirect(url_for("settings"))`。
+- 涉及檔案：`src/backend/app.py`。
+
+#### BF-2: SQLite 連線未關閉（資源洩漏）
+
+- 症狀：`sqlite3.Connection` 的 `with` block 只做 commit/rollback，不關閉連線；長時間執行累積未釋放連線。
+- 修正：`MORDatabase.get_connection()` 改為 `@contextmanager`，在 `finally` 中明確 `conn.close()`。
+- 涉及檔案：`src/backend/database.py`（呼叫方 `with db.get_connection() as conn:` 語法不變）。
+
+#### BF-3: `_apply_reasons_and_budgets` 跨模組引用私有函式
+
+- 症狀：`forecast_workbench_context.py` 引入底線前綴的私有函式，表示模組邊界洩漏。
+- 修正：移除底線前綴，成為 `operational_views` 的公開 API。
+- 涉及檔案：`src/backend/operational_views.py`、`src/backend/forecast_workbench_context.py`。
+
+#### BF-4: SimpleCache 無界增長
+
+- 症狀：`CACHE_DEFAULT_TIMEOUT=0`（永不過期）+ cache key 包含日期，每天產生新 key 且舊 key 永不清除，記憶體持續增長。
+- 修正：`create_app` 的 cache config 加入 `CACHE_THRESHOLD: 500`（最多 500 條目，超過自動 LRU 淘汰）。
+- 涉及檔案：`src/backend/app.py`。
+
+#### BF-5: Close-Month 非原子操作（孤兒快照風險）
+
+- 症狀：`_find_or_create_close_snapshot` 先建快照再呼叫 `close_month`；若後者失敗，留下孤兒快照，下次結帳撿到錯誤快照。
+- 修正：屬於既有 Seam 3（Close-Month Workflow）的一部分，在該 seam 中以 transaction 包裹整個操作。
+- 暫不獨立修正，等 Seam 3 展開時一起處理。
+
+#### BF-6: Monthly Review 廣義例外吞掉邏輯錯誤
+
+- 症狀：`except Exception as exc:` 捕捉所有例外（含程式邏輯錯誤），只顯示 `str(exc)`，難以 debug。
+- 修正：縮窄為具體例外型別（`ValueError`, `LookupError`），其餘讓 Flask error handler 處理。
+- 涉及檔案：`src/backend/app.py`（`monthly_review` route）。
+
+Boundary for BF batch:
+- 每個 BF item 獨立 commit，不合併進其他 seam。
+- 不改動 route 對外行為（回傳內容、重導向目標、狀態碼）。
+- BF-0 完成後跑 `pytest -q` 確認 218→271 通過。
+- BF-2 完成後確認 `with db.get_connection() as conn:` 呼叫方不需修改。
+
+---
 
 ### 1. Workbench Context Internals
 

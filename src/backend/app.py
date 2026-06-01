@@ -73,7 +73,7 @@ def create_app(config: dict | None = None) -> Flask:
     data_base_path = Path(app.config.get("DATA_BASE_PATH", PROJECT_ROOT))
     db_base_path = Path(app.config.get("DB_BASE_PATH", PROJECT_ROOT))
     db = get_db(db_base_path)
-    cache = Cache(config={"CACHE_TYPE": "SimpleCache", "CACHE_DEFAULT_TIMEOUT": 0})
+    cache = Cache(config={"CACHE_TYPE": "SimpleCache", "CACHE_DEFAULT_TIMEOUT": 0, "CACHE_THRESHOLD": 500})
     cache.init_app(app)
     app.jinja_env.filters["product_display_name"] = product_display_name
 
@@ -443,7 +443,7 @@ def create_app(config: dict | None = None) -> Flask:
                 product_summary = build_product_summary(db, year, month)
                 forecast_bias = build_forecast_bias(db, year, month)
                 trend_chart = build_trend_chart(build_trend(db, year, month))
-            except Exception as exc:
+            except (ValueError, LookupError, KeyError, TypeError) as exc:
                 error_message = str(exc)
         return render_template(
             "monthly_review.html",
@@ -493,7 +493,7 @@ def create_app(config: dict | None = None) -> Flask:
         items = build_item_config_payloads_from_form(request.form)
         update_item_configs(db, items)
         _invalidate_all_context_cache()
-        return settings()
+        return redirect(url_for("settings"))
 
     @app.get("/exclusions")
     def exclusions_management() -> str:

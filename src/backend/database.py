@@ -23,6 +23,7 @@ already have the column (either from a previous migration or from being
 created fresh with the full schema in migration 1).
 """
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
 
 
@@ -235,10 +236,19 @@ class MORDatabase:
         self.db_path = db_path
         self._init_db()
 
-    def get_connection(self) -> sqlite3.Connection:
+    @contextmanager
+    def get_connection(self):
+        """Context manager that opens, commits/rolls-back, and closes the connection."""
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
-        return conn
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
 
     def _init_db(self) -> None:
         with self.get_connection() as conn:

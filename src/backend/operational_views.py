@@ -408,7 +408,7 @@ def list_budget_months(db) -> list[tuple[int, int]]:
     return _impl(db)
 
 
-def _apply_reasons_and_budgets(
+def apply_reasons_and_budgets(
     summary: ForecastSummary,
     adjustment_reasons: dict[str, str],
     budget_targets: dict[str, BudgetTarget],
