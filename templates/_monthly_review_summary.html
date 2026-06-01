@@ -1,7 +1,80 @@
 {# ── 月度總覽（含稅淨額為主） ── #}
 {% import "_monthly_review_macros.html" as review_ui %}
-<section class="workbench-panel review-section" aria-labelledby="review-overview-title">
-  <h3 id="review-overview-title" class="review-section-title">月度總覽（金額為含稅淨額）</h3>
+{% set budget_risk = summary.budget_amount_achievement_total is not none and summary.budget_amount_achievement_total < 1 %}
+{% set yoy_risk = summary.yoy_amount_growth_total is not none and summary.yoy_amount_growth_total < 1 %}
+{% set forecast_risk = summary.forecast_amount_accuracy_total is not none and (summary.forecast_amount_accuracy_total < 0.85 or summary.forecast_amount_accuracy_total > 1.15) %}
+{% set achievement_pct = (summary.budget_amount_achievement_total * 100) if summary.budget_amount_achievement_total is not none else none %}
+{% set yoy_risk_count = summary.rows | selectattr("yoy_amount_growth", "ne", none) | selectattr("yoy_amount_growth", "lt", 1) | list | length %}
+{% set budget_risk_count = summary.rows | selectattr("budget_amount_achievement", "ne", none) | selectattr("budget_amount_achievement", "lt", 1) | list | length %}
+{% set forecast_under_count = summary.rows | selectattr("forecast_amount", "gt", 0) | selectattr("forecast_amount_accuracy", "ne", none) | selectattr("forecast_amount_accuracy", "lt", 0.85) | list | length %}
+{% set forecast_over_count = summary.rows | selectattr("forecast_amount", "gt", 0) | selectattr("forecast_amount_accuracy", "ne", none) | selectattr("forecast_amount_accuracy", "gt", 1.15) | list | length %}
+{% set forecast_miss_count = forecast_under_count + forecast_over_count %}
+{% set achievement_bar_pct = ([[achievement_pct, 0] | max, 100] | min) if achievement_pct is not none else none %}
+<section class="workbench-panel review-section review-hero" aria-labelledby="review-overview-title">
+  <div class="review-hero-brief">
+    <div>
+      <p class="review-kicker">Monthly close review</p>
+      <h3 id="review-overview-title" class="review-section-title">月度總覽（金額為含稅淨額）</h3>
+    </div>
+    <div class="review-brief-note">
+      <strong>
+        {% if budget_risk %}
+          本月低於預算，先確認缺口客戶。
+        {% elif yoy_risk %}
+          本月較去年下滑，先看流失與衰退品項。
+        {% elif forecast_risk %}
+          本月預估偏差較大，需校準下月預估。
+        {% else %}
+          本月整體穩定，可聚焦成長來源與下月維護。
+        {% endif %}
+      </strong>
+      <span>{{ summary.year }}/{{ "%02d"|format(summary.month) }} · {{ summary.rows | length }} 筆客戶品項 · 結月 {{ summary.closed_at[:16] }}</span>
+    </div>
+  </div>
+  <div class="review-progress-body">
+    <div class="review-progress-main">
+      <div class="progress-target-row">
+        <span class="progress-label-muted">預算目標</span>
+        <strong class="progress-target-value">
+          {% if summary.budget_amount_achievement_total is not none %}{{ "{:,.0f}".format(summary.budget_amount_total) }}{% else %}-{% endif %}
+        </strong>
+      </div>
+      <div class="progress-track">
+        {% if achievement_pct is not none %}
+        <div class="progress-fill {% if achievement_pct >= 100 %}fill-success{% elif achievement_pct >= 90 %}fill-warning{% else %}fill-danger{% endif %}"
+             style="width: {{ achievement_bar_pct }}%"
+             role="progressbar"
+             aria-valuenow="{{ achievement_bar_pct | round(1) }}"
+             aria-valuemin="0"
+             aria-valuemax="100"></div>
+        {% endif %}
+      </div>
+      <div class="progress-footer-row">
+        <span class="progress-label-muted">實際達成</span>
+        <strong class="progress-forecast-value">{{ "{:,.0f}".format(summary.actual_amount_total) }}</strong>
+        <span class="progress-rate {% if achievement_pct is none %}{% elif achievement_pct >= 100 %}rate-success{% elif achievement_pct >= 90 %}rate-warning{% else %}rate-danger{% endif %}">
+          {{ review_ui.achievement(summary.budget_amount_achievement_total) }}
+        </span>
+      </div>
+    </div>
+    <div class="review-status-strip" aria-label="本月檢討重點">
+      <div class="review-status-item {% if budget_risk_count > 0 %}review-status-item--risk{% endif %}">
+        <span class="dist-dot {% if budget_risk_count > 0 %}dist-dot-high{% else %}dist-dot-ok{% endif %}"></span>
+        <span>低於預算</span>
+        <strong>{{ budget_risk_count }}</strong>
+      </div>
+      <div class="review-status-item {% if yoy_risk_count > 0 %}review-status-item--risk{% endif %}">
+        <span class="dist-dot {% if yoy_risk_count > 0 %}dist-dot-high{% else %}dist-dot-ok{% endif %}"></span>
+        <span>YoY 下滑</span>
+        <strong>{{ yoy_risk_count }}</strong>
+      </div>
+      <div class="review-status-item {% if forecast_miss_count > 0 %}review-status-item--warn{% endif %}">
+        <span class="dist-dot {% if forecast_miss_count > 0 %}dist-dot-caution{% else %}dist-dot-ok{% endif %}"></span>
+        <span>預估失準</span>
+        <strong>{{ forecast_miss_count }}</strong>
+      </div>
+    </div>
+  </div>
   <div class="review-overview-grid">
     <div class="review-metric-card">
       <span class="review-metric-label">實際金額</span>

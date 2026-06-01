@@ -1,8 +1,12 @@
 {# ── 客戶面總覽 ── #}
 {% import "_monthly_review_macros.html" as review_ui %}
 {% if customer_summary and customer_summary.rows %}
-<section class="workbench-panel review-section" aria-labelledby="review-customer-title">
-  <h3 id="review-customer-title" class="review-section-title">客戶面總覽（Top {{ customer_summary.rows | length }}）</h3>
+<details class="workbench-panel review-section review-disclosure" aria-labelledby="review-customer-title">
+  <summary class="review-disclosure-summary">
+    <span class="row-chevron" aria-hidden="true"></span>
+    <span id="review-customer-title" class="review-section-title">客戶面總覽（Top {{ customer_summary.rows | length }}）</span>
+    <span class="review-disclosure-hint">展開客戶排行</span>
+  </summary>
   <div class="table-wrap workbench-table-shell">
     <table class="review-table review-customer-table">
       <thead>
@@ -24,7 +28,7 @@
           <td>
             {% if c.products %}
             <details class="review-customer-drill">
-              <summary>{{ c.customer_name }}</summary>
+              <summary><span class="row-chevron" aria-hidden="true"></span><span>{{ c.customer_name }}</span></summary>
               <table class="review-customer-products">
                 <thead><tr><th>品項</th><th class="num">數量</th><th class="num">金額</th><th class="num">去年</th><th class="num">YoY</th></tr></thead>
                 <tbody>
@@ -53,13 +57,17 @@
       </tbody>
     </table>
   </div>
-</section>
+</details>
 {% endif %}
 
 {# ── 品項 Top 20 ── #}
 {% if product_summary and product_summary.rows %}
-<section class="workbench-panel review-section" aria-labelledby="review-product-title">
-  <h3 id="review-product-title" class="review-section-title">品項 Top {{ product_summary.rows | length }}（依金額）</h3>
+<details class="workbench-panel review-section review-disclosure" aria-labelledby="review-product-title">
+  <summary class="review-disclosure-summary">
+    <span class="row-chevron" aria-hidden="true"></span>
+    <span id="review-product-title" class="review-section-title">品項 Top {{ product_summary.rows | length }}（依金額）</span>
+    <span class="review-disclosure-hint">展開品項排行</span>
+  </summary>
   <div class="table-wrap workbench-table-shell">
     <table class="review-table">
       <thead>
@@ -90,13 +98,17 @@
       </tbody>
     </table>
   </div>
-</section>
+</details>
 {% endif %}
 
 {# ── 預估準確度（依金額誤差排序） ── #}
 {% if summary.rows | selectattr("forecast_amount", "gt", 0) | list %}
-<section class="workbench-panel review-section" aria-labelledby="review-accuracy-title">
-  <h3 id="review-accuracy-title" class="review-section-title">預估準確度（金額誤差最大 Top 20）</h3>
+<details class="workbench-panel review-section review-disclosure" aria-labelledby="review-accuracy-title">
+  <summary class="review-disclosure-summary">
+    <span class="row-chevron" aria-hidden="true"></span>
+    <span id="review-accuracy-title" class="review-section-title">預估準確度（金額誤差最大 Top 20）</span>
+    <span class="review-disclosure-hint">展開誤差表</span>
+  </summary>
   <div class="table-wrap workbench-table-shell">
     <table class="review-table">
       <thead>
@@ -125,5 +137,5 @@
       </tbody>
     </table>
   </div>
-</section>
+</details>
 {% endif %}

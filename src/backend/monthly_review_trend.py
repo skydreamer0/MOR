@@ -11,7 +11,7 @@ Empty months yield zero amounts; the UI may render them as dashed/grey.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from src.backend.database import MORDatabase
 
@@ -32,6 +32,7 @@ class TrendPoint:
 @dataclass(frozen=True)
 class TrendSeries:
     points: list[TrendPoint]         # oldest first
+    previous_year_points: list[TrendPoint] = field(default_factory=list)
 
 
 def build_trend(
@@ -39,7 +40,8 @@ def build_trend(
 ) -> TrendSeries:
     target_months = _last_n_months(year, month, months)
     points = [_build_point(db, y, m) for y, m in target_months]
-    return TrendSeries(points=points)
+    previous_year_points = [_build_point(db, y - 1, m) for y, m in target_months]
+    return TrendSeries(points=points, previous_year_points=previous_year_points)
 
 
 # ---------------------------------------------------------------------------

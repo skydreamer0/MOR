@@ -1,8 +1,12 @@
 {# ── 完整明細 ── #}
 {% import "_monthly_review_macros.html" as review_ui %}
-<section class="workbench-panel review-section" aria-labelledby="review-detail-title">
+<details class="workbench-panel review-section review-disclosure review-detail-disclosure" aria-labelledby="review-detail-title">
+  <summary class="review-disclosure-summary">
+    <span class="row-chevron" aria-hidden="true"></span>
+    <span id="review-detail-title" class="review-section-title">完整明細</span>
+    <span class="review-disclosure-hint">展開 {{ summary.rows | length }} 筆原始列</span>
+  </summary>
   <div class="workbench-toolbar review-detail-toolbar">
-    <h3 id="review-detail-title" class="review-section-title">完整明細</h3>
     <div class="review-detail-controls">
       <label>
         搜尋
@@ -71,4 +75,4 @@
       </tbody>
     </table>
   </div>
-</section>
+</details>

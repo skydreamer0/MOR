@@ -37,4 +37,21 @@
   if (filter) filter.addEventListener("change", applyFilters);
   if (search) search.addEventListener("input", applyFilters);
   applyFilters();
+
+  var printState = [];
+
+  window.addEventListener("beforeprint", function () {
+    printState = [];
+    document.querySelectorAll(".review-disclosure").forEach(function (section) {
+      printState.push([section, section.open]);
+      section.open = true;
+    });
+  });
+
+  window.addEventListener("afterprint", function () {
+    printState.forEach(function (entry) {
+      entry[0].open = entry[1];
+    });
+    printState = [];
+  });
 })();

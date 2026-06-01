@@ -70,6 +70,9 @@ def _set_price_quantity(db, product, price_quantity):
 
 def test_trend_returns_n_points_oldest_first(tmp_path):
     db = _db(tmp_path)
+    _insert_actual(db, 2025, 3, 500)
+    _insert_actual(db, 2025, 4, 600)
+    _insert_actual(db, 2025, 5, 700)
     _insert_actual(db, 2026, 3, 1000)
     _insert_actual(db, 2026, 4, 2000)
     _insert_actual(db, 2026, 5, 3000)
@@ -78,6 +81,8 @@ def test_trend_returns_n_points_oldest_first(tmp_path):
 
     assert [(p.year, p.month) for p in ts.points] == [(2026, 3), (2026, 4), (2026, 5)]
     assert [p.actual for p in ts.points] == [1000.0, 2000.0, 3000.0]
+    assert [(p.year, p.month) for p in ts.previous_year_points] == [(2025, 3), (2025, 4), (2025, 5)]
+    assert [p.actual for p in ts.previous_year_points] == [500.0, 600.0, 700.0]
     assert ts.points[-1].label == "26/05"
 
 

@@ -36,6 +36,8 @@ class MonthlyReviewTrendChart:
     budget_points: str
     forecast_points: str
     actual_points: str
+    last_year_actual_points: str
+    last_year_actual_segments: list[str]
     actual_markers: list[ChartMarker]
 
 
@@ -53,10 +55,13 @@ def build_trend_chart(series: TrendSeries | None) -> MonthlyReviewTrendChart | N
     inner_w = chart_w - pad_l - pad_r
     inner_h = chart_h - pad_t - pad_b
     step = inner_w / (len(series.points) - 1 if len(series.points) > 1 else 1)
+    has_last_year_actual = any(p.actual > 0 for p in series.previous_year_points)
+    last_year_actuals = [p.actual for p in series.previous_year_points] if has_last_year_actual else []
     y_max = max(
         [p.actual for p in series.points]
         + [p.forecast for p in series.points]
         + [p.budget for p in series.points]
+        + last_year_actuals
         + [1.0]
     )
 
@@ -81,6 +86,25 @@ def build_trend_chart(series: TrendSeries | None) -> MonthlyReviewTrendChart | N
             for i, value in enumerate(values)
         )
 
+    def positive_segments(values: list[float]) -> list[str]:
+        segments: list[list[tuple[int, float]]] = []
+        current: list[tuple[int, float]] = []
+        for i, value in enumerate(values):
+            if value > 0:
+                current.append((i, value))
+            elif current:
+                segments.append(current)
+                current = []
+        if current:
+            segments.append(current)
+        return [
+            " ".join(f"{x_at(i)},{y_at(value)}" for i, value in segment)
+            for segment in segments
+            if len(segment) >= 2
+        ]
+
+    last_year_actual_segments = positive_segments(last_year_actuals) if has_last_year_actual else []
+
     actual_markers = [
         ChartMarker(
             x=x_at(i),
@@ -89,6 +113,11 @@ def build_trend_chart(series: TrendSeries | None) -> MonthlyReviewTrendChart | N
                 f"{p.label}\u3000實際 {p.actual:,.0f}"
                 f"\u3000預估 {p.forecast:,.0f}"
                 f"\u3000預算 {p.budget:,.0f}"
+                + (
+                    f"\u3000去年同期 {series.previous_year_points[i].actual:,.0f}"
+                    if i < len(series.previous_year_points) and series.previous_year_points[i].actual > 0
+                    else ""
+                )
             ),
         )
         for i, p in enumerate(series.points)
@@ -96,7 +125,11 @@ def build_trend_chart(series: TrendSeries | None) -> MonthlyReviewTrendChart | N
 
     return MonthlyReviewTrendChart(
         title=f"近 {len(series.points)} 個月趨勢（金額）",
-        aria_label="近 12 個月金額趨勢",
+        aria_label=(
+            "近 12 個月金額趨勢，含去年同期實際金額比較"
+            if last_year_actual_segments else
+            "近 12 個月金額趨勢"
+        ),
         width=chart_w,
         height=chart_h,
         y_ticks=y_ticks,
@@ -104,5 +137,7 @@ def build_trend_chart(series: TrendSeries | None) -> MonthlyReviewTrendChart | N
         budget_points=polyline([p.budget for p in series.points]),
         forecast_points=polyline([p.forecast for p in series.points]),
         actual_points=polyline([p.actual for p in series.points]),
+        last_year_actual_points=polyline(last_year_actuals) if last_year_actual_segments else "",
+        last_year_actual_segments=last_year_actual_segments,
         actual_markers=actual_markers,
     )

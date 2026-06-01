@@ -136,10 +136,17 @@
 
 {# ── 12 個月趨勢圖 ── #}
 {% if trend_chart %}
-<section class="workbench-panel review-section" aria-labelledby="review-trend-title">
-  <h3 id="review-trend-title" class="review-section-title">{{ trend_chart.title }}</h3>
+<details class="workbench-panel review-section review-disclosure" aria-labelledby="review-trend-title">
+  <summary class="review-disclosure-summary">
+    <span class="row-chevron" aria-hidden="true"></span>
+    <span id="review-trend-title" class="review-section-title">{{ trend_chart.title }}</span>
+    <span class="review-disclosure-hint">展開趨勢圖</span>
+  </summary>
   <div class="review-chart-legend">
     <span><span class="swatch swatch-actual"></span>實際</span>
+    {% if trend_chart.last_year_actual_segments %}
+    <span><span class="swatch swatch-last-year"></span>去年同期</span>
+    {% endif %}
     <span><span class="swatch swatch-forecast"></span>預估</span>
     <span><span class="swatch swatch-budget"></span>預算</span>
   </div>
@@ -157,6 +164,10 @@
       points="{{ trend_chart.budget_points }}"/>
     <polyline fill="none" stroke="#f97316" stroke-width="1.5" stroke-dasharray="2 3"
       points="{{ trend_chart.forecast_points }}"/>
+    {% for points in trend_chart.last_year_actual_segments %}
+    <polyline fill="none" stroke="#64748b" stroke-width="1.8" stroke-dasharray="6 4"
+      points="{{ points }}"/>
+    {% endfor %}
     <polyline fill="none" stroke="#2563eb" stroke-width="2"
       points="{{ trend_chart.actual_points }}"/>
     {% for marker in trend_chart.actual_markers %}
@@ -165,13 +176,17 @@
       </circle>
     {% endfor %}
   </svg>
-</section>
+</details>
 {% endif %}
 
 {# ── 行動清單（業務的下一步） ── #}
 {% if action_lists %}
-<section class="workbench-panel review-section" aria-labelledby="review-actions-title">
-  <h3 id="review-actions-title" class="review-section-title">行動清單</h3>
+<details class="workbench-panel review-section review-disclosure" aria-labelledby="review-actions-title">
+  <summary class="review-disclosure-summary">
+    <span class="row-chevron" aria-hidden="true"></span>
+    <span id="review-actions-title" class="review-section-title">行動清單</span>
+    <span class="review-disclosure-hint">展開所有名單</span>
+  </summary>
   <div class="review-growth-grid">
     <div class="review-growth-panel">
       <h4>失聯名單 <span class="badge status-high">{{ action_lists.lost | length }}</span></h4>
@@ -235,12 +250,16 @@
       {% else %}<p class="muted">無</p>{% endif %}
     </div>
   </div>
-</section>
+</details>
 {% endif %}
 
 {# ── 預估模型檢討 ── #}
-<section class="workbench-panel review-section" aria-labelledby="review-bias-title">
-  <h3 id="review-bias-title" class="review-section-title">預估模型檢討</h3>
+<details class="workbench-panel review-section review-disclosure" aria-labelledby="review-bias-title">
+  <summary class="review-disclosure-summary">
+    <span class="row-chevron" aria-hidden="true"></span>
+    <span id="review-bias-title" class="review-section-title">預估模型檢討</span>
+    <span class="review-disclosure-hint">展開校準線索</span>
+  </summary>
   {% if forecast_bias %}
   <p class="muted small">近 {{ forecast_bias.lookback_months }} 個月同一品項連續偏差 ≥ 15%，搭配本月失準列作為下月預估校準依據</p>
   <div class="review-growth-grid">
@@ -292,11 +311,15 @@
   {% else %}
     <p class="muted">無預估偏誤資料。</p>
   {% endif %}
-</section>
+</details>
 
 {# ── 跳單與成長（依金額排序） ── #}
-<section class="workbench-panel review-section" aria-labelledby="review-growth-title">
-  <h3 id="review-growth-title" class="review-section-title">跳單與成長（金額面）</h3>
+<details class="workbench-panel review-section review-disclosure" aria-labelledby="review-growth-title">
+  <summary class="review-disclosure-summary">
+    <span class="row-chevron" aria-hidden="true"></span>
+    <span id="review-growth-title" class="review-section-title">跳單與成長（金額面）</span>
+    <span class="review-disclosure-hint">展開明細清單</span>
+  </summary>
   <div class="review-growth-grid">
     <div class="review-growth-panel">
       <h4>低於去年同期 <span class="badge status-high">{{ yoy_below | length }}</span></h4>
@@ -359,4 +382,4 @@
       {% else %}<p class="muted">無</p>{% endif %}
     </div>
   </div>
-</section>
+</details>
