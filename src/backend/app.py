@@ -341,6 +341,26 @@ def create_app(config: dict | None = None) -> Flask:
             error_message=error_message,
         )
 
+    @app.get("/products")
+    def products() -> str:
+        try:
+            context = _load_context_from_request()
+            slices = aggregate_to_analytics(context.summary.rows, "product", context.target)
+            year, month = context.target.year, context.target.month
+            error_message = None
+        except (FileNotFoundError, ValueError, FormValidationError) as exc:
+            slices = []
+            year = request.args.get("year", "")
+            month = request.args.get("month", "")
+            error_message = f"無法載入商品分析：{exc}"
+        return render_template(
+            "products.html",
+            slices=slices,
+            year=year,
+            month=month,
+            error_message=error_message,
+        )
+
     @app.get("/settings")
     def settings() -> str:
         try:
