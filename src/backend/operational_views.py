@@ -179,7 +179,7 @@ def build_dashboard_metrics(
     # Use taxed_amount from daily actuals when available — more accurate than qty × price
     actual_amount = sum(
         float(actuals[row.row_id].taxed_amount) if row.row_id in actuals
-        else _dashboard_amount(row.this_year_same_month_qty, row)
+        else amount_for_quantity(row.this_year_same_month_qty, row)
         for row in budgeted_rows
     )
 
@@ -189,7 +189,7 @@ def build_dashboard_metrics(
         return projs[row.row_id].estimated_eom_qty if row.row_id in projs else row.final_forecast
 
     forecast_quantity = sum(_eom_qty(row) for row in budgeted_rows)
-    forecast_amount = sum(_dashboard_amount(_eom_qty(row), row) for row in budgeted_rows)
+    forecast_amount = sum(amount_for_quantity(_eom_qty(row), row) for row in budgeted_rows)
 
     high_risk_rows = [row for row in included_rows if is_high_risk_drop(row)]
 
@@ -221,10 +221,6 @@ def recalculate_forecast_amounts(rows: Iterable[ForecastRow]) -> list[ForecastRo
     return _recalculate_forecast_amounts(rows)
 
 
-def _is_amount_included(row: ForecastRow) -> bool:
-    return is_amount_included(row)
-
-
 def _target_totals(
     budgeted_rows: Iterable[ForecastRow],
     company_budgets: Iterable[BudgetTarget] | None,
@@ -240,30 +236,18 @@ def _target_totals(
     return (
         sum(row.budget_quantity for row in rows),
         sum(
-            row.budget_amount if row.budget_amount > 0 else _dashboard_amount(row.budget_quantity, row)
+            row.budget_amount if row.budget_amount > 0 else amount_for_quantity(row.budget_quantity, row)
             for row in rows
         ),
     )
-
-
-def _dashboard_amount(quantity: float, row: ForecastRow) -> float:
-    return amount_for_quantity(quantity, row)
-
-
-def _amount_from_latest_order_price(quantity: float, row: ForecastRow) -> float:
-    return amount_for_quantity(quantity, row)
-
-
-def _latest_price_quantity(row: ForecastRow) -> float:
-    return latest_price_quantity(row)
 
 
 def _to_monthly_review_row(row: ForecastRow, month_index: int) -> MonthlyReviewRow:
     actual_quantity = row.this_year_same_month_qty
     actual_amount = row.ty_monthly_amount[month_index] if 0 <= month_index < len(row.ty_monthly_amount) else 0.0
     forecast_quantity = row.final_forecast
-    forecast_amount = _dashboard_amount(forecast_quantity, row)
-    budget_amount = row.budget_amount if row.budget_amount > 0 else _dashboard_amount(row.budget_quantity, row)
+    forecast_amount = amount_for_quantity(forecast_quantity, row)
+    budget_amount = row.budget_amount if row.budget_amount > 0 else amount_for_quantity(row.budget_quantity, row)
     last_year_quantity = row.last_year_same_month_qty
     last_year_amount = row.ly_monthly_amount[month_index] if 0 <= month_index < len(row.ly_monthly_amount) else 0.0
     return MonthlyReviewRow(
@@ -302,7 +286,7 @@ def build_product_monitor_rows(
         today=today,
         projections=projections,
         target_month=target_month,
-        amount_for_quantity=_dashboard_amount,
+        amount_for_quantity=amount_for_quantity,
     )
 
 
@@ -455,7 +439,7 @@ def _apply_reason_and_budget(
         budget_monthly=budget_monthly,
         budget_monthly_amount=budget_monthly_amount,
     )
-    return replace(row, estimated_amount=0.0 if row.excluded else _dashboard_amount(row.final_forecast, row))
+    return replace(row, estimated_amount=0.0 if row.excluded else amount_for_quantity(row.final_forecast, row))
 
 
 def _normalize_item_status(item_status: object, legacy_status_label: object = "") -> str:
@@ -481,7 +465,7 @@ def _to_monitor_row(
         today,
         projection,
         target_month,
-        amount_for_quantity=_dashboard_amount,
+        amount_for_quantity=amount_for_quantity,
     )
 
 
