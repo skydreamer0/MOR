@@ -110,23 +110,24 @@ Boundary for BF batch: ✅ 全數完成
 
 ---
 
-### 1. Workbench Context Internals
+### 1. Workbench Context Internals ✅ 完成
 
 Goal: keep `forecast_workbench_context.py` as the public context builder while moving remaining summary enrichment, health, projection, and monitor assembly details into smaller testable helpers.
 
-Boundary:
+完成內容：
+- 移除 `app.py` dead import `build_monthly_review_report`（從未呼叫）
+- `_patch_latest_order_dates`：測試改為從 `forecast_workbench_context` 引入（canonical 位置），移除 `operational_views` 的 proxy shim
+- 新增 `_filter_visible_rows(summary, item_configs)` helper，從 `_build_summary` 提取 visibility filter 成具名函式，可獨立測試
 
-- Keep `build(forecast_config, db, target_source, *, today=None)` stable unless a test-protected API change is necessary.
-- Do not touch export/write workflows in the same seam.
-
-### 2. Amount Calculation Seam
+### 2. Amount Calculation Seam ✅ 完成
 
 Goal: expand the new amount calculation seam so monthly review and raw forecast engine behavior cannot diverge silently from dashboard/export calculations.
 
-Boundary:
-
-- Characterize current behavior before changing formulas.
-- Treat `exporter.py` primarily as workbook output, not the owner of pricing rules.
+完成內容：
+- 移除 `operational_views.py` 裡的四個 amount alias（`_dashboard_amount`、`_amount_from_latest_order_price`、`_latest_price_quantity`、`_is_amount_included`）
+- 全部呼叫點改為直接使用 `amount_calculation.amount_for_quantity`
+- `operational_views.py`：590 → 565 行（-25 行）
+- 消除因 alias 分歧導致 amount 計算邏輯悄悄不一致的風險
 
 ### 3. Close-Month Workflow ✅ 完成（BF-5）
 
