@@ -38,10 +38,10 @@ from src.backend.operational_views import (
 from src.backend.web.form_parser import FormValidationError, parse_manual_quantities, parse_target_period, validate_target_period
 from src.backend.web.forecast_presenter import product_display_name
 from src.backend.daily_sales_importer import (
-    close_month,
     get_close_record,
     import_daily_sales_workbook,
 )
+from src.backend.close_month_workflow import execute_close_month
 from src.backend.database import get_db
 from src.backend.etl import import_current_month, sync_excel_to_db
 from src.backend.snapshot_service import (
@@ -264,35 +264,6 @@ def create_app(config: dict | None = None) -> Flask:
             ),
         )
 
-    def _find_or_create_close_snapshot(year: int, month: int) -> int | None:
-        """Return an existing Final/CloseMonth snapshot ID, or auto-create one."""
-        with db.get_connection() as conn:
-            row = conn.execute(
-                """
-                SELECT id FROM forecast_snapshots
-                WHERE year = ? AND month = ? AND snapshot_type IN ('Final', 'CloseMonth')
-                ORDER BY id DESC LIMIT 1
-                """,
-                (year, month),
-            ).fetchone()
-        if row:
-            return row["id"]
-        # Auto-create from current forecast state
-        try:
-            ctx = build_forecast_page_context(
-                data_base_path, forecast_config, db,
-                {"year": str(year), "month": str(month)},
-            )
-            snapshot_rows = serialize_forecast_rows_for_snapshot(ctx.summary.rows)
-        except Exception as exc:
-            logger.error("結月快照自動建立失敗 %d/%02d: %s", year, month, exc, exc_info=True)
-            raise
-        return save_snapshot(
-            db, year, month,
-            f"結月快照 {year}/{month:02d}", "CloseMonth",
-            snapshot_rows, created_by="結月",
-        )
-
     @app.post("/monitor/products/close-month")
     def close_product_monitor_month() -> Response:
         year = request.form.get("year", type=int)
@@ -305,8 +276,12 @@ def create_app(config: dict | None = None) -> Flask:
         except FormValidationError:
             return redirect(url_for("product_monitor", import_error="年月範圍不合法。"))
         try:
-            snapshot_id = _find_or_create_close_snapshot(year, month)
-            close_month(db, year, month, snapshot_id=snapshot_id, note=note)
+            ctx = build_forecast_page_context(
+                data_base_path, forecast_config, db,
+                {"year": str(year), "month": str(month)},
+            )
+            snapshot_rows = serialize_forecast_rows_for_snapshot(ctx.summary.rows)
+            execute_close_month(db, year, month, snapshot_rows, note=note)
             _invalidate_context_cache(year, month)
         except Exception as exc:
             return redirect(url_for("product_monitor", year=year, month=month,
