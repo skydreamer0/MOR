@@ -86,23 +86,27 @@ Architecture direction:
 - 修正：`create_app` 的 cache config 加入 `CACHE_THRESHOLD: 500`（最多 500 條目，超過自動 LRU 淘汰）。
 - 涉及檔案：`src/backend/app.py`。
 
-#### BF-5: Close-Month 非原子操作（孤兒快照風險）
+#### BF-5: Close-Month 非原子操作（孤兒快照風險）✅ 完成（Seam 3）
 
-- 症狀：`_find_or_create_close_snapshot` 先建快照再呼叫 `close_month`；若後者失敗，留下孤兒快照，下次結帳撿到錯誤快照。
-- 修正：屬於既有 Seam 3（Close-Month Workflow）的一部分，在該 seam 中以 transaction 包裹整個操作。
-- 暫不獨立修正，等 Seam 3 展開時一起處理。
+- 症狀：`_find_or_create_close_snapshot` 先建快照再呼叫 `close_month`；若後者失敗，留下孤兒快照。
+- 修正：建立 `close_month_workflow.execute_close_month()`，所有寫入共用單一 connection；`app.py` 移除兩步驟拆分邏輯。
+- 涉及檔案：`src/backend/close_month_workflow.py`（新增）、`src/backend/app.py`。
 
-#### BF-6: Monthly Review 廣義例外吞掉邏輯錯誤
+#### BF-6: Monthly Review 廣義例外吞掉邏輯錯誤 ✅ 完成
 
 - 症狀：`except Exception as exc:` 捕捉所有例外（含程式邏輯錯誤），只顯示 `str(exc)`，難以 debug。
 - 修正：縮窄為具體例外型別（`ValueError`, `LookupError`），其餘讓 Flask error handler 處理。
 - 涉及檔案：`src/backend/app.py`（`monthly_review` route）。
 
-Boundary for BF batch:
-- 每個 BF item 獨立 commit，不合併進其他 seam。
-- 不改動 route 對外行為（回傳內容、重導向目標、狀態碼）。
-- BF-0 完成後跑 `pytest -q` 確認 218→271 通過。
-- BF-2 完成後確認 `with db.get_connection() as conn:` 呼叫方不需修改。
+#### BF-7: `/sync` 回傳純文字（UX）✅ 完成
+
+- 症狀：sync 後回傳純文字頁面，使用者需手動回上頁。
+- 修正：改為 `redirect(url_for("dashboard", sync_message=...))` PRG 模式。
+- 涉及檔案：`src/backend/app.py`。
+
+Boundary for BF batch: ✅ 全數完成
+- 每個 BF item 獨立 commit，可單獨驗證。
+- 290 tests passing。
 
 ---
 
@@ -124,14 +128,16 @@ Boundary:
 - Characterize current behavior before changing formulas.
 - Treat `exporter.py` primarily as workbook output, not the owner of pricing rules.
 
-### 3. Close-Month Workflow
+### 3. Close-Month Workflow ✅ 完成（BF-5）
 
 Goal: move remaining close-month route-local orchestration into a backend workflow/service.
+
+完成內容：`close_month_workflow.py` 建立，包含原子寫入邏輯。`app.py` 路由已精簡為：建 context → 序列化 rows → 呼叫 `execute_close_month()`。
 
 Boundary:
 
 - Snapshot immutability is already owned by `snapshot_service.py`.
-- This seam should own route orchestration, validation, close-record creation, cache invalidation points, and redirect/message behavior.
+- Route only orchestrates: context build, row serialization, cache invalidation, redirect.
 
 ### 4. Context Cache Seam
 

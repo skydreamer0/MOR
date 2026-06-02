@@ -479,13 +479,13 @@ def create_app(config: dict | None = None) -> Flask:
         return redirect(url_for("settings"))
 
     @app.post("/sync")
-    def sync_data() -> str:
+    def sync_data() -> Response:
         try:
             sync_excel_to_db(db, data_base_path)
             _invalidate_all_context_cache()
-            return "資料同步完成！請重新載入工作台。"
         except Exception as exc:
-            return f"同步失敗：{exc}"
+            return redirect(url_for("dashboard", sync_error=str(exc)))
+        return redirect(url_for("dashboard", sync_message="資料同步完成。"))
 
     @app.post("/upload/current-month")
     def upload_current_month() -> str:
