@@ -1,6 +1,6 @@
 # MOR Roadmap
 
-Last reviewed: 2026-05-31
+Last reviewed: 2026-06-01
 
 This file is the active source of truth for MOR planning. Historical implementation plans and architecture review artifacts should not be used as implementation context unless this roadmap explicitly points to them.
 
@@ -52,50 +52,113 @@ Architecture direction:
 
 ## Active Refactor Queue
 
-### 1. Workbench Context Internals
+### 0. Architecture Bug Fix Batch (prerequisite for remaining seams)
+
+架構審查發現的具體問題，按優先順序逐一修正。每個修正獨立 commit，可單獨驗證。
+
+#### BF-0: Werkzeug 版本釘選（測試環境修復）
+
+- 症狀：Flask 2.3.2 + Werkzeug 3.1.8 不相容，`test_app.py` 全數失敗。
+- 修正：`requirements.txt` 加入 `werkzeug>=2.3.3,<3.0`，恢復 53 個路由測試。
+- 涉及檔案：`requirements.txt`。
+
+#### BF-1: PRG 修正（`/items/save` 表單重複送出）
+
+- 症狀：`save_items()` POST 後直接 render 頁面，F5 重新整理觸發重複 POST。
+- 修正：`return settings()` → `return redirect(url_for("settings"))`。
+- 涉及檔案：`src/backend/app.py`。
+
+#### BF-2: SQLite 連線未關閉（資源洩漏）
+
+- 症狀：`sqlite3.Connection` 的 `with` block 只做 commit/rollback，不關閉連線；長時間執行累積未釋放連線。
+- 修正：`MORDatabase.get_connection()` 改為 `@contextmanager`，在 `finally` 中明確 `conn.close()`。
+- 涉及檔案：`src/backend/database.py`（呼叫方 `with db.get_connection() as conn:` 語法不變）。
+
+#### BF-3: `_apply_reasons_and_budgets` 跨模組引用私有函式
+
+- 症狀：`forecast_workbench_context.py` 引入底線前綴的私有函式，表示模組邊界洩漏。
+- 修正：移除底線前綴，成為 `operational_views` 的公開 API。
+- 涉及檔案：`src/backend/operational_views.py`、`src/backend/forecast_workbench_context.py`。
+
+#### BF-4: SimpleCache 無界增長
+
+- 症狀：`CACHE_DEFAULT_TIMEOUT=0`（永不過期）+ cache key 包含日期，每天產生新 key 且舊 key 永不清除，記憶體持續增長。
+- 修正：`create_app` 的 cache config 加入 `CACHE_THRESHOLD: 500`（最多 500 條目，超過自動 LRU 淘汰）。
+- 涉及檔案：`src/backend/app.py`。
+
+#### BF-5: Close-Month 非原子操作（孤兒快照風險）✅ 完成（Seam 3）
+
+- 症狀：`_find_or_create_close_snapshot` 先建快照再呼叫 `close_month`；若後者失敗，留下孤兒快照。
+- 修正：建立 `close_month_workflow.execute_close_month()`，所有寫入共用單一 connection；`app.py` 移除兩步驟拆分邏輯。
+- 涉及檔案：`src/backend/close_month_workflow.py`（新增）、`src/backend/app.py`。
+
+#### BF-6: Monthly Review 廣義例外吞掉邏輯錯誤 ✅ 完成
+
+- 症狀：`except Exception as exc:` 捕捉所有例外（含程式邏輯錯誤），只顯示 `str(exc)`，難以 debug。
+- 修正：縮窄為具體例外型別（`ValueError`, `LookupError`），其餘讓 Flask error handler 處理。
+- 涉及檔案：`src/backend/app.py`（`monthly_review` route）。
+
+#### BF-7: `/sync` 回傳純文字（UX）✅ 完成
+
+- 症狀：sync 後回傳純文字頁面，使用者需手動回上頁。
+- 修正：改為 `redirect(url_for("dashboard", sync_message=...))` PRG 模式。
+- 涉及檔案：`src/backend/app.py`。
+
+Boundary for BF batch: ✅ 全數完成
+- 每個 BF item 獨立 commit，可單獨驗證。
+- 290 tests passing。
+
+---
+
+### 1. Workbench Context Internals ✅ 完成
 
 Goal: keep `forecast_workbench_context.py` as the public context builder while moving remaining summary enrichment, health, projection, and monitor assembly details into smaller testable helpers.
 
-Boundary:
+完成內容：
+- 移除 `app.py` dead import `build_monthly_review_report`（從未呼叫）
+- `_patch_latest_order_dates`：測試改為從 `forecast_workbench_context` 引入（canonical 位置），移除 `operational_views` 的 proxy shim
+- 新增 `_filter_visible_rows(summary, item_configs)` helper，從 `_build_summary` 提取 visibility filter 成具名函式，可獨立測試
 
-- Keep `build(forecast_config, db, target_source, *, today=None)` stable unless a test-protected API change is necessary.
-- Do not touch export/write workflows in the same seam.
-
-### 2. Amount Calculation Seam
+### 2. Amount Calculation Seam ✅ 完成
 
 Goal: expand the new amount calculation seam so monthly review and raw forecast engine behavior cannot diverge silently from dashboard/export calculations.
 
-Boundary:
+完成內容：
+- 移除 `operational_views.py` 裡的四個 amount alias（`_dashboard_amount`、`_amount_from_latest_order_price`、`_latest_price_quantity`、`_is_amount_included`）
+- 全部呼叫點改為直接使用 `amount_calculation.amount_for_quantity`
+- `operational_views.py`：590 → 565 行（-25 行）
+- 消除因 alias 分歧導致 amount 計算邏輯悄悄不一致的風險
 
-- Characterize current behavior before changing formulas.
-- Treat `exporter.py` primarily as workbook output, not the owner of pricing rules.
-
-### 3. Close-Month Workflow
+### 3. Close-Month Workflow ✅ 完成（BF-5）
 
 Goal: move remaining close-month route-local orchestration into a backend workflow/service.
+
+完成內容：`close_month_workflow.py` 建立，包含原子寫入邏輯。`app.py` 路由已精簡為：建 context → 序列化 rows → 呼叫 `execute_close_month()`。
 
 Boundary:
 
 - Snapshot immutability is already owned by `snapshot_service.py`.
-- This seam should own route orchestration, validation, close-record creation, cache invalidation points, and redirect/message behavior.
+- Route only orchestrates: context build, row serialization, cache invalidation, redirect.
 
-### 4. Context Cache Seam
+### 4. Context Cache Seam ✅ 完成
 
 Goal: extract cache key/invalidation state from `app.py` into a small `ContextCache` seam if cache behavior starts blocking route simplification.
 
-Priority: low. Current helper functions are acceptable until other route seams are quieter.
+完成內容：
+- 新增 `src/backend/context_cache.py`，`ContextCache` 類別封裝版本計數器與 key 生成
+- `app.py` closure 中的 `_month_versions`、`_global_version` 及 5 個 helper 函式改以 `ctx_cache = ContextCache(flask_cache)` 取代
+- `_invalidate_context_cache()` → `ctx_cache.invalidate()`，`_invalidate_all_context_cache()` → `ctx_cache.invalidate_all()`
 
 ## Product Backlog
 
-1. Product view page: product-level sales summary, similar in shape to the completed Customer View.
-
-Hold feature work until the active refactor batch is small and verified, unless the user explicitly prioritizes the feature.
+(empty — all planned items complete)
 
 ## Completed Feature Work
 
 - Browser multi-page UI smoke coverage.
 - Budget coverage warning in Settings UI.
 - Customer view page (`/customers`) with YTD summary, month expansion, and sparkline.
+- Product view page (`/products`) with YTD summary, month expansion, and sparkline.
 - Forecast item status layering: discontinued products render in a collapsed section below active forecast rows.
 - Path unification: `src/backend/` is the canonical backend implementation path; root `app.py` is only a launch wrapper.
 

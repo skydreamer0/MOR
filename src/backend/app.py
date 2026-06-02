@@ -30,7 +30,6 @@ from src.backend.product_monitor_workflow import build_product_monitor_template_
 from src.backend.operational_views import (
     aggregate_to_analytics,
     build_forecast_page_context,
-    build_monthly_review_report,
     forecast_amount_total,
     last_year_amount_total,
     update_item_configs,
@@ -38,10 +37,11 @@ from src.backend.operational_views import (
 from src.backend.web.form_parser import FormValidationError, parse_manual_quantities, parse_target_period, validate_target_period
 from src.backend.web.forecast_presenter import product_display_name
 from src.backend.daily_sales_importer import (
-    close_month,
     get_close_record,
     import_daily_sales_workbook,
 )
+from src.backend.close_month_workflow import execute_close_month
+from src.backend.context_cache import ContextCache
 from src.backend.database import get_db
 from src.backend.etl import import_current_month, sync_excel_to_db
 from src.backend.snapshot_service import (
@@ -73,47 +73,23 @@ def create_app(config: dict | None = None) -> Flask:
     data_base_path = Path(app.config.get("DATA_BASE_PATH", PROJECT_ROOT))
     db_base_path = Path(app.config.get("DB_BASE_PATH", PROJECT_ROOT))
     db = get_db(db_base_path)
-    cache = Cache(config={"CACHE_TYPE": "SimpleCache", "CACHE_DEFAULT_TIMEOUT": 0})
-    cache.init_app(app)
+    flask_cache = Cache(config={"CACHE_TYPE": "SimpleCache", "CACHE_DEFAULT_TIMEOUT": 0, "CACHE_THRESHOLD": 500})
+    flask_cache.init_app(app)
     app.jinja_env.filters["product_display_name"] = product_display_name
 
-    # Version counters for cache invalidation — no DB queries on hot path.
-    # _month_versions tracks per-(year, month) writes (adjustments, daily imports, close-month).
-    # _global_version tracks writes that affect all months (sync, item config changes).
-    _month_versions: dict[tuple[int, int], int] = {}
-    _global_version: list[int] = [0]
-
-    def _make_cache_key(year: int, month: int, as_of: date | None = None) -> str:
-        key = (
-            f"forecast-context:{year}:{month}"
-            f":g{_global_version[0]}"
-            f":m{_month_versions.get((year, month), 0)}"
-        )
-        if as_of is not None:
-            key += f":d{as_of.isoformat()}"
-        return key
-
-    def _invalidate_context_cache(year: int, month: int) -> None:
-        _month_versions[(year, month)] = _month_versions.get((year, month), 0) + 1
-
-    def _invalidate_all_context_cache() -> None:
-        _global_version[0] += 1
+    ctx_cache = ContextCache(flask_cache)
 
     def _build_cached_context(year: int, month: int):
         today = date.today()
-        as_of = today if (year, month) == (today.year, today.month) else None
-        key = _make_cache_key(year, month, as_of)
-        context = cache.get(key)
-        if context is None:
-            context = build_forecast_page_context(
-                data_base_path,
-                forecast_config,
-                db,
+        return ctx_cache.get_or_build(
+            year, month,
+            lambda: build_forecast_page_context(
+                data_base_path, forecast_config, db,
                 {"year": str(year), "month": str(month)},
                 today=today,
-            )
-            cache.set(key, context)
-        return context
+            ),
+            today=today,
+        )
 
     def _load_context_from_request():
         default_target = default_target_from_db(db)
@@ -122,7 +98,7 @@ def create_app(config: dict | None = None) -> Flask:
 
     def _save_row_override(row_id: str, manual_qty: str | None, reason: str | None, year: int, month: int) -> None:
         save_row_override(db, row_id, manual_qty, reason, year, month)
-        _invalidate_context_cache(year, month)
+        ctx_cache.invalidate(year, month)
 
     def _find_forecast_row(row_id: str, year: int, month: int):
         context = _build_cached_context(year, month)
@@ -264,35 +240,6 @@ def create_app(config: dict | None = None) -> Flask:
             ),
         )
 
-    def _find_or_create_close_snapshot(year: int, month: int) -> int | None:
-        """Return an existing Final/CloseMonth snapshot ID, or auto-create one."""
-        with db.get_connection() as conn:
-            row = conn.execute(
-                """
-                SELECT id FROM forecast_snapshots
-                WHERE year = ? AND month = ? AND snapshot_type IN ('Final', 'CloseMonth')
-                ORDER BY id DESC LIMIT 1
-                """,
-                (year, month),
-            ).fetchone()
-        if row:
-            return row["id"]
-        # Auto-create from current forecast state
-        try:
-            ctx = build_forecast_page_context(
-                data_base_path, forecast_config, db,
-                {"year": str(year), "month": str(month)},
-            )
-            snapshot_rows = serialize_forecast_rows_for_snapshot(ctx.summary.rows)
-        except Exception as exc:
-            logger.error("結月快照自動建立失敗 %d/%02d: %s", year, month, exc, exc_info=True)
-            raise
-        return save_snapshot(
-            db, year, month,
-            f"結月快照 {year}/{month:02d}", "CloseMonth",
-            snapshot_rows, created_by="結月",
-        )
-
     @app.post("/monitor/products/close-month")
     def close_product_monitor_month() -> Response:
         year = request.form.get("year", type=int)
@@ -305,9 +252,13 @@ def create_app(config: dict | None = None) -> Flask:
         except FormValidationError:
             return redirect(url_for("product_monitor", import_error="年月範圍不合法。"))
         try:
-            snapshot_id = _find_or_create_close_snapshot(year, month)
-            close_month(db, year, month, snapshot_id=snapshot_id, note=note)
-            _invalidate_context_cache(year, month)
+            ctx = build_forecast_page_context(
+                data_base_path, forecast_config, db,
+                {"year": str(year), "month": str(month)},
+            )
+            snapshot_rows = serialize_forecast_rows_for_snapshot(ctx.summary.rows)
+            execute_close_month(db, year, month, snapshot_rows, note=note)
+            ctx_cache.invalidate(year, month)
         except Exception as exc:
             return redirect(url_for("product_monitor", year=year, month=month,
                                     import_error=f"結月失敗：{exc}"))
@@ -321,7 +272,7 @@ def create_app(config: dict | None = None) -> Flask:
             return redirect(url_for("product_monitor", import_error="請選擇當月累積業績檔。"))
         try:
             result = import_daily_sales_workbook(db, uploaded.stream, uploaded.filename)
-            _invalidate_context_cache(result.sales_year, result.sales_month)
+            ctx_cache.invalidate(result.sales_year, result.sales_month)
         except Exception as exc:
             return redirect(url_for("product_monitor", import_error=f"匯入失敗：{exc}"))
         return redirect(
@@ -390,6 +341,26 @@ def create_app(config: dict | None = None) -> Flask:
             error_message=error_message,
         )
 
+    @app.get("/products")
+    def products() -> str:
+        try:
+            context = _load_context_from_request()
+            slices = aggregate_to_analytics(context.summary.rows, "product", context.target)
+            year, month = context.target.year, context.target.month
+            error_message = None
+        except (FileNotFoundError, ValueError, FormValidationError) as exc:
+            slices = []
+            year = request.args.get("year", "")
+            month = request.args.get("month", "")
+            error_message = f"無法載入商品分析：{exc}"
+        return render_template(
+            "products.html",
+            slices=slices,
+            year=year,
+            month=month,
+            error_message=error_message,
+        )
+
     @app.get("/settings")
     def settings() -> str:
         try:
@@ -443,7 +414,7 @@ def create_app(config: dict | None = None) -> Flask:
                 product_summary = build_product_summary(db, year, month)
                 forecast_bias = build_forecast_bias(db, year, month)
                 trend_chart = build_trend_chart(build_trend(db, year, month))
-            except Exception as exc:
+            except (ValueError, LookupError, KeyError, TypeError) as exc:
                 error_message = str(exc)
         return render_template(
             "monthly_review.html",
@@ -492,8 +463,8 @@ def create_app(config: dict | None = None) -> Flask:
     def save_items() -> Response:
         items = build_item_config_payloads_from_form(request.form)
         update_item_configs(db, items)
-        _invalidate_all_context_cache()
-        return settings()
+        ctx_cache.invalidate_all()
+        return redirect(url_for("settings"))
 
     @app.get("/exclusions")
     def exclusions_management() -> str:
@@ -504,13 +475,13 @@ def create_app(config: dict | None = None) -> Flask:
         return redirect(url_for("settings"))
 
     @app.post("/sync")
-    def sync_data() -> str:
+    def sync_data() -> Response:
         try:
             sync_excel_to_db(db, data_base_path)
-            _invalidate_all_context_cache()
-            return "資料同步完成！請重新載入工作台。"
+            ctx_cache.invalidate_all()
         except Exception as exc:
-            return f"同步失敗：{exc}"
+            return redirect(url_for("dashboard", sync_error=str(exc)))
+        return redirect(url_for("dashboard", sync_message="資料同步完成。"))
 
     @app.post("/upload/current-month")
     def upload_current_month() -> str:
@@ -525,7 +496,7 @@ def create_app(config: dict | None = None) -> Flask:
         try:
             df = pd.read_excel(file)
             count = import_current_month(db, df)
-            _invalidate_all_context_cache()
+            ctx_cache.invalidate_all()
             return f"已匯入 {count} 筆當月業績資料。"
         except Exception as exc:
             return f"匯入失敗：{exc}", 400

@@ -645,6 +645,7 @@ def test_item_management_exclusion_is_reflected_on_workbench():
             "is_visible_P2": "1",
             "is_excluded_P2": "1",
         },
+        follow_redirects=True,
     )
     workbench = client.get("/forecast").get_data(as_text=True)
 
@@ -678,6 +679,7 @@ def test_forecast_page_layers_discontinued_items_below_active_rows():
             "is_visible_P2": "1",
             "item_status_P2": "discontinued",
         },
+        follow_redirects=True,
     )
     forecast = client.get("/forecast?year=2026&month=5").get_data(as_text=True)
 
@@ -741,6 +743,7 @@ def test_item_settings_save_price_quantity_and_forecast_uses_it():
             "is_visible_P1": "1",
             "price_quantity_P1": "100",
         },
+        follow_redirects=True,
     )
     forecast = client.get("/forecast?year=2026&month=4").get_data(as_text=True)
 
@@ -782,6 +785,7 @@ def test_item_settings_save_persists_payload_shape_to_item_configs():
             "price_quantity_P1": "24.7",
             "item_status_P1": "discontinued",
         },
+        follow_redirects=True,
     )
 
     assert response.status_code == 200
@@ -819,6 +823,7 @@ def test_item_settings_save_coerces_invalid_fields_to_existing_defaults():
             "price_quantity_P1": "not-a-number",
             "item_status_P1": "retired",
         },
+        follow_redirects=True,
     )
 
     assert response.status_code == 200
@@ -850,6 +855,7 @@ def test_item_settings_save_clears_forecast_context_cache():
             "product_codes": ["P1"],
             "is_budgeted_P1": "1",
         },
+        follow_redirects=True,
     )
     second_forecast = client.get("/forecast?year=2026&month=4").get_data(as_text=True)
 
@@ -883,6 +889,7 @@ def test_unbudgeted_item_has_no_budget_target_on_forecast_page():
             "product_codes": ["P1"],
             "is_visible_P1": "1",
         },
+        follow_redirects=True,
     )
     forecast = client.get("/forecast?year=2026&month=4").get_data(as_text=True)
 
