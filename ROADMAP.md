@@ -1,6 +1,6 @@
 # MOR Roadmap
 
-Last reviewed: 2026-06-01
+Last reviewed: 2026-06-02
 
 This file is the active source of truth for MOR planning. Historical implementation plans and architecture review artifacts should not be used as implementation context unless this roadmap explicitly points to them.
 
@@ -148,6 +148,60 @@ Goal: extract cache key/invalidation state from `app.py` into a small `ContextCa
 - 新增 `src/backend/context_cache.py`，`ContextCache` 類別封裝版本計數器與 key 生成
 - `app.py` closure 中的 `_month_versions`、`_global_version` 及 5 個 helper 函式改以 `ctx_cache = ContextCache(flask_cache)` 取代
 - `_invalidate_context_cache()` → `ctx_cache.invalidate()`，`_invalidate_all_context_cache()` → `ctx_cache.invalidate_all()`
+
+### 5. Architecture Hygiene Batch
+
+架構審查（2026-06-02）發現的具體問題，按優先順序修正。每個修正獨立 commit 可單獨驗證。
+
+#### AH-1: ETL 年份寫死（高優先，靜默失效）
+
+- 症狀：`BUDGET_FILE_PATTERN = "2026預算報表*.xlsx"` 和 `default_year=2026` 寫死在 `etl.py`，2027 年起靜默失效，需手動改源碼。
+- 修正：從 `ForecastConfig` 讀取 `current_year`，或從 Excel 檔名自動推斷年份；`default_year` 改為參數化。
+- 涉及檔案：`src/backend/etl.py`、`src/backend/forecast_config.py`。
+
+#### AH-2: `/close-month` 與 `/snapshots/save` 繞過 ContextCache
+
+- 症狀：`close_product_monitor_month` 和 `save_snapshot_route` 直接呼叫 `build_forecast_page_context()`，不走 `_build_cached_context()`，每次執行都重建整個上下文，與其他路由行為不一致。
+- 修正：改為呼叫 `_build_cached_context(year, month)`。
+- 涉及檔案：`src/backend/app.py`（兩個路由函式）。
+
+#### AH-3: `build_forecast_page_context` 的 `data_base_path` 是死參數
+
+- 症狀：`operational_views.build_forecast_page_context()` 接受 `data_base_path: Path`，但立刻轉給 `forecast_workbench_context.build()`，後者完全不使用它；`app.py` 多處傳入此參數都是無效呼叫。
+- 修正：移除 `operational_views.build_forecast_page_context()` 的 `data_base_path` 參數，同步更新 `app.py` 的五個呼叫點。
+- 涉及檔案：`src/backend/operational_views.py`、`src/backend/app.py`。
+
+#### AH-4: `src/backend/app.py` 模組層級副作用
+
+- 症狀：第 606 行 `app = create_app()` 在模組層級執行，import 此模組即觸發 DB 初始化與 Flask 應用建立；根目錄 `app.py` import `create_app` 時已隱含觸發一次建立。
+- 修正：刪除 `src/backend/app.py` 的模組層級 `app = create_app()`；統一由根目錄 `app.py` 或 `if __name__ == "__main__"` 啟動。
+- 涉及檔案：`src/backend/app.py`。
+
+#### AH-5: `forecast_engine.py` 死代碼函式
+
+- 症狀：`_month_quantity()` 和 `_month_amount()`（第 163–178 行）從未被呼叫；實際使用的是函式內部定義的 `_pqty`/`_pamt` closure。
+- 修正：直接刪除兩個函式。
+- 涉及檔案：`src/backend/forecast_engine.py`。
+
+#### AH-6: `ForecastOptions.excluded_item_ids` 應為 `frozenset`
+
+- 症狀：`@dataclass(frozen=True)` 中的 `set[str]` 欄位不可雜湊，違反 `frozen` 的語意預期（frozen dataclass 理應可做 dict key / set member）。
+- 修正：型別改為 `frozenset[str]`，更新 `forecast_workbench_context.py` 傳入端。
+- 涉及檔案：`src/backend/forecast_models.py`、`src/backend/forecast_workbench_context.py`。
+
+#### AH-7: `excluded_items.json` 舊版遷移碼
+
+- 症狀：`sync_excel_to_db()` 仍讀取並遷移 `excluded_items.json`（舊格式）；現有部署早已完成遷移，此段碼只增加混淆。
+- 修正：確認無現存 `excluded_items.json` 後，移除對應的讀取與 INSERT 邏輯。
+- 涉及檔案：`src/backend/etl.py`。
+
+#### AH-8: ContextCache 不支援多 Worker（文件限制）
+
+- 症狀：`_global_version` / `_month_versions` 存在 Python 物件、`SimpleCache` 為 in-process；若部署多 Worker（gunicorn multi-process），invalidation 不跨進程傳播，不同 Worker 會返回不同版本資料。
+- 修正（文件層面）：在 `context_cache.py` 加上說明「必須單 Worker 部署」；未來若需多 Worker 再評估改用 Redis/Memcached 後端。
+- 涉及檔案：`src/backend/context_cache.py`。
+
+---
 
 ## Product Backlog
 
