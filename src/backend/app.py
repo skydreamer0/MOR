@@ -30,7 +30,6 @@ from src.backend.product_monitor_workflow import build_product_monitor_template_
 from src.backend.operational_views import (
     aggregate_to_analytics,
     build_forecast_page_context,
-    build_monthly_review_report,
     forecast_amount_total,
     last_year_amount_total,
     update_item_configs,

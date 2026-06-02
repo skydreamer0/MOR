@@ -466,15 +466,6 @@ def _normalize_item_status(item_status: object, legacy_status_label: object = ""
     return "active"
 
 
-def _patch_latest_order_dates(
-    summary: ForecastSummary,
-    daily_actuals: Mapping[str, DailyActualAggregate],
-) -> ForecastSummary:
-    from src.backend.forecast_workbench_context import _patch_latest_order_dates as patch_latest_order_dates
-
-    return patch_latest_order_dates(summary, daily_actuals)
-
-
 def _to_monitor_row(
     row: ForecastRow,
     actual: DailyActualAggregate | None = None,

@@ -103,6 +103,19 @@ def _patch_latest_order_dates(
     return replace(summary, rows=patched)
 
 
+def _filter_visible_rows(summary: ForecastSummary, item_configs: dict) -> ForecastSummary:
+    """Remove rows whose product_code is marked is_visible=False in item_configs."""
+    visible = [
+        row for row in summary.rows
+        if item_configs.get(row.product_code, {}).get("is_visible", True)
+    ]
+    return replace(
+        summary,
+        rows=visible,
+        total=sum(row.estimated_amount for row in visible if not row.excluded),
+    )
+
+
 def _build_summary(
     inputs: ForecastWorkbenchInputs,
     db,
@@ -119,15 +132,7 @@ def _build_summary(
         ),
         forecast_config,
     )
-    visible_rows = [
-        row for row in summary.rows
-        if inputs.item_configs.get(row.product_code, {}).get("is_visible", True)
-    ]
-    summary = replace(
-        summary,
-        rows=visible_rows,
-        total=sum(row.estimated_amount for row in visible_rows if not row.excluded),
-    )
+    summary = _filter_visible_rows(summary, inputs.item_configs)
     summary = replace(summary, rows=enrich_rows_with_history(summary.rows, db, target.year, target.month))
     summary = _patch_latest_order_dates(summary, inputs.daily_actuals)
     summary = apply_user_adjustments(summary, manual_adjustments=inputs.manual_adjustments, excluded_ids=set())

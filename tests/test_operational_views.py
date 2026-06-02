@@ -7,11 +7,11 @@ import pytest
 from src.backend.daily_sales_importer import DailyActualAggregate
 from src.backend.forecast_models import ForecastRow, ForecastSummary
 from src.backend.row_identity import make_row_id
+from src.backend.forecast_workbench_context import _patch_latest_order_dates
 from src.backend.operational_views import (
     BudgetTarget,
     apply_reasons_and_budgets,
     _fetch_monthly_history,
-    _patch_latest_order_dates,
     build_customer_risk_ranking,
     build_dashboard_metrics,
     build_data_health_summary,
