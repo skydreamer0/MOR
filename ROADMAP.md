@@ -140,23 +140,25 @@ Boundary:
 - Snapshot immutability is already owned by `snapshot_service.py`.
 - Route only orchestrates: context build, row serialization, cache invalidation, redirect.
 
-### 4. Context Cache Seam
+### 4. Context Cache Seam ✅ 完成
 
 Goal: extract cache key/invalidation state from `app.py` into a small `ContextCache` seam if cache behavior starts blocking route simplification.
 
-Priority: low. Current helper functions are acceptable until other route seams are quieter.
+完成內容：
+- 新增 `src/backend/context_cache.py`，`ContextCache` 類別封裝版本計數器與 key 生成
+- `app.py` closure 中的 `_month_versions`、`_global_version` 及 5 個 helper 函式改以 `ctx_cache = ContextCache(flask_cache)` 取代
+- `_invalidate_context_cache()` → `ctx_cache.invalidate()`，`_invalidate_all_context_cache()` → `ctx_cache.invalidate_all()`
 
 ## Product Backlog
 
-1. Product view page: product-level sales summary, similar in shape to the completed Customer View.
-
-Hold feature work until the active refactor batch is small and verified, unless the user explicitly prioritizes the feature.
+(empty — all planned items complete)
 
 ## Completed Feature Work
 
 - Browser multi-page UI smoke coverage.
 - Budget coverage warning in Settings UI.
 - Customer view page (`/customers`) with YTD summary, month expansion, and sparkline.
+- Product view page (`/products`) with YTD summary, month expansion, and sparkline.
 - Forecast item status layering: discontinued products render in a collapsed section below active forecast rows.
 - Path unification: `src/backend/` is the canonical backend implementation path; root `app.py` is only a launch wrapper.
 
