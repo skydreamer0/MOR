@@ -19,17 +19,20 @@ Architecture direction:
 ## Current Module Boundaries
 
 - `src/backend/forecast_workbench_context.py` builds the workbench-ready forecast context, owns `ForecastPageContext`, and owns summary-local latest-order-date enrichment.
+- `src/backend/forecast_page_context.py` owns Forecast page render-data assembly, risk levels, visible/discontinued row split, visible totals, and forecast review signatures.
 - `src/backend/forecast_workbench_inputs.py` owns DB input loading and budget target records for the forecast workbench context.
 - `src/backend/amount_calculation.py` owns forecast row amount inclusion and quantity-to-amount calculation.
 - `src/backend/forecast_write_workflow.py` owns forecast row override persistence.
 - `src/backend/forecast_export_workflow.py` owns export summary preparation.
+- `src/backend/monthly_review_context.py` owns Monthly Review page/export context assembly.
 - `src/backend/snapshot_service.py` owns snapshot persistence, forecast-row snapshot serialization, and final/close-month snapshot immutability.
 - `src/backend/item_settings_workflow.py` owns item/settings request-form parsing and item config payload normalization.
-- `src/backend/dashboard_analytics_workflow.py` owns dashboard analytics/template context assembly.
+- `src/backend/dashboard_analytics_workflow.py` owns dashboard template context assembly.
+- `src/backend/analytics.py` owns reusable analytics slices plus dashboard status distribution and customer risk ranking helpers.
 - `src/backend/product_monitor_workflow.py` owns product monitor template context assembly.
 - `src/backend/product_monitor_rows.py` owns product monitor row view models, row calculation, status labels, and monthly history lookup.
 - `src/backend/row_identity.py` owns canonical forecast row identity make/parse helpers.
-- `src/backend/operational_views.py` still owns shared operational view models, analytics helpers, remaining budget/history presentation helpers, and compatibility facades.
+- `src/backend/operational_views.py` still owns shared operational view models, remaining budget/history presentation helpers, and compatibility facades.
 - `src/backend/app.py` still owns Flask request/response wiring, redirects, cache invalidation, and remaining route-local workflow glue.
 
 ## Completed Architecture Seams
@@ -49,6 +52,9 @@ Architecture direction:
 13. Close-month snapshot immutability and Forecast UI delete guard.
 14. Forecast workbench input loader ownership cleanup.
 15. Amount calculation seam foundation.
+16. Dashboard analytics helper relocation.
+17. Forecast page presentation context extraction.
+18. Monthly Review context package foundation.
 
 ## Cloud Agent Architecture Roadmaps
 
@@ -176,9 +182,16 @@ Verification:
 D:\AI\python.exe -m pytest tests\test_forecast_workbench_context.py tests\test_operational_views.py tests\test_app.py -q --basetemp=.pytest-tmp
 ```
 
-### Phase 3: Dashboard and Analytics Helper Relocation
+### Phase 3: Dashboard and Analytics Helper Relocation - Completed 2026-06-03
 
 Goal: move dashboard-facing analytics helpers out of `operational_views.py` into modules whose names match their purpose.
+
+Completed result:
+
+- `aggregate_to_analytics`, `build_status_distribution`, `build_customer_risk_ranking`, and `CustomerRiskItem` now live in `analytics.py`.
+- `app.py` and `dashboard_analytics_workflow.py` import dashboard analytics helpers from `analytics.py`.
+- `operational_views.py` no longer exports the dashboard analytics helper facades.
+- Architecture tests guard the canonical import path.
 
 Tasks:
 
@@ -209,9 +222,16 @@ Verification:
 D:\AI\python.exe -m pytest tests\test_dashboard_analytics_workflow.py tests\test_operational_views.py tests\test_app.py -q --basetemp=.pytest-tmp
 ```
 
-### Phase 4: Forecast Page Presentation Context
+### Phase 4: Forecast Page Presentation Context - Completed 2026-06-03
 
 Goal: move Forecast page render-data assembly out of the `/forecast` route.
+
+Completed result:
+
+- Added `forecast_page_context.py` for Forecast page render-data assembly.
+- Moved row sorting, active/discontinued split, visible row limit, visible/unrendered totals, customer list, risk levels, and forecast review signature validation behind backend helpers.
+- Kept `/forecast` responsible for loading context, finalized/snapshot lookup, and template rendering.
+- Added characterization tests for presentation output and architecture guards for canonical imports.
 
 Tasks:
 
@@ -243,9 +263,17 @@ Verification:
 D:\AI\python.exe -m pytest tests\test_app.py tests\test_forecast_presenter.py -q --basetemp=.pytest-tmp
 ```
 
-### Phase 5: Monthly Review Context Package
+### Phase 5: Monthly Review Context Package - Completed 2026-06-03
 
 Goal: collapse repeated Monthly Review route orchestration into one backend context package.
+
+Completed result:
+
+- Added `monthly_review_context.py` to assemble summary, action lists, customer summary, product summary, forecast bias, trend, and optional trend chart.
+- Updated Monthly Review HTML and export routes to use the same context builder.
+- Kept `monthly_review.py` DB-only behavior unchanged.
+- Replaced Monthly Review export broad exception handling with current route-level known error types.
+- Added context tests and architecture guards for the shared route seam.
 
 Tasks:
 

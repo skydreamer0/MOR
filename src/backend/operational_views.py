@@ -7,7 +7,6 @@ from typing import Iterable, Mapping
 
 import pandas as pd
 
-from src.backend.analytics import AnalyticsSlice
 from src.backend.amount_calculation import (
     amount_for_quantity,
     is_amount_included,
@@ -16,7 +15,7 @@ from src.backend.amount_calculation import (
 from src.backend.daily_sales_importer import DailyActualAggregate
 from src.backend.data_loader import normalize_product_code
 from src.backend.forecast_config import ForecastConfig
-from src.backend.forecast_models import ForecastRow, ForecastSummary, ForecastTarget
+from src.backend.forecast_models import ForecastRow, ForecastSummary
 from src.backend.forecast_workbench_inputs import BudgetTarget
 from src.backend.product_monitor_rows import (
     ProductMonitorRow,
@@ -45,14 +44,6 @@ class DashboardMetrics:
     amount_gap: float
     high_risk_product_count: int
     high_risk_customer_count: int
-
-
-@dataclass(frozen=True)
-class CustomerRiskItem:
-    customer: str
-    gap_amount: float
-    gap_quantity: float
-    item_count: int
 
 
 @dataclass(frozen=True)
@@ -452,99 +443,3 @@ def _to_monitor_row(
         target_month,
         amount_for_quantity=amount_for_quantity,
     )
-
-
-def build_status_distribution(monitor_rows: list[ProductMonitorRow]) -> dict[str, int]:
-    dist = {"high": 0, "caution": 0, "ok": 0, "no_history": 0}
-    for row in monitor_rows:
-        if row.status_key in dist:
-            dist[row.status_key] += 1
-    return dist
-
-
-def build_customer_risk_ranking(
-    monitor_rows: list[ProductMonitorRow],
-    top_n: int = 5,
-) -> list[CustomerRiskItem]:
-    customer_gaps: dict[str, dict] = {}
-    for row in monitor_rows:
-        if row.status_key not in ("high", "caution"):
-            continue
-        if row.customer not in customer_gaps:
-            customer_gaps[row.customer] = {"gap_amount": 0.0, "gap_quantity": 0.0, "item_count": 0}
-        agg = customer_gaps[row.customer]
-        agg["gap_amount"] += row.amount_impact
-        agg["gap_quantity"] += row.diff_quantity
-        agg["item_count"] += 1
-    ranking = [
-        CustomerRiskItem(customer=name, **data)
-        for name, data in customer_gaps.items()
-    ]
-    ranking.sort(key=lambda x: x.gap_amount)
-    return ranking[:top_n]
-
-
-def aggregate_to_analytics(
-    rows: list[ForecastRow],
-    entity_type: str,
-    target: ForecastTarget,
-) -> list[dict]:
-    """
-    Aggregate ForecastRow monthly arrays by entity_type and return
-    a list of AnalyticsSlice.to_dict() ready for JSON embedding.
-
-    entity_type: "total" | "customer" | "product"
-    Sorted by ytd_ty descending (highest revenue first).
-    """
-    groups: dict[str, list[ForecastRow]] = {}
-    labels: dict[str, str] = {}
-
-    for row in rows:
-        if row.excluded:
-            continue
-        if entity_type == "total":
-            key, label = "total", "全公司"
-        elif entity_type == "customer":
-            key, label = row.customer, row.customer
-        else:  # product
-            key, label = row.product_code, row.product_name
-
-        groups.setdefault(key, []).append(row)
-        labels[key] = label
-
-    result: list[dict] = []
-    for entity_id, entity_rows in groups.items():
-        ly  = [sum(r.ly_monthly[i]     for r in entity_rows) for i in range(12)]
-        ty  = [sum(r.ty_monthly[i]     for r in entity_rows) for i in range(12)]
-        bud = [sum(r.budget_monthly[i] for r in entity_rows) for i in range(12)]
-
-        # Amount arrays (qty × price per transaction, pre-computed in ForecastRow)
-        ly_amt  = [sum(r.ly_monthly_amount[i]     for r in entity_rows) for i in range(12)]
-        ty_amt  = [sum(r.ty_monthly_amount[i]     for r in entity_rows) for i in range(12)]
-        # Budget amounts use the original target_amount from budget_targets — not qty × current price
-        bud_amt = [sum(r.budget_monthly_amount[i] for r in entity_rows) for i in range(12)]
-
-        # Forecast: only target_month carries a value
-        fcst = [0.0] * 12
-        fcst[target.month - 1] = sum(r.final_forecast for r in entity_rows)
-        fcst_amt = sum(r.estimated_amount for r in entity_rows)
-
-        slc = AnalyticsSlice(
-            entity_id=entity_id,
-            entity_label=labels[entity_id],
-            entity_type=entity_type,
-            target_year=target.year,
-            target_month=target.month,
-            ly_monthly=ly,
-            ty_monthly=ty,
-            budget_monthly=bud,
-            forecast_monthly=fcst,
-            ly_monthly_amount=ly_amt,
-            ty_monthly_amount=ty_amt,
-            budget_monthly_amount=bud_amt,
-            forecast_amount=fcst_amt,
-        )
-        result.append(slc.to_dict())
-
-    result.sort(key=lambda x: x["ytd_ty"], reverse=True)
-    return result

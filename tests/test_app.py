@@ -285,13 +285,22 @@ def test_monthly_review_defaults_to_latest_closed_sales_month(monkeypatch):
         budget_amount_achievement_total=1.0,
         rows=[],
     )
+    from src.backend.monthly_review_context import MonthlyReviewContext
+
     monkeypatch.setattr(app, "list_reviewable_months", lambda db: [(2026, 4), (2026, 3)])
-    monkeypatch.setattr(app, "build_monthly_review", lambda db, y, m: stub_summary)
-    monkeypatch.setattr(app, "build_action_lists", lambda db, y, m: None)
-    monkeypatch.setattr(app, "build_customer_summary", lambda db, y, m: None)
-    monkeypatch.setattr(app, "build_forecast_bias", lambda db, y, m: None)
-    monkeypatch.setattr(app, "build_product_summary", lambda db, y, m: None)
-    monkeypatch.setattr(app, "build_trend", lambda db, y, m: None)
+    monkeypatch.setattr(
+        app,
+        "build_monthly_review_context",
+        lambda db, y, m: MonthlyReviewContext(
+            summary=stub_summary,
+            action_lists=None,
+            customer_summary=None,
+            product_summary=None,
+            forecast_bias=None,
+            trend=None,
+            trend_chart=None,
+        ),
+    )
 
     client = _client()
     response = client.get("/monthly-review")
