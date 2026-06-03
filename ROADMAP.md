@@ -531,11 +531,11 @@ Goal: extract cache key/invalidation state from `app.py` into a small `ContextCa
 - 修正：canonical `forecast_workbench_context.build()` 簽名只保留 `forecast_config`、`db`、`target_source` 與 keyword-only `today`；補 architecture guard 防止 `data_base_path` 參數回流。
 - 涉及檔案：`src/backend/forecast_workbench_context.py`、`src/backend/app.py`、`tests/test_architecture_imports.py`。
 
-#### AH-4: `src/backend/app.py` 模組層級副作用
+#### AH-4: `src/backend/app.py` 模組層級副作用 ✅ 完成
 
-- 症狀：第 606 行 `app = create_app()` 在模組層級執行，import 此模組即觸發 DB 初始化與 Flask 應用建立；根目錄 `app.py` import `create_app` 時已隱含觸發一次建立。
-- 修正：刪除 `src/backend/app.py` 的模組層級 `app = create_app()`；統一由根目錄 `app.py` 或 `if __name__ == "__main__"` 啟動。
-- 涉及檔案：`src/backend/app.py`。
+- 症狀：`app = create_app()` 在 backend 模組層級執行，import `src.backend.app` 即觸發 DB 初始化與 Flask 應用建立；根目錄 `app.py` import `create_app` 時已隱含觸發一次建立。
+- 修正：刪除 `src/backend/app.py` 的模組層級 `app = create_app()`；直接執行 backend 模組時改由 `if __name__ == "__main__"` 呼叫 `create_app().run(...)`，並補 architecture guard。
+- 涉及檔案：`src/backend/app.py`、`tests/test_architecture_imports.py`。
 
 #### AH-5: `forecast_engine.py` 死代碼函式
 

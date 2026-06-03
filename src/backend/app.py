@@ -521,8 +521,5 @@ def _validate_submitted_row_ids(summary: ForecastSummary, submitted_row_ids: set
         raise FormValidationError(f"Unknown forecast row: {', '.join(unknown_row_ids)}")
 
 
-app = create_app()
-
-
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000, debug=False, use_reloader=False)
+    create_app().run(host="127.0.0.1", port=5000, debug=False, use_reloader=False)

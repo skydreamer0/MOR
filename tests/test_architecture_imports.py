@@ -77,6 +77,24 @@ def test_forecast_context_builder_signature_has_no_data_base_path_argument():
     assert list(parameters)[:3] == ["forecast_config", "db", "target_source"]
 
 
+def test_backend_app_has_no_module_level_flask_app_instance():
+    tree = ast.parse((PROJECT_ROOT / "src/backend/app.py").read_text(encoding="utf-8"))
+
+    module_level_app_factories = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        for target in node.targets
+        if isinstance(target, ast.Name)
+        and target.id == "app"
+        and isinstance(node.value, ast.Call)
+        and isinstance(node.value.func, ast.Name)
+        and node.value.func.id == "create_app"
+    ]
+
+    assert module_level_app_factories == []
+
+
 def test_dashboard_analytics_helpers_are_imported_from_analytics_not_operational_views():
     dashboard_helpers = {
         "aggregate_to_analytics",
