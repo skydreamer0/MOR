@@ -543,11 +543,11 @@ Goal: extract cache key/invalidation state from `app.py` into a small `ContextCa
 - 修正：刪除兩個函式，並補 architecture guard 防止 dead helpers 回流。
 - 涉及檔案：`src/backend/forecast_engine.py`、`tests/test_architecture_imports.py`。
 
-#### AH-6: `ForecastOptions.excluded_item_ids` 應為 `frozenset`
+#### AH-6: `ForecastOptions.excluded_item_ids` 應為 `frozenset` ✅ 完成
 
 - 症狀：`@dataclass(frozen=True)` 中的 `set[str]` 欄位不可雜湊，違反 `frozen` 的語意預期（frozen dataclass 理應可做 dict key / set member）。
-- 修正：型別改為 `frozenset[str]`，更新 `forecast_workbench_context.py` 傳入端。
-- 涉及檔案：`src/backend/forecast_models.py`、`src/backend/forecast_workbench_context.py`。
+- 修正：型別改為 `frozenset[str]`，預設值改為 `frozenset()`，並在 `__post_init__` 將既有 set/list 呼叫端正規化為 `frozenset`。
+- 涉及檔案：`src/backend/forecast_models.py`、`tests/test_forecast.py`。
 
 #### AH-7: `excluded_items.json` 舊版遷移碼
 
