@@ -513,11 +513,11 @@ Goal: extract cache key/invalidation state from `app.py` into a small `ContextCa
 
 架構審查（2026-06-02）發現的具體問題，按優先順序修正。每個修正獨立 commit 可單獨驗證。
 
-#### AH-1: ETL 年份寫死（高優先，靜默失效）
+#### AH-1: ETL 年份寫死（高優先，靜默失效）✅ 完成
 
 - 症狀：`BUDGET_FILE_PATTERN = "2026預算報表*.xlsx"` 和 `default_year=2026` 寫死在 `etl.py`，2027 年起靜默失效，需手動改源碼。
-- 修正：從 `ForecastConfig` 讀取 `current_year`，或從 Excel 檔名自動推斷年份；`default_year` 改為參數化。
-- 涉及檔案：`src/backend/etl.py`、`src/backend/forecast_config.py`。
+- 修正：預算檔搜尋改為跨年份 pattern，從預算 Excel 檔名推斷年份，並讓 `sync_excel_to_db()` 可用 `default_budget_year` 明確覆寫；`normalize_budget_targets()` 的 `default_year` 改為參數化且支援無「年」欄預算表。
+- 涉及檔案：`src/backend/etl.py`、`tests/test_etl.py`。
 
 #### AH-2: `/close-month` 與 `/snapshots/save` 繞過 ContextCache
 

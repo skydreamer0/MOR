@@ -59,3 +59,61 @@ def test_sync_cleanup_failure_does_not_propagate(tmp_path):
     with db.get_connection() as conn:
         count = conn.execute("SELECT COUNT(*) FROM sales_records").fetchone()[0]
     assert count == 1
+
+
+def test_normalize_budget_targets_uses_default_year_when_sheet_has_no_year_column():
+    df = pd.DataFrame([
+        {"客戶簡稱": "A", "商品號": "P1", "標  題": "07預算S總量", 5: 20},
+    ])
+
+    rows = normalize_budget_targets(df, default_year=2027)
+
+    assert rows.iloc[0]["year"] == 2027
+
+
+def test_sync_excel_to_db_infers_budget_year_from_latest_budget_filename(tmp_path):
+    from src.backend.database import MORDatabase
+    from src.backend.etl import sync_excel_to_db
+
+    db = MORDatabase(tmp_path / "test.db")
+    sales = pd.DataFrame([
+        {"年": 2027, "月": 5, "日": 1, "客戶簡稱": "A", "商品號": "P1", "商品簡稱": "Product", "銷+贈S量": 1, "單價NT(淨)": 10, "含稅總額(淨)": 10},
+    ])
+    budget = pd.DataFrame([
+        {"客戶簡稱": "A", "商品號": "P1", "標  題": "07預算S總量", 5: 20},
+    ])
+    sales.to_excel(tmp_path / "業績明細.xlsx", index=False, sheet_name="業績明細")
+    budget.to_excel(tmp_path / "2027預算報表.xlsx", index=False)
+
+    sync_excel_to_db(db, tmp_path)
+
+    with db.get_connection() as conn:
+        saved = conn.execute(
+            "SELECT year, month, target_quantity FROM budget_targets"
+        ).fetchone()
+
+    assert tuple(saved) == (2027, 5, 20.0)
+
+
+def test_sync_excel_to_db_prefers_requested_budget_year(tmp_path):
+    from src.backend.database import MORDatabase
+    from src.backend.etl import sync_excel_to_db
+
+    db = MORDatabase(tmp_path / "test.db")
+    sales = pd.DataFrame([
+        {"年": 2027, "月": 5, "日": 1, "客戶簡稱": "A", "商品號": "P1", "商品簡稱": "Product", "銷+贈S量": 1, "單價NT(淨)": 10, "含稅總額(淨)": 10},
+    ])
+    budget_2026 = pd.DataFrame([{ "客戶簡稱": "A", "商品號": "P1", "標  題": "07預算S總量", 5: 10 }])
+    budget_2027 = pd.DataFrame([{ "客戶簡稱": "A", "商品號": "P1", "標  題": "07預算S總量", 5: 20 }])
+    sales.to_excel(tmp_path / "業績明細.xlsx", index=False, sheet_name="業績明細")
+    budget_2026.to_excel(tmp_path / "2026預算報表.xlsx", index=False)
+    budget_2027.to_excel(tmp_path / "2027預算報表.xlsx", index=False)
+
+    sync_excel_to_db(db, tmp_path, default_budget_year=2026)
+
+    with db.get_connection() as conn:
+        saved = conn.execute(
+            "SELECT year, month, target_quantity FROM budget_targets"
+        ).fetchone()
+
+    assert tuple(saved) == (2026, 5, 10.0)
