@@ -24,14 +24,13 @@ from src.backend.exporter import export_forecast
 from src.backend.forecast_config import ForecastConfig
 from src.backend.forecast_export_workflow import prepare_export_summary
 from src.backend.forecast_models import ForecastSummary
+from src.backend.forecast_workbench_context import build as build_forecast_page_context
 from src.backend.forecast_write_workflow import save_row_override
 from src.backend.item_settings_workflow import build_item_config_payloads_from_form
+from src.backend.amount_calculation import forecast_amount_total, last_year_amount_total
 from src.backend.product_monitor_workflow import build_product_monitor_template_context
 from src.backend.operational_views import (
     aggregate_to_analytics,
-    build_forecast_page_context,
-    forecast_amount_total,
-    last_year_amount_total,
     update_item_configs,
 )
 from src.backend.web.form_parser import FormValidationError, parse_manual_quantities, parse_target_period, validate_target_period
@@ -84,7 +83,7 @@ def create_app(config: dict | None = None) -> Flask:
         return ctx_cache.get_or_build(
             year, month,
             lambda: build_forecast_page_context(
-                data_base_path, forecast_config, db,
+                forecast_config, db,
                 {"year": str(year), "month": str(month)},
                 today=today,
             ),
@@ -253,7 +252,7 @@ def create_app(config: dict | None = None) -> Flask:
             return redirect(url_for("product_monitor", import_error="年月範圍不合法。"))
         try:
             ctx = build_forecast_page_context(
-                data_base_path, forecast_config, db,
+                forecast_config, db,
                 {"year": str(year), "month": str(month)},
             )
             snapshot_rows = serialize_forecast_rows_for_snapshot(ctx.summary.rows)
@@ -296,7 +295,6 @@ def create_app(config: dict | None = None) -> Flask:
             target = parse_target_period(request.form, default_target)
 
             context = build_forecast_page_context(
-                data_base_path,
                 forecast_config,
                 db,
                 {"year": str(target.year), "month": str(target.month)},
@@ -364,7 +362,7 @@ def create_app(config: dict | None = None) -> Flask:
     @app.get("/settings")
     def settings() -> str:
         try:
-            context = build_forecast_page_context(data_base_path, forecast_config, db, request.args)
+            context = build_forecast_page_context(forecast_config, db, request.args)
             items = context.items
             health = context.health
             data_issues = validate_health(health)
@@ -541,7 +539,6 @@ def create_app(config: dict | None = None) -> Flask:
 
         try:
             context = build_forecast_page_context(
-                data_base_path,
                 forecast_config,
                 db,
                 {"year": str(year), "month": str(month)},

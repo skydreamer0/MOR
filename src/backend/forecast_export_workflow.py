@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from src.backend.amount_calculation import forecast_amount_total, recalculate_forecast_amounts
 from src.backend.forecast_engine import apply_user_adjustments
 from src.backend.forecast_models import ForecastSummary
-from src.backend.operational_views import forecast_amount_total, recalculate_forecast_amounts
 
 
 def prepare_export_summary(

@@ -70,9 +70,15 @@ Overall goal:
 - Preserve the Flask/Jinja/vanilla JS architecture from ADR 0001.
 - Avoid database, UI, and calculation rewrites unless the phase explicitly says so.
 
-### Phase 0: Baseline and Safety
+### Phase 0: Baseline and Safety - Completed 2026-06-03
 
 Goal: establish a clean test baseline before moving imports or modules.
+
+Completed result:
+
+- Baseline operational/workbench tests passed before Phase 1 edits.
+- `operational_views.py` export/caller classification was completed by parallel read-only inspection.
+- No production code was moved in this phase.
 
 Tasks:
 
@@ -99,9 +105,15 @@ Verification:
 D:\AI\python.exe -m pytest tests\test_operational_views.py tests\test_forecast_workbench_context.py -q --basetemp=.pytest-tmp
 ```
 
-### Phase 1: Amount Calculation Import Cleanup
+### Phase 1: Amount Calculation Import Cleanup - Completed 2026-06-03
 
 Goal: make amount calculation callers use `amount_calculation.py` directly instead of routing through `operational_views.py`.
+
+Completed result:
+
+- `app.py`, `forecast_export_workflow.py`, and `forecast_workbench_context.py` now import amount helpers directly from `amount_calculation.py`.
+- Unused amount facade exports were removed from `operational_views.py`.
+- `tests/test_architecture_imports.py` now guards this seam so amount helpers do not drift back through `operational_views.py`.
 
 Tasks:
 
@@ -130,9 +142,16 @@ Verification:
 D:\AI\python.exe -m pytest tests\test_operational_views.py tests\test_exporter.py tests\test_forecast_workbench_context.py -q --basetemp=.pytest-tmp
 ```
 
-### Phase 2: Forecast Workbench Context Canonical Import
+### Phase 2: Forecast Workbench Context Canonical Import - Completed 2026-06-03
 
 Goal: make `forecast_workbench_context.py` the only normal entry point for building `ForecastPageContext`.
+
+Completed result:
+
+- `app.py` now imports `forecast_workbench_context.build` as the local `build_forecast_page_context` name.
+- Route calls now use the canonical builder signature without the legacy `data_base_path` compatibility argument.
+- Internal tests no longer import `ForecastPageContext` or `build_forecast_page_context` from `operational_views.py`.
+- The `operational_views.py` compatibility shim is intentionally left for later deletion/minimization.
 
 Tasks:
 
