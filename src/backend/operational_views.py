@@ -10,11 +10,8 @@ import pandas as pd
 from src.backend.analytics import AnalyticsSlice
 from src.backend.amount_calculation import (
     amount_for_quantity,
-    forecast_amount_total as _forecast_amount_total,
     is_amount_included,
-    last_year_amount_total as _last_year_amount_total,
     latest_price_quantity,
-    recalculate_forecast_amounts as _recalculate_forecast_amounts,
 )
 from src.backend.daily_sales_importer import DailyActualAggregate
 from src.backend.data_loader import normalize_product_code
@@ -207,18 +204,6 @@ def build_dashboard_metrics(
         high_risk_product_count=len({row.product_code for row in high_risk_rows}),
         high_risk_customer_count=len({row.customer for row in high_risk_rows}),
     )
-
-
-def forecast_amount_total(rows: Iterable[ForecastRow]) -> float:
-    return _forecast_amount_total(rows)
-
-
-def last_year_amount_total(rows: Iterable[ForecastRow]) -> float:
-    return _last_year_amount_total(rows)
-
-
-def recalculate_forecast_amounts(rows: Iterable[ForecastRow]) -> list[ForecastRow]:
-    return _recalculate_forecast_amounts(rows)
 
 
 def _target_totals(

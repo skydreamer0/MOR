@@ -8,6 +8,7 @@ import pandas as pd
 
 from src.backend.daily_sales_importer import DailyActualAggregate
 from src.backend.data_loader import default_target_from_db
+from src.backend.amount_calculation import forecast_amount_total
 from src.backend.forecast_config import ForecastConfig
 from src.backend.forecast_engine import ForecastOptions, apply_user_adjustments, build_forecast
 from src.backend.forecast_models import ForecastRow, ForecastSummary, ForecastTarget
@@ -24,7 +25,6 @@ from src.backend.operational_views import (
     build_product_monitor_rows,
     DashboardMetrics,
     DataHealthSummary,
-    forecast_amount_total,
 )
 from src.backend.product_monitor_rows import ProductMonitorRow
 from src.backend.projection_engine import ProjectionResult, batch_project_eom

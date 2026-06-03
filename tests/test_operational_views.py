@@ -679,16 +679,16 @@ def _make_db_with_sales():
     return db
 
 
-def test_build_forecast_page_context_uses_db_not_excel(tmp_path):
+def test_build_forecast_page_context_uses_db_not_excel():
     """build_forecast_page_context must serve data from DB without any Excel file present."""
     from src.backend.forecast_config import ForecastConfig
-    from src.backend.operational_views import build_forecast_page_context
+    from src.backend.forecast_workbench_context import build
 
     db = _make_db_with_sales()
     config = ForecastConfig()
 
-    # No Excel file exists in tmp_path — context must still build from DB
-    ctx = build_forecast_page_context(tmp_path, config, db, {"year": "2026", "month": "5"})
+    # Context must build from DB without relying on an Excel file path.
+    ctx = build(config, db, {"year": "2026", "month": "5"})
 
     assert ctx.target.year == 2026
     assert ctx.target.month == 5
@@ -696,15 +696,15 @@ def test_build_forecast_page_context_uses_db_not_excel(tmp_path):
     assert len(ctx.sales_data) > 0
 
 
-def test_build_forecast_page_context_accepts_today_parameter(tmp_path):
+def test_build_forecast_page_context_accepts_today_parameter():
     """build_forecast_page_context must thread an explicit today to the projection engine."""
     from src.backend.forecast_config import ForecastConfig
-    from src.backend.operational_views import build_forecast_page_context
+    from src.backend.forecast_workbench_context import build
 
     db = _make_db_with_sales()
     config = ForecastConfig()
     specific_today = date(2026, 5, 15)
-    ctx = build_forecast_page_context(tmp_path, config, db, {"year": "2026", "month": "5"}, today=specific_today)
+    ctx = build(config, db, {"year": "2026", "month": "5"}, today=specific_today)
     assert ctx.target.year == 2026
     assert ctx.target.month == 5
 
@@ -713,24 +713,23 @@ def test_build_forecast_page_context_accepts_today_parameter(tmp_path):
 # _patch_latest_order_dates — current-month daily actuals update ForecastRow
 # ---------------------------------------------------------------------------
 
-def test_forecast_workbench_context_build_matches_legacy_context_contract():
+def test_forecast_workbench_context_build_returns_complete_context():
     from src.backend.forecast_config import ForecastConfig
     from src.backend.forecast_workbench_context import build
-    from src.backend.operational_views import build_forecast_page_context
 
     db = _make_db_with_sales()
     config = ForecastConfig()
     target_source = {"year": "2026", "month": "5"}
 
     workbench_context = build(config, db, target_source, today=date(2026, 5, 15))
-    legacy_context = build_forecast_page_context(None, config, db, target_source)
 
-    assert workbench_context.target == legacy_context.target
-    assert len(workbench_context.summary.rows) == len(legacy_context.summary.rows)
-    assert len(workbench_context.sales_data) == len(legacy_context.sales_data)
+    assert workbench_context.target.year == 2026
+    assert workbench_context.target.month == 5
+    assert workbench_context.summary.rows
+    assert len(workbench_context.sales_data) > 0
     assert workbench_context.dashboard.forecast_quantity >= 0
     assert workbench_context.monitor_rows
-    assert workbench_context.health.order_count == legacy_context.health.order_count
+    assert workbench_context.health.order_count > 0
     assert workbench_context.items
 
 
