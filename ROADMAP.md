@@ -519,10 +519,10 @@ Goal: extract cache key/invalidation state from `app.py` into a small `ContextCa
 - 修正：預算檔搜尋改為跨年份 pattern，從預算 Excel 檔名推斷年份，並讓 `sync_excel_to_db()` 可用 `default_budget_year` 明確覆寫；`normalize_budget_targets()` 的 `default_year` 改為參數化且支援無「年」欄預算表。
 - 涉及檔案：`src/backend/etl.py`、`tests/test_etl.py`。
 
-#### AH-2: `/close-month` 與 `/snapshots/save` 繞過 ContextCache
+#### AH-2: `/close-month` 與 `/snapshots/save` 繞過 ContextCache ✅ 完成
 
 - 症狀：`close_product_monitor_month` 和 `save_snapshot_route` 直接呼叫 `build_forecast_page_context()`，不走 `_build_cached_context()`，每次執行都重建整個上下文，與其他路由行為不一致。
-- 修正：改為呼叫 `_build_cached_context(year, month)`。
+- 修正：改為呼叫 `_build_cached_context(year, month)`，並補路由 cache seam regression tests。
 - 涉及檔案：`src/backend/app.py`（兩個路由函式）。
 
 #### AH-3: `build_forecast_page_context` 的 `data_base_path` 是死參數

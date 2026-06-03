@@ -229,6 +229,69 @@ def test_forecast_reuses_dashboard_context_cache(monkeypatch):
     assert calls["count"] == 1
 
 
+def test_save_snapshot_reuses_forecast_context_cache(monkeypatch):
+    calls = {"count": 0}
+    real_builder = app.build_forecast_page_context
+
+    def counting_builder(*args, **kwargs):
+        calls["count"] += 1
+        return real_builder(*args, **kwargs)
+
+    db_base_path = _isolated_db_base()
+    _seed_db_sales(db_base_path, _minimal_sales_rows())
+    monkeypatch.setattr(app, "build_forecast_page_context", counting_builder)
+    client = _client({"DB_BASE_PATH": db_base_path})
+
+    forecast_response = client.get("/forecast?year=2026&month=5")
+    save_response = client.post(
+        "/snapshots/save",
+        data={"year": "2026", "month": "5", "snapshot_name": "Cache test"},
+    )
+
+    assert forecast_response.status_code == 200
+    assert save_response.status_code == 302
+    assert calls["count"] == 1
+
+
+def test_close_month_reuses_forecast_context_cache(monkeypatch):
+    calls = {"count": 0}
+    real_builder = app.build_forecast_page_context
+
+    def counting_builder(*args, **kwargs):
+        calls["count"] += 1
+        return real_builder(*args, **kwargs)
+
+    db_base_path = _isolated_db_base()
+    _seed_sales_from_legacy_df(
+        db_base_path,
+        pd.DataFrame([
+            {
+                "年": 2025, "月": 5, "日": 10,
+                "客戶簡稱": "Hospital A", "商品號": "P1",
+                "商品簡稱": "Product One", "銷+贈S量": 10,
+                "單價NT(淨)": 100, "含稅總額(淨)": 0,
+            }
+        ]),
+    )
+    monkeypatch.setattr(app, "build_forecast_page_context", counting_builder)
+    client = _client({"DB_BASE_PATH": db_base_path})
+
+    client.post(
+        "/monitor/products/import",
+        data={"daily_sales_file": (_daily_import_workbook(), "may.xlsx")},
+        content_type="multipart/form-data",
+    )
+    forecast_response = client.get("/forecast?year=2026&month=5")
+    close_response = client.post(
+        "/monitor/products/close-month",
+        data={"year": "2026", "month": "5"},
+    )
+
+    assert forecast_response.status_code == 200
+    assert close_response.status_code == 302
+    assert calls["count"] == 1
+
+
 def test_homepage_data_health_alert_appears_before_progress_hero():
     db_base_path = _isolated_db_base()
     data = pd.DataFrame([{

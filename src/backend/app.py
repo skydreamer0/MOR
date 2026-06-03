@@ -225,10 +225,7 @@ def create_app(config: dict | None = None) -> Flask:
         except FormValidationError:
             return redirect(url_for("product_monitor", import_error="年月範圍不合法。"))
         try:
-            ctx = build_forecast_page_context(
-                forecast_config, db,
-                {"year": str(year), "month": str(month)},
-            )
+            ctx = _build_cached_context(year, month)
             snapshot_rows = serialize_forecast_rows_for_snapshot(ctx.summary.rows)
             execute_close_month(db, year, month, snapshot_rows, note=note)
             ctx_cache.invalidate(year, month)
@@ -490,11 +487,7 @@ def create_app(config: dict | None = None) -> Flask:
             snapshot_name = f"{'定稿' if snapshot_type == 'Final' else '草稿'} {year}/{month:02d}"
 
         try:
-            context = build_forecast_page_context(
-                forecast_config,
-                db,
-                {"year": str(year), "month": str(month)},
-            )
+            context = _build_cached_context(year, month)
             summary = context.summary
 
             snapshot_rows = serialize_forecast_rows_for_snapshot(summary.rows)
