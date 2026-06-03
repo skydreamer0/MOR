@@ -1,6 +1,6 @@
 # MOR Roadmap
 
-Last reviewed: 2026-06-02
+Last reviewed: 2026-06-03
 
 This file is the active source of truth for MOR planning. Historical implementation plans and architecture review artifacts should not be used as implementation context unless this roadmap explicitly points to them.
 
@@ -49,6 +49,291 @@ Architecture direction:
 13. Close-month snapshot immutability and Forecast UI delete guard.
 14. Forecast workbench input loader ownership cleanup.
 15. Amount calculation seam foundation.
+
+## Cloud Agent Architecture Roadmaps
+
+Use this section as the current staged roadmap for cloud/remote agents. Work one phase at a time, keep behavior stable, and update this section after each completed phase.
+
+Plain-language summary:
+
+- MOR is not broken. It has reached a stage where many features have already moved into smaller modules, but a few old middle stations still make the code harder to follow.
+- First, retire `operational_views.py` as the old front desk. It still redirects callers to work now owned elsewhere, which makes humans and agents think it is more important than it is.
+- Second, clean the Forecast page route. The `/forecast` route still decides display ordering, discontinued rows, risk levels, visible totals, and similar presentation rules. Those should move behind a backend page-context module.
+- Third, package Monthly Review. The calculation modules are already fairly clean, but the route still has to remember the full serving order: summary, actions, customers, products, bias, trend, and chart.
+- Fourth, clean Settings later. The Settings route mixes data health, budget coverage, direct DB lookup, and fallback shape. It is less urgent, but it will keep getting noisier if left inside the route.
+
+Overall goal:
+
+- Retire `src/backend/operational_views.py` as a broad compatibility module.
+- Keep Flask routes thin.
+- Move page/template assembly into small backend modules.
+- Preserve the Flask/Jinja/vanilla JS architecture from ADR 0001.
+- Avoid database, UI, and calculation rewrites unless the phase explicitly says so.
+
+### Phase 0: Baseline and Safety
+
+Goal: establish a clean test baseline before moving imports or modules.
+
+Tasks:
+
+1. Run the focused operational/view tests and record current failures, if any.
+2. Inspect only current callers of `operational_views.py`, `forecast_workbench_context.py`, `amount_calculation.py`, and `app.py`.
+3. Classify every `operational_views.py` export as one of:
+   - real owned behavior
+   - compatibility facade
+   - test-only legacy import
+4. Do not move code in this phase unless needed to fix a failing baseline test.
+
+Likely files:
+
+- `src/backend/operational_views.py`
+- `src/backend/forecast_workbench_context.py`
+- `src/backend/amount_calculation.py`
+- `src/backend/app.py`
+- `tests/test_operational_views.py`
+- `tests/test_forecast_workbench_context.py`
+
+Verification:
+
+```powershell
+D:\AI\python.exe -m pytest tests\test_operational_views.py tests\test_forecast_workbench_context.py -q --basetemp=.pytest-tmp
+```
+
+### Phase 1: Amount Calculation Import Cleanup
+
+Goal: make amount calculation callers use `amount_calculation.py` directly instead of routing through `operational_views.py`.
+
+Tasks:
+
+1. Change production imports of these helpers to direct imports from `src/backend/amount_calculation.py`:
+   - `forecast_amount_total`
+   - `last_year_amount_total`
+   - `recalculate_forecast_amounts`
+   - `amount_for_quantity` where applicable
+2. Update tests so amount calculation behavior is asserted against `amount_calculation.py`.
+3. Leave temporary compatibility aliases in `operational_views.py` only if needed by older tests during the phase.
+4. After tests pass, remove unused amount aliases from `operational_views.py`.
+
+Likely files:
+
+- `src/backend/amount_calculation.py`
+- `src/backend/operational_views.py`
+- `src/backend/forecast_export_workflow.py`
+- `src/backend/forecast_workbench_context.py`
+- `src/backend/app.py`
+- `tests/test_operational_views.py`
+- `tests/test_exporter.py`
+
+Verification:
+
+```powershell
+D:\AI\python.exe -m pytest tests\test_operational_views.py tests\test_exporter.py tests\test_forecast_workbench_context.py -q --basetemp=.pytest-tmp
+```
+
+### Phase 2: Forecast Workbench Context Canonical Import
+
+Goal: make `forecast_workbench_context.py` the only normal entry point for building `ForecastPageContext`.
+
+Tasks:
+
+1. Replace production imports of `operational_views.build_forecast_page_context` with the canonical workbench context builder.
+2. Remove or shrink the `data_base_path` compatibility argument path.
+3. Update tests that still import `ForecastPageContext` or `build_forecast_page_context` from `operational_views.py`.
+4. Keep a short compatibility shim only if a route migration would otherwise become too large.
+5. Document the canonical import path in `ROADMAP.md` if the phase changes module ownership.
+
+Likely files:
+
+- `src/backend/forecast_workbench_context.py`
+- `src/backend/operational_views.py`
+- `src/backend/app.py`
+- `tests/test_forecast_workbench_context.py`
+- `tests/test_operational_views.py`
+- `tests/test_app.py`
+
+Verification:
+
+```powershell
+D:\AI\python.exe -m pytest tests\test_forecast_workbench_context.py tests\test_operational_views.py tests\test_app.py -q --basetemp=.pytest-tmp
+```
+
+### Phase 3: Dashboard and Analytics Helper Relocation
+
+Goal: move dashboard-facing analytics helpers out of `operational_views.py` into modules whose names match their purpose.
+
+Tasks:
+
+1. Move or re-home:
+   - `aggregate_to_analytics`
+   - `build_status_distribution`
+   - `build_customer_risk_ranking`
+   - `CustomerRiskItem` if still needed
+2. Prefer existing modules before adding new ones:
+   - `dashboard_analytics_workflow.py` for dashboard template assembly
+   - `analytics.py` for reusable analytics data shaping
+3. Keep product monitor row calculation in `product_monitor_rows.py`.
+4. Update imports and tests one helper group at a time.
+5. Delete compatibility exports only after all callers move.
+
+Likely files:
+
+- `src/backend/dashboard_analytics_workflow.py`
+- `src/backend/analytics.py`
+- `src/backend/operational_views.py`
+- `src/backend/app.py`
+- `tests/test_dashboard_analytics_workflow.py`
+- `tests/test_operational_views.py`
+
+Verification:
+
+```powershell
+D:\AI\python.exe -m pytest tests\test_dashboard_analytics_workflow.py tests\test_operational_views.py tests\test_app.py -q --basetemp=.pytest-tmp
+```
+
+### Phase 4: Forecast Page Presentation Context
+
+Goal: move Forecast page render-data assembly out of the `/forecast` route.
+
+Tasks:
+
+1. Create a small backend module for Forecast page presentation context.
+2. Move these route-local rules behind one interface:
+   - row sorting
+   - active/discontinued split
+   - visible row limit
+   - visible and unrendered totals
+   - customer list
+   - risk levels
+   - forecast signature if it remains page-specific
+3. Keep the route responsible only for target loading, context call, snapshot/finalized lookup, and `render_template`.
+4. Add characterization tests before changing output shape.
+5. Keep template variable names stable.
+
+Likely files:
+
+- `src/backend/app.py`
+- `src/backend/forecast_page_context.py` or another clearly named new module
+- `src/backend/amount_calculation.py`
+- `templates/forecast.html`
+- `tests/test_app.py`
+- `tests/test_forecast_presenter.py`
+
+Verification:
+
+```powershell
+D:\AI\python.exe -m pytest tests\test_app.py tests\test_forecast_presenter.py -q --basetemp=.pytest-tmp
+```
+
+### Phase 5: Monthly Review Context Package
+
+Goal: collapse repeated Monthly Review route orchestration into one backend context package.
+
+Tasks:
+
+1. Create a monthly review context builder that returns:
+   - summary
+   - action lists
+   - customer summary
+   - product summary
+   - forecast bias
+   - trend
+   - trend chart for HTML callers
+2. Use the same context builder from the HTML route and export route where practical.
+3. Keep `monthly_review.py` DB-only behavior unchanged.
+4. Replace broad exception handling only with known current error types.
+5. Add tests that verify HTML and export callers share the same assembled data.
+
+Likely files:
+
+- `src/backend/app.py`
+- `src/backend/monthly_review.py`
+- `src/backend/monthly_review_context.py` or another clearly named new module
+- `src/backend/monthly_review_actions.py`
+- `src/backend/monthly_review_chart.py`
+- `src/backend/monthly_review_customers.py`
+- `src/backend/monthly_review_export.py`
+- `src/backend/monthly_review_forecast_bias.py`
+- `src/backend/monthly_review_products.py`
+- `src/backend/monthly_review_trend.py`
+- `tests/test_monthly_review*.py`
+
+Verification:
+
+```powershell
+D:\AI\python.exe -m pytest tests\test_monthly_review.py tests\test_monthly_review_actions.py tests\test_monthly_review_chart.py tests\test_monthly_review_customers.py tests\test_monthly_review_products.py tests\test_monthly_review_forecast_bias.py tests\test_monthly_review_trend.py -q --basetemp=.pytest-tmp
+```
+
+### Phase 6: Settings Data Health Context
+
+Goal: move Settings page data-health and budget-coverage assembly out of the route.
+
+Tasks:
+
+1. Create a settings context builder that returns:
+   - items
+   - health
+   - data issues
+   - target year/month
+   - error fallback shape
+2. Move the budget coverage SQL out of `app.py`.
+3. Keep settings template variable names stable.
+4. Keep `item_settings_workflow.py` focused on form parsing and payload normalization.
+5. Add tests for missing data, budget coverage warnings, and normal settings context.
+
+Likely files:
+
+- `src/backend/app.py`
+- `src/backend/settings_context.py` or another clearly named new module
+- `src/backend/data_validator.py`
+- `src/backend/item_settings_workflow.py`
+- `templates/settings.html`
+- `tests/test_item_settings_workflow.py`
+- `tests/test_data_validator.py`
+- `tests/test_app.py`
+
+Verification:
+
+```powershell
+D:\AI\python.exe -m pytest tests\test_item_settings_workflow.py tests\test_data_validator.py tests\test_app.py -q --basetemp=.pytest-tmp
+```
+
+### Phase 7: Final operational_views Deletion or Minimal Shim
+
+Goal: finish the retirement of `operational_views.py`.
+
+Tasks:
+
+1. Re-run import search for `operational_views`.
+2. If no production callers remain, either:
+   - delete `operational_views.py`, or
+   - keep a tiny deprecated shim only for deliberate compatibility.
+3. Move remaining tests to canonical modules.
+4. Update `docs/architecture/current-architecture.md` and this roadmap if module ownership changes.
+5. Run full validation before claiming completion.
+
+Likely files:
+
+- `src/backend/operational_views.py`
+- `src/backend/app.py`
+- `docs/architecture/current-architecture.md`
+- `ROADMAP.md`
+- `tests/test_operational_views.py`
+
+Verification:
+
+```powershell
+D:\AI\python.exe -m pytest -q --basetemp=.pytest-tmp
+```
+
+### Phase Stop Rules
+
+Stop and report before continuing if:
+
+- A phase needs broad UI template changes.
+- A phase changes forecast math, row identity, Excel schema, or DB schema.
+- More than three production modules need major rewrites in one phase.
+- Existing tests do not describe the current behavior clearly.
+- `operational_views.py` deletion would require unrelated feature work.
 
 ## Active Refactor Queue
 
