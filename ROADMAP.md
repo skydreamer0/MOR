@@ -22,18 +22,20 @@ Architecture direction:
 - `src/backend/forecast_page_context.py` owns Forecast page render-data assembly, risk levels, visible/discontinued row split, visible totals, and forecast review signatures.
 - `src/backend/forecast_workbench_inputs.py` owns DB input loading and budget target records for the forecast workbench context.
 - `src/backend/amount_calculation.py` owns forecast row amount inclusion and quantity-to-amount calculation.
+- `src/backend/dashboard_metrics.py` owns dashboard KPI metrics.
+- `src/backend/data_health_summary.py` owns data health summary view model and builder.
 - `src/backend/forecast_write_workflow.py` owns forecast row override persistence.
 - `src/backend/forecast_export_workflow.py` owns export summary preparation.
 - `src/backend/monthly_review_context.py` owns Monthly Review page/export context assembly.
 - `src/backend/snapshot_service.py` owns snapshot persistence, forecast-row snapshot serialization, and final/close-month snapshot immutability.
 - `src/backend/item_settings_workflow.py` owns item/settings request-form parsing and item config payload normalization.
+- `src/backend/item_settings_repository.py` owns item setting persistence.
 - `src/backend/settings_context.py` owns Settings page data-health, budget-coverage, target, and error fallback context assembly.
 - `src/backend/dashboard_analytics_workflow.py` owns dashboard template context assembly.
 - `src/backend/analytics.py` owns reusable analytics slices plus dashboard status distribution and customer risk ranking helpers.
 - `src/backend/product_monitor_workflow.py` owns product monitor template context assembly.
 - `src/backend/product_monitor_rows.py` owns product monitor row view models, row calculation, status labels, and monthly history lookup.
 - `src/backend/row_identity.py` owns canonical forecast row identity make/parse helpers.
-- `src/backend/operational_views.py` still owns shared operational view models, remaining budget/history presentation helpers, and compatibility facades.
 - `src/backend/app.py` still owns Flask request/response wiring, redirects, cache invalidation, and remaining route-local workflow glue.
 
 ## Completed Architecture Seams
@@ -57,6 +59,7 @@ Architecture direction:
 17. Forecast page presentation context extraction.
 18. Monthly Review context package foundation.
 19. Settings data-health context extraction.
+20. `operational_views.py` retirement.
 
 ## Cloud Agent Architecture Roadmaps
 
@@ -354,9 +357,24 @@ Verification:
 D:\AI\python.exe -m pytest tests\test_item_settings_workflow.py tests\test_data_validator.py tests\test_app.py -q --basetemp=.pytest-tmp
 ```
 
-### Phase 7: Final operational_views Deletion or Minimal Shim
+### Phase 7: Final operational_views Deletion or Minimal Shim - Completed 2026-06-03
 
 Goal: finish the retirement of `operational_views.py`.
+
+Completed result:
+
+- Re-ran import search for `operational_views`.
+- Deleted `src/backend/operational_views.py`; no compatibility shim remains.
+- Moved remaining production callers to canonical modules:
+  - `dashboard_metrics.py`
+  - `data_health_summary.py`
+  - `forecast_workbench_context.py`
+  - `forecast_workbench_inputs.py`
+  - `item_settings_repository.py`
+  - `product_monitor_rows.py`
+- Moved remaining tests to canonical module imports and renamed `tests/test_operational_views.py` to `tests/test_forecast_workbench_helpers.py`.
+- Updated `docs/architecture/current-architecture.md` and this roadmap.
+- Added architecture guards that require the retired module to stay deleted and prevent runtime/unit-test imports from returning.
 
 Tasks:
 
@@ -374,7 +392,7 @@ Likely files:
 - `src/backend/app.py`
 - `docs/architecture/current-architecture.md`
 - `ROADMAP.md`
-- `tests/test_operational_views.py`
+- `tests/test_forecast_workbench_helpers.py`
 
 Verification:
 
@@ -591,7 +609,7 @@ Use subagents only for broad audits, independent investigations, or explicit use
 Focused backend route/service validation:
 
 ```powershell
-D:\AI\python.exe -m pytest tests\test_operational_views.py -q --basetemp=.pytest-tmp
+D:\AI\python.exe -m pytest tests\test_forecast_workbench_helpers.py -q --basetemp=.pytest-tmp
 D:\AI\python.exe -m pytest tests\test_app.py -q --basetemp=.pytest-tmp
 D:\AI\python.exe -m pytest tests\test_exporter.py tests\test_snapshot_service.py -q --basetemp=.pytest-tmp
 ```
@@ -599,7 +617,7 @@ D:\AI\python.exe -m pytest tests\test_exporter.py tests\test_snapshot_service.py
 Quick syntax validation:
 
 ```powershell
-D:\AI\python.exe -m py_compile app.py src\backend\app.py src\backend\sales_forecast.py src\backend\forecast_config.py src\backend\forecast_models.py src\backend\data_loader.py src\backend\forecast_engine.py src\backend\projection_engine.py src\backend\operational_views.py src\backend\etl.py src\backend\exporter.py src\backend\web\form_parser.py src\backend\web\forecast_presenter.py
+D:\AI\python.exe -m py_compile app.py src\backend\app.py src\backend\sales_forecast.py src\backend\forecast_config.py src\backend\forecast_models.py src\backend\data_loader.py src\backend\forecast_engine.py src\backend\projection_engine.py src\backend\forecast_workbench_context.py src\backend\forecast_page_context.py src\backend\dashboard_metrics.py src\backend\data_health_summary.py src\backend\monthly_review_context.py src\backend\settings_context.py src\backend\etl.py src\backend\exporter.py src\backend\web\form_parser.py src\backend\web\forecast_presenter.py
 ```
 
 Full validation before broad backend completion claims:

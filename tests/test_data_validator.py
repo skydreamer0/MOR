@@ -1,7 +1,7 @@
 import pandas as pd
 
 from src.backend.data_validator import DataIssue, validate, validate_health
-from src.backend.operational_views import DataHealthSummary
+from src.backend.data_health_summary import DataHealthSummary
 
 
 def test_zero_price_warning():

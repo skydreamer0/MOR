@@ -40,21 +40,21 @@ def test_amount_helpers_are_imported_from_amount_calculation_not_operational_vie
     assert offenders == {}
 
 
-def test_operational_views_no_longer_exports_amount_facades():
-    forbidden_defs = {
-        "forecast_amount_total",
-        "last_year_amount_total",
-        "recalculate_forecast_amounts",
-    }
-    tree = ast.parse(
-        (PROJECT_ROOT / "src/backend/operational_views.py").read_text(encoding="utf-8")
-    )
+def test_operational_views_module_has_been_retired():
+    assert not (PROJECT_ROOT / "src/backend/operational_views.py").exists()
 
-    defined_functions = {
-        node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)
-    }
 
-    assert defined_functions & forbidden_defs == set()
+def test_no_runtime_or_unit_tests_import_operational_views():
+    offenders: list[str] = []
+    for base in [PROJECT_ROOT / "src", PROJECT_ROOT / "tests"]:
+        for path in base.rglob("*.py"):
+            if path == Path(__file__).resolve():
+                continue
+            source = path.read_text(encoding="utf-8")
+            if "operational_views" in source:
+                offenders.append(str(path.relative_to(PROJECT_ROOT)))
+
+    assert offenders == []
 
 
 def test_app_imports_forecast_context_builder_from_canonical_module():
@@ -87,23 +87,6 @@ def test_dashboard_analytics_helpers_are_imported_from_analytics_not_operational
     offenders = {module_path: names for module_path, names in offenders.items() if names}
 
     assert offenders == {}
-
-
-def test_operational_views_no_longer_exports_dashboard_analytics_helpers():
-    forbidden_defs = {
-        "aggregate_to_analytics",
-        "build_customer_risk_ranking",
-        "build_status_distribution",
-    }
-    tree = ast.parse(
-        (PROJECT_ROOT / "src/backend/operational_views.py").read_text(encoding="utf-8")
-    )
-
-    defined_functions = {
-        node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)
-    }
-
-    assert defined_functions & forbidden_defs == set()
 
 
 def test_forecast_page_presentation_helpers_are_not_route_local():

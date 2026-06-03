@@ -8,7 +8,7 @@ import uuid
 import pandas as pd
 from openpyxl import load_workbook
 
-from src.backend import app, operational_views
+from src.backend import app
 from src.backend.forecast_config import ForecastConfig
 
 

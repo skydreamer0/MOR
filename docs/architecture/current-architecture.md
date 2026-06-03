@@ -49,15 +49,22 @@ Routes should not own:
 
 ## Active Services
 
-- `forecast_workbench_context.py`: workbench context builder.
+- `forecast_workbench_context.py`: workbench context builder and forecast row reason/budget enrichment.
 - `forecast_write_workflow.py`: forecast row override persistence.
 - `forecast_export_workflow.py`: export summary preparation.
+- `forecast_page_context.py`: Forecast page render context, row visibility split, risk levels, and review signature validation.
 - `snapshot_service.py`: snapshot persistence and row serialization.
 - `item_settings_workflow.py`: settings form normalization.
+- `item_settings_repository.py`: item setting persistence.
+- `settings_context.py`: Settings page context, data-health issues, and budget coverage.
 - `dashboard_analytics_workflow.py`: dashboard template context.
+- `dashboard_metrics.py`: dashboard KPI metrics.
+- `analytics.py`: reusable analytics slices and dashboard risk/status helpers.
+- `data_health_summary.py`: data health summary view model and builder.
 - `product_monitor_workflow.py`: product monitor template context.
+- `product_monitor_rows.py`: product monitor row view models, status labels, and row calculation.
 - `row_identity.py`: canonical forecast row identity helpers.
-- `operational_views.py`: remaining operational view models, data-loading helpers, and presentation calculations.
+- `monthly_review_context.py`: Monthly Review page/export context assembly.
 
 ## Data Rule
 

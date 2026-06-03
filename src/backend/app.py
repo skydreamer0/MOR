@@ -27,7 +27,7 @@ from src.backend.forecast_write_workflow import save_row_override
 from src.backend.item_settings_workflow import build_item_config_payloads_from_form
 from src.backend.product_monitor_workflow import build_product_monitor_template_context
 from src.backend.analytics import aggregate_to_analytics
-from src.backend.operational_views import update_item_configs
+from src.backend.item_settings_repository import update_item_configs
 from src.backend.web.form_parser import FormValidationError, parse_manual_quantities, parse_target_period, validate_target_period
 from src.backend.web.forecast_presenter import product_display_name
 from src.backend.daily_sales_importer import (

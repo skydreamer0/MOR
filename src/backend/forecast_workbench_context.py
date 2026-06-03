@@ -8,25 +8,23 @@ import pandas as pd
 
 from src.backend.daily_sales_importer import DailyActualAggregate
 from src.backend.data_loader import default_target_from_db
-from src.backend.amount_calculation import forecast_amount_total
+from src.backend.amount_calculation import amount_for_quantity, forecast_amount_total
 from src.backend.forecast_config import ForecastConfig
 from src.backend.forecast_engine import ForecastOptions, apply_user_adjustments, build_forecast
 from src.backend.forecast_models import ForecastRow, ForecastSummary, ForecastTarget
 from src.backend.forecast_workbench_inputs import (
+    BudgetTarget,
     ForecastWorkbenchInputs,
     load_forecast_workbench_inputs,
 )
 from src.backend.history_service import enrich_rows_with_history
-from src.backend.operational_views import (
-    apply_reasons_and_budgets,
-    build_dashboard_metrics,
-    build_data_health_summary,
-    build_items_from_sales_data,
+from src.backend.dashboard_metrics import DashboardMetrics, build_dashboard_metrics
+from src.backend.data_health_summary import DataHealthSummary, build_data_health_summary
+from src.backend.forecast_workbench_inputs import build_items_from_sales_data
+from src.backend.product_monitor_rows import (
+    ProductMonitorRow,
     build_product_monitor_rows,
-    DashboardMetrics,
-    DataHealthSummary,
 )
-from src.backend.product_monitor_rows import ProductMonitorRow
 from src.backend.projection_engine import ProjectionResult, batch_project_eom
 from src.backend.web.form_parser import parse_target_period
 from src.backend.workday_calendar import ensure_calendar_year
@@ -76,6 +74,7 @@ def build(
             today=context_today,
             projections=projections,
             target_month=target.month,
+            amount_for_quantity=amount_for_quantity,
         ),
         health=build_data_health_summary(inputs.data, summary, inputs.budget_months),
         items=build_items_from_sales_data(inputs.data, db),
@@ -145,6 +144,64 @@ def _build_summary(
         inputs.budget_year_amount_map,
     )
     return replace(summary, total=forecast_amount_total(summary.rows))
+
+
+def apply_reasons_and_budgets(
+    summary: ForecastSummary,
+    adjustment_reasons: dict[str, str],
+    budget_targets: dict[str, BudgetTarget],
+    item_configs: dict[str, dict] | None = None,
+    budget_year_map: dict[str, list[float]] | None = None,
+    budget_year_amount_map: dict[str, list[float]] | None = None,
+) -> ForecastSummary:
+    item_configs = item_configs or {}
+    budget_year_map = budget_year_map or {}
+    budget_year_amount_map = budget_year_amount_map or {}
+    rows = [
+        _apply_reason_and_budget(
+            row,
+            adjustment_reasons,
+            budget_targets,
+            item_configs,
+            budget_year_map,
+            budget_year_amount_map,
+        )
+        for row in summary.rows
+    ]
+    return replace(summary, rows=rows)
+
+
+def _apply_reason_and_budget(
+    row: ForecastRow,
+    adjustment_reasons: dict[str, str],
+    budget_targets: dict[str, BudgetTarget],
+    item_configs: dict[str, dict],
+    budget_year_map: dict[str, list[float]],
+    budget_year_amount_map: dict[str, list[float]],
+) -> ForecastRow:
+    budget = budget_targets.get(row.row_id, BudgetTarget(0.0, 0.0))
+    item_config = item_configs.get(row.product_code, {})
+    is_budgeted = item_config.get("is_budgeted", True)
+    if not is_budgeted:
+        budget = BudgetTarget(0.0, 0.0)
+    budget_monthly = budget_year_map.get(row.row_id, [0.0] * 12) if is_budgeted else [0.0] * 12
+    budget_monthly_amount = (
+        budget_year_amount_map.get(row.row_id, [0.0] * 12)
+        if is_budgeted
+        else [0.0] * 12
+    )
+    row = replace(
+        row,
+        adjustment_reason=adjustment_reasons.get(row.row_id, row.adjustment_reason),
+        budget_quantity=budget.target_quantity,
+        budget_amount=budget.target_amount,
+        base_budget_quantity=budget.base_target_quantity,
+        price_quantity=float(item_config.get("price_quantity") or 0),
+        item_status=str(item_config.get("item_status") or "active"),
+        budget_monthly=budget_monthly,
+        budget_monthly_amount=budget_monthly_amount,
+    )
+    return replace(row, estimated_amount=0.0 if row.excluded else amount_for_quantity(row.final_forecast, row))
 
 
 def _build_projections(
