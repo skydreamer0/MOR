@@ -95,6 +95,15 @@ def test_backend_app_has_no_module_level_flask_app_instance():
     assert module_level_app_factories == []
 
 
+def test_forecast_engine_does_not_keep_dead_month_filter_helpers():
+    tree = ast.parse((PROJECT_ROOT / "src/backend/forecast_engine.py").read_text(encoding="utf-8"))
+    defined_functions = {
+        node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)
+    }
+
+    assert {"_month_quantity", "_month_amount"}.isdisjoint(defined_functions)
+
+
 def test_dashboard_analytics_helpers_are_imported_from_analytics_not_operational_views():
     dashboard_helpers = {
         "aggregate_to_analytics",

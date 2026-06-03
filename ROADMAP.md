@@ -537,11 +537,11 @@ Goal: extract cache key/invalidation state from `app.py` into a small `ContextCa
 - 修正：刪除 `src/backend/app.py` 的模組層級 `app = create_app()`；直接執行 backend 模組時改由 `if __name__ == "__main__"` 呼叫 `create_app().run(...)`，並補 architecture guard。
 - 涉及檔案：`src/backend/app.py`、`tests/test_architecture_imports.py`。
 
-#### AH-5: `forecast_engine.py` 死代碼函式
+#### AH-5: `forecast_engine.py` 死代碼函式 ✅ 完成
 
-- 症狀：`_month_quantity()` 和 `_month_amount()`（第 163–178 行）從未被呼叫；實際使用的是函式內部定義的 `_pqty`/`_pamt` closure。
-- 修正：直接刪除兩個函式。
-- 涉及檔案：`src/backend/forecast_engine.py`。
+- 症狀：`_month_quantity()` 和 `_month_amount()` 從未被呼叫；實際使用的是函式內部定義的 `_pqty`/`_pamt` closure。
+- 修正：刪除兩個函式，並補 architecture guard 防止 dead helpers 回流。
+- 涉及檔案：`src/backend/forecast_engine.py`、`tests/test_architecture_imports.py`。
 
 #### AH-6: `ForecastOptions.excluded_item_ids` 應為 `frozenset`
 
