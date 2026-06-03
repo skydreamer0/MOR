@@ -525,11 +525,11 @@ Goal: extract cache key/invalidation state from `app.py` into a small `ContextCa
 - 修正：改為呼叫 `_build_cached_context(year, month)`，並補路由 cache seam regression tests。
 - 涉及檔案：`src/backend/app.py`（兩個路由函式）。
 
-#### AH-3: `build_forecast_page_context` 的 `data_base_path` 是死參數
+#### AH-3: `build_forecast_page_context` 的 `data_base_path` 是死參數 ✅ 完成
 
-- 症狀：`operational_views.build_forecast_page_context()` 接受 `data_base_path: Path`，但立刻轉給 `forecast_workbench_context.build()`，後者完全不使用它；`app.py` 多處傳入此參數都是無效呼叫。
-- 修正：移除 `operational_views.build_forecast_page_context()` 的 `data_base_path` 參數，同步更新 `app.py` 的五個呼叫點。
-- 涉及檔案：`src/backend/operational_views.py`、`src/backend/app.py`。
+- 症狀：舊 `operational_views.build_forecast_page_context()` 曾接受 `data_base_path: Path`，但該參數不參與 context build；容易讓 route 呼叫看起來仍依賴 Excel base path。
+- 修正：canonical `forecast_workbench_context.build()` 簽名只保留 `forecast_config`、`db`、`target_source` 與 keyword-only `today`；補 architecture guard 防止 `data_base_path` 參數回流。
+- 涉及檔案：`src/backend/forecast_workbench_context.py`、`src/backend/app.py`、`tests/test_architecture_imports.py`。
 
 #### AH-4: `src/backend/app.py` 模組層級副作用
 

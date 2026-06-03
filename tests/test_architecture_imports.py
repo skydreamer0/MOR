@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import inspect
 from pathlib import Path
 
 
@@ -65,6 +66,15 @@ def test_app_imports_forecast_context_builder_from_canonical_module():
 
     assert "build_forecast_page_context" not in operational_imports
     assert "build" in canonical_imports
+
+
+def test_forecast_context_builder_signature_has_no_data_base_path_argument():
+    from src.backend.forecast_workbench_context import build
+
+    parameters = inspect.signature(build).parameters
+
+    assert "data_base_path" not in parameters
+    assert list(parameters)[:3] == ["forecast_config", "db", "target_source"]
 
 
 def test_dashboard_analytics_helpers_are_imported_from_analytics_not_operational_views():
