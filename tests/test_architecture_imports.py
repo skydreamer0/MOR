@@ -157,3 +157,16 @@ def test_monthly_review_routes_use_context_builder():
     assert "build_monthly_review_context" in _imports_from(
         "src/backend/app.py", "src.backend.monthly_review_context"
     )
+
+
+def test_settings_route_uses_settings_context_builder():
+    data_validator_imports = _imports_from("src/backend/app.py", "src.backend.data_validator")
+    settings_imports = _imports_from("src/backend/app.py", "src.backend.settings_context")
+
+    assert "validate_budget_coverage" not in data_validator_imports
+    assert "validate_health" not in data_validator_imports
+    assert "build_settings_page_context" in settings_imports
+    assert "build_settings_error_context" in settings_imports
+
+    app_source = (PROJECT_ROOT / "src/backend/app.py").read_text(encoding="utf-8")
+    assert "SELECT DISTINCT product_code FROM budget_targets" not in app_source

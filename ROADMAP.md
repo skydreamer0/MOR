@@ -27,6 +27,7 @@ Architecture direction:
 - `src/backend/monthly_review_context.py` owns Monthly Review page/export context assembly.
 - `src/backend/snapshot_service.py` owns snapshot persistence, forecast-row snapshot serialization, and final/close-month snapshot immutability.
 - `src/backend/item_settings_workflow.py` owns item/settings request-form parsing and item config payload normalization.
+- `src/backend/settings_context.py` owns Settings page data-health, budget-coverage, target, and error fallback context assembly.
 - `src/backend/dashboard_analytics_workflow.py` owns dashboard template context assembly.
 - `src/backend/analytics.py` owns reusable analytics slices plus dashboard status distribution and customer risk ranking helpers.
 - `src/backend/product_monitor_workflow.py` owns product monitor template context assembly.
@@ -55,6 +56,7 @@ Architecture direction:
 16. Dashboard analytics helper relocation.
 17. Forecast page presentation context extraction.
 18. Monthly Review context package foundation.
+19. Settings data-health context extraction.
 
 ## Cloud Agent Architecture Roadmaps
 
@@ -310,9 +312,17 @@ Verification:
 D:\AI\python.exe -m pytest tests\test_monthly_review.py tests\test_monthly_review_actions.py tests\test_monthly_review_chart.py tests\test_monthly_review_customers.py tests\test_monthly_review_products.py tests\test_monthly_review_forecast_bias.py tests\test_monthly_review_trend.py -q --basetemp=.pytest-tmp
 ```
 
-### Phase 6: Settings Data Health Context
+### Phase 6: Settings Data Health Context - Completed 2026-06-03
 
 Goal: move Settings page data-health and budget-coverage assembly out of the route.
+
+Completed result:
+
+- Added `settings_context.py` to assemble Settings items, health, data issues, target year/month, and error fallback shape.
+- Moved budget coverage SQL out of `app.py`.
+- Kept Settings template variable names stable.
+- Kept `item_settings_workflow.py` focused on form parsing and payload normalization.
+- Added Settings context tests and architecture guards for the route seam.
 
 Tasks:
 

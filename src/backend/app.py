@@ -8,7 +8,6 @@ import pandas as pd
 from flask import Flask, Response, redirect, render_template, request, send_file, url_for
 from flask_caching import Cache
 
-from src.backend.data_validator import validate_budget_coverage, validate_health
 from src.backend.dashboard_analytics_workflow import build_dashboard_template_context
 from src.backend.monthly_review import list_reviewable_months
 from src.backend.monthly_review_context import build_monthly_review_context
@@ -39,6 +38,7 @@ from src.backend.close_month_workflow import execute_close_month
 from src.backend.context_cache import ContextCache
 from src.backend.database import get_db
 from src.backend.etl import import_current_month, sync_excel_to_db
+from src.backend.settings_context import build_settings_error_context, build_settings_page_context
 from src.backend.snapshot_service import (
     delete_snapshot,
     is_finalized,
@@ -336,34 +336,22 @@ def create_app(config: dict | None = None) -> Flask:
     @app.get("/settings")
     def settings() -> str:
         try:
-            context = build_forecast_page_context(forecast_config, db, request.args)
-            items = context.items
-            health = context.health
-            data_issues = validate_health(health)
-            with db.get_connection() as conn:
-                budget_rows = conn.execute(
-                    "SELECT DISTINCT product_code FROM budget_targets WHERE year = ?",
-                    (context.target.year,),
-                ).fetchall()
-            budget_codes = {r["product_code"] for r in budget_rows}
-            sales_codes = {item["product_code"] for item in items}
-            data_issues += validate_budget_coverage(sales_codes, budget_codes)
-            error_message = None
+            settings_context = build_settings_page_context(forecast_config, db, request.args)
         except (FileNotFoundError, ValueError, FormValidationError) as exc:
-            context = None
-            items = []
-            health = None
-            data_issues = []
-            error_message = f"載入系統設定失敗：{exc}"
+            settings_context = build_settings_error_context(
+                exc,
+                fallback_year=request.args.get("year", ""),
+                fallback_month=request.args.get("month", ""),
+            )
 
         return render_template(
             "settings.html",
-            items=items,
-            health=health,
-            data_issues=data_issues,
-            year=context.target.year if context else request.args.get("year", ""),
-            month=context.target.month if context else request.args.get("month", ""),
-            error_message=error_message,
+            items=settings_context.items,
+            health=settings_context.health,
+            data_issues=settings_context.data_issues,
+            year=settings_context.year,
+            month=settings_context.month,
+            error_message=settings_context.error_message,
         )
 
     @app.get("/monthly-review")
