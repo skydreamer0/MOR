@@ -549,11 +549,11 @@ Goal: extract cache key/invalidation state from `app.py` into a small `ContextCa
 - 修正：型別改為 `frozenset[str]`，預設值改為 `frozenset()`，並在 `__post_init__` 將既有 set/list 呼叫端正規化為 `frozenset`。
 - 涉及檔案：`src/backend/forecast_models.py`、`tests/test_forecast.py`。
 
-#### AH-7: `excluded_items.json` 舊版遷移碼
+#### AH-7: `excluded_items.json` 舊版遷移碼 ✅ 完成
 
 - 症狀：`sync_excel_to_db()` 仍讀取並遷移 `excluded_items.json`（舊格式）；現有部署早已完成遷移，此段碼只增加混淆。
-- 修正：確認無現存 `excluded_items.json` 後，移除對應的讀取與 INSERT 邏輯。
-- 涉及檔案：`src/backend/etl.py`。
+- 修正：確認 repo 無現存 `excluded_items.json` 後，移除對應的讀取與 `item_configs` INSERT/UPDATE 遷移邏輯，並補 regression test 確認舊 JSON 不再影響 DB。
+- 涉及檔案：`src/backend/etl.py`、`tests/test_etl.py`。
 
 #### AH-8: ContextCache 不支援多 Worker（文件限制）
 

@@ -19,7 +19,6 @@ current_month_records 中相同月份的記錄會被自動清除。
     SHPB `銷售數量` + `贈品數量` = 業績明細 `銷+贈S量`
     兩者語意相同，合算後寫入 `quantity`。
 """
-import json
 import logging
 import re
 from pathlib import Path
@@ -153,7 +152,6 @@ def import_current_month(db: MORDatabase, df_shpb: pd.DataFrame) -> int:
 def sync_excel_to_db(
     db: MORDatabase,
     project_root: Path,
-    config_file: str = "excluded_items.json",
     *,
     default_budget_year: int | None = None,
 ):
@@ -168,12 +166,6 @@ def sync_excel_to_db(
     sales_file = _find_first_file(project_root, SALES_FILE_PATTERN)
     if sales_file:
         sales_rows = normalize_sales_records(pd.read_excel(sales_file, sheet_name=SALES_SHEET_NAME))
-
-    excluded_ids: list = []
-    json_path = project_root / config_file
-    if json_path.exists():
-        with open(json_path, "r", encoding="utf-8") as f:
-            excluded_ids = json.load(f)
 
     budget_rows = None
     budget_file = _find_budget_file(project_root, default_budget_year)
@@ -191,23 +183,6 @@ def sync_excel_to_db(
             conn.execute("DELETE FROM sales_records")
             sales_rows.to_sql("sales_records", conn, if_exists="append", index=False)
             logger.info("Synced %d sales records.", len(sales_rows))
-
-        if excluded_ids:
-            for pid in excluded_ids:
-                product_code = normalize_product_code(pid)
-                conn.execute(
-                    """
-                    INSERT OR IGNORE INTO item_configs
-                    (product_code, is_excluded, is_budgeted, is_visible, price_quantity, item_status, status_label, custom_category)
-                    VALUES (?, 0, 1, 1, 0, 'active', NULL, NULL)
-                    """,
-                    (product_code,),
-                )
-                conn.execute(
-                    "UPDATE item_configs SET is_excluded = 1 WHERE product_code = ?",
-                    (product_code,),
-                )
-            logger.info("Migrated %d exclusions from JSON.", len(excluded_ids))
 
         if budget_rows is not None:
             budget_years = budget_rows["year"].unique().tolist()

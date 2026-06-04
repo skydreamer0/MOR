@@ -117,3 +117,28 @@ def test_sync_excel_to_db_prefers_requested_budget_year(tmp_path):
         ).fetchone()
 
     assert tuple(saved) == (2026, 5, 10.0)
+
+
+def test_sync_excel_to_db_ignores_legacy_excluded_items_json(tmp_path):
+    from src.backend.database import MORDatabase
+    from src.backend.etl import sync_excel_to_db
+
+    db = MORDatabase(tmp_path / "test.db")
+    sales = pd.DataFrame([
+        {
+            "年": 2027, "月": 5, "日": 1, "客戶簡稱": "A",
+            "商品號": "P1", "商品簡稱": "Product", "銷+贈S量": 1,
+            "單價NT(淨)": 10, "含稅總額(淨)": 10,
+        },
+    ])
+    sales.to_excel(tmp_path / "業績明細.xlsx", index=False, sheet_name="業績明細")
+    (tmp_path / "excluded_items.json").write_text('["P1"]', encoding="utf-8")
+
+    sync_excel_to_db(db, tmp_path)
+
+    with db.get_connection() as conn:
+        migrated = conn.execute(
+            "SELECT is_excluded FROM item_configs WHERE product_code = 'P1'"
+        ).fetchone()
+
+    assert migrated is None
