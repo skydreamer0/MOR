@@ -25,7 +25,10 @@ class ForecastTarget:
 class ForecastOptions:
     include_all: bool = False
     max_cycle_interval_days: int = 120
-    excluded_item_ids: set[str] = field(default_factory=set)
+    excluded_item_ids: frozenset[str] = field(default_factory=frozenset)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "excluded_item_ids", frozenset(self.excluded_item_ids))
 
 
 @dataclass(frozen=True)

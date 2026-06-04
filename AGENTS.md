@@ -79,7 +79,7 @@ D:\AI\python.exe -m pytest -q
 For quick import/syntax validation:
 
 ```powershell
-D:\AI\python.exe -m py_compile app.py src\backend\app.py src\backend\sales_forecast.py src\backend\forecast_config.py src\backend\forecast_models.py src\backend\data_loader.py src\backend\forecast_engine.py src\backend\exporter.py src\backend\web\form_parser.py src\backend\web\forecast_presenter.py
+D:\AI\python.exe -m py_compile app.py src\backend\app.py src\backend\sales_forecast.py src\backend\forecast_config.py src\backend\forecast_models.py src\backend\data_loader.py src\backend\forecast_engine.py src\backend\forecast_workbench_context.py src\backend\forecast_page_context.py src\backend\dashboard_metrics.py src\backend\data_health_summary.py src\backend\monthly_review_context.py src\backend\settings_context.py src\backend\exporter.py src\backend\web\form_parser.py src\backend\web\forecast_presenter.py
 ```
 
 ## Project Structure
@@ -95,7 +95,12 @@ src/backend/                   Canonical backend logic
   forecast_models.py           ForecastTarget, ForecastRow, ForecastSummary
   data_loader.py               Excel loading and DataFrame normalization
   forecast_engine.py           Forecast calculation and adjustments
-  operational_views.py         Dashboard, monitor, and data health presentation service
+  analytics.py                 Analytics slices and dashboard risk/status helpers
+  dashboard_metrics.py         Dashboard KPI metrics
+  data_health_summary.py       Data health summary model/builder
+  forecast_page_context.py     Forecast page render context
+  monthly_review_context.py    Monthly Review page/export context
+  settings_context.py          Settings page context
   exporter.py                  Excel workbook export
   sales_forecast.py            Compatibility facade for older imports
   web/form_parser.py           Form parsing and validation

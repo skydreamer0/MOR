@@ -8,20 +8,32 @@ from src.backend.daily_sales_importer import DailyActualAggregate
 from src.backend.forecast_models import ForecastRow, ForecastSummary
 from src.backend.row_identity import make_row_id
 from src.backend.forecast_workbench_context import _patch_latest_order_dates
-from src.backend.operational_views import (
+from src.backend.amount_calculation import amount_for_quantity
+from src.backend.dashboard_metrics import build_dashboard_metrics
+from src.backend.data_health_summary import build_data_health_summary
+from src.backend.forecast_workbench_context import apply_reasons_and_budgets
+from src.backend.forecast_workbench_inputs import (
     BudgetTarget,
-    apply_reasons_and_budgets,
-    _fetch_monthly_history,
-    build_customer_risk_ranking,
-    build_dashboard_metrics,
-    build_data_health_summary,
-    build_product_monitor_rows,
-    build_status_distribution,
     load_adjustments,
     load_budget_year,
     load_budget_year_amounts,
     load_budgets,
 )
+from src.backend.product_monitor_rows import (
+    _cycle_status_info,
+    _fetch_monthly_history,
+    _three_axis_status,
+    _to_monitor_row as _build_product_monitor_row,
+    build_product_monitor_rows as _build_product_monitor_rows,
+)
+
+
+def build_product_monitor_rows(*args, **kwargs):
+    return _build_product_monitor_rows(*args, **kwargs, amount_for_quantity=amount_for_quantity)
+
+
+def _to_monitor_row(*args, **kwargs):
+    return _build_product_monitor_row(*args, **kwargs, amount_for_quantity=amount_for_quantity)
 
 
 def _row(
@@ -281,128 +293,6 @@ def test_product_monitor_rows_classify_yoy_drop_statuses_and_notes():
     assert by_product["P4"].status_key == "no_history"
 
 
-def test_status_distribution_counts_monitor_rows_by_status():
-    monitor_rows = build_product_monitor_rows(
-        [
-            _row(
-                row_id="A__P1",
-                customer="A",
-                product_code="P1",
-                product_name="High Risk",
-                last_year=100,
-                last_month=80,
-                current=20,
-                final=80,
-                budget=100,
-                price=10,
-            ),
-            _row(
-                row_id="B__P2",
-                customer="B",
-                product_code="P2",
-                product_name="Caution",
-                last_year=100,
-                last_month=95,
-                current=70,
-                final=95,
-                budget=100,
-                price=10,
-            ),
-            _row(
-                row_id="C__P3",
-                customer="C",
-                product_code="P3",
-                product_name="Growth",
-                last_year=100,
-                last_month=100,
-                current=100,
-                final=110,
-                budget=100,
-                price=10,
-            ),
-            _row(
-                row_id="D__P4",
-                customer="D",
-                product_code="P4",
-                product_name="No History",
-                last_year=0,
-                last_month=0,
-                current=2,
-                final=4,
-                budget=0,   # no budget → no_history
-                price=10,
-            ),
-        ]
-    )
-
-    dist = build_status_distribution(monitor_rows)
-
-    assert dist == {"high": 1, "caution": 1, "ok": 1, "no_history": 1}
-    assert sum(dist.values()) == len(monitor_rows)
-
-
-def test_customer_risk_ranking_aggregates_high_and_slight_rows_by_amount_gap():
-    monitor_rows = build_product_monitor_rows(
-        [
-            _row(
-                row_id="A__P1",
-                customer="Customer A",
-                product_code="P1",
-                product_name="High Risk",
-                last_year=100,
-                last_month=80,
-                current=20,
-                final=80,
-                budget=100,
-                price=10,
-            ),
-            _row(
-                row_id="A__P2",
-                customer="Customer A",
-                product_code="P2",
-                product_name="Slight",
-                last_year=100,
-                last_month=95,
-                current=60,
-                final=95,
-                budget=100,
-                price=20,
-            ),
-            _row(
-                row_id="B__P3",
-                customer="Customer B",
-                product_code="P3",
-                product_name="High Risk",
-                last_year=200,
-                last_month=150,
-                current=60,
-                final=150,
-                budget=200,
-                price=30,
-            ),
-            _row(
-                row_id="C__P4",
-                customer="Customer C",
-                product_code="P4",
-                product_name="Growth",
-                last_year=100,
-                last_month=100,
-                current=100,
-                final=120,
-                budget=100,
-                price=100,
-            ),
-        ]
-    )
-
-    ranking = build_customer_risk_ranking(monitor_rows, top_n=2)
-
-    assert [item.customer for item in ranking] == ["Customer B", "Customer A"]
-    assert [item.gap_amount for item in ranking] == [-1500, -300]
-    assert [item.gap_quantity for item in ranking] == [-50, -25]
-    assert [item.item_count for item in ranking] == [1, 2]
-
-
 def test_data_health_summary_reports_source_coverage_and_row_anomalies():
     rows = [
         _row(
@@ -497,7 +387,6 @@ def test_monitor_row_pack_factor_only_applies_when_actual_is_present():
     from dataclasses import replace as dreplace
     row_with_pack = dreplace(base, price_quantity=6.0)
 
-    from src.backend.operational_views import _to_monitor_row
     from src.backend.daily_sales_importer import DailyActualAggregate
 
     # 沒有每日業績資料時：this_year_same_month_qty 直接用（不乘 pack_factor）
@@ -519,7 +408,6 @@ def test_monitor_row_pack_factor_only_applies_when_actual_is_present():
 # Phase 3: 3-axis status logic
 # ---------------------------------------------------------------------------
 
-from src.backend.operational_views import _three_axis_status, _cycle_status_info
 
 
 def test_three_axis_status_high_risk_from_yoy():
@@ -646,7 +534,6 @@ def test_monitor_row_cycle_delay_forces_high_risk():
         if (order_date + timedelta(days=i)).weekday() < 5
     )
 
-    from src.backend.operational_views import _to_monitor_row
     monitor_row = _to_monitor_row(row, workday_set=workday_set, today=today)
 
     assert monitor_row.cycle_status == "delayed"

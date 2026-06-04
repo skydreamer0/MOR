@@ -5,11 +5,9 @@ import pandas as pd
 from src.backend.dashboard_analytics_workflow import build_dashboard_template_context
 from src.backend.forecast_models import ForecastRow, ForecastSummary, ForecastTarget
 from src.backend.forecast_workbench_context import ForecastPageContext
-from src.backend.operational_views import (
-    DashboardMetrics,
-    DataHealthSummary,
-    ProductMonitorRow,
-)
+from src.backend.dashboard_metrics import DashboardMetrics
+from src.backend.data_health_summary import DataHealthSummary
+from src.backend.product_monitor_rows import ProductMonitorRow
 
 
 def _row(row_id: str, customer: str, product_code: str, product_name: str, amount: float) -> ForecastRow:

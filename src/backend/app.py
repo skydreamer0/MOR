@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import logging
 from datetime import date
 from pathlib import Path
@@ -9,30 +8,26 @@ import pandas as pd
 from flask import Flask, Response, redirect, render_template, request, send_file, url_for
 from flask_caching import Cache
 
-from src.backend.data_validator import validate_budget_coverage, validate_health
 from src.backend.dashboard_analytics_workflow import build_dashboard_template_context
-from src.backend.monthly_review import build_monthly_review, list_reviewable_months
-from src.backend.monthly_review_actions import build_action_lists
-from src.backend.monthly_review_chart import build_trend_chart
-from src.backend.monthly_review_customers import build_customer_summary
+from src.backend.monthly_review import list_reviewable_months
+from src.backend.monthly_review_context import build_monthly_review_context
 from src.backend.monthly_review_export import export_monthly_review
-from src.backend.monthly_review_forecast_bias import build_forecast_bias
-from src.backend.monthly_review_products import build_product_summary
-from src.backend.monthly_review_trend import build_trend
 from src.backend.data_loader import default_target_from_data, default_target_from_db, latest_closed_month_from_data, load_sales_detail
 from src.backend.exporter import export_forecast
 from src.backend.forecast_config import ForecastConfig
 from src.backend.forecast_export_workflow import prepare_export_summary
 from src.backend.forecast_models import ForecastSummary
 from src.backend.forecast_workbench_context import build as build_forecast_page_context
+from src.backend.forecast_page_context import (
+    build_forecast_page_render_context,
+    forecast_row_risk,
+    validate_forecast_signature,
+)
 from src.backend.forecast_write_workflow import save_row_override
 from src.backend.item_settings_workflow import build_item_config_payloads_from_form
-from src.backend.amount_calculation import forecast_amount_total, last_year_amount_total
 from src.backend.product_monitor_workflow import build_product_monitor_template_context
-from src.backend.operational_views import (
-    aggregate_to_analytics,
-    update_item_configs,
-)
+from src.backend.analytics import aggregate_to_analytics
+from src.backend.item_settings_repository import update_item_configs
 from src.backend.web.form_parser import FormValidationError, parse_manual_quantities, parse_target_period, validate_target_period
 from src.backend.web.forecast_presenter import product_display_name
 from src.backend.daily_sales_importer import (
@@ -43,6 +38,7 @@ from src.backend.close_month_workflow import execute_close_month
 from src.backend.context_cache import ContextCache
 from src.backend.database import get_db
 from src.backend.etl import import_current_month, sync_excel_to_db
+from src.backend.settings_context import build_settings_error_context, build_settings_page_context
 from src.backend.snapshot_service import (
     delete_snapshot,
     is_finalized,
@@ -106,14 +102,6 @@ def create_app(config: dict | None = None) -> Flask:
                 return row
         raise FormValidationError(f"Unknown forecast row: {row_id}")
 
-    def _forecast_row_risk(row) -> str:
-        if row.last_year_same_month_qty > 0 and row.final_forecast < row.last_year_same_month_qty * 0.9:
-            return "high"
-        return "normal"
-
-    def _risk_levels(rows) -> dict[str, str]:
-        return {row.row_id: _forecast_row_risk(row) for row in rows}
-
     @app.get("/")
     def dashboard() -> str:
         try:
@@ -162,32 +150,18 @@ def create_app(config: dict | None = None) -> Flask:
             summary = None
             error_message = f"無法產生預估：{exc}"
 
-        rows = summary.rows if summary else []
-        sorted_rows = sorted(rows, key=lambda row: (0 if _forecast_row_risk(row) == "high" else 1, row.customer, row.product_code))
-        active_rows = [row for row in sorted_rows if row.item_status != "discontinued"]
-        discontinued_rows = [row for row in sorted_rows if row.item_status == "discontinued"]
-        visible_rows = active_rows[: forecast_config.visible_row_limit]
-        rendered_rows = visible_rows + discontinued_rows
-        visible_total = forecast_amount_total(visible_rows)
-        unrendered_total = (summary.total if summary else 0) - visible_total
-        customers = sorted({row.customer for row in visible_rows})
+        template_context = build_forecast_page_render_context(
+            summary,
+            visible_row_limit=forecast_config.visible_row_limit,
+            fallback_year=request.args.get("year", ""),
+            fallback_month=request.args.get("month", ""),
+        )
         return render_template(
             "forecast.html",
-            year=summary.year if summary else request.args.get("year", ""),
-            month=summary.month if summary else request.args.get("month", ""),
-            rows=visible_rows,
-            discontinued_rows=discontinued_rows,
-            discontinued_last_year_total=last_year_amount_total(discontinued_rows),
-            total=summary.total if summary else 0,
-            unrendered_total=unrendered_total,
-            forecast_signature=_forecast_signature(summary) if summary else "",
-            row_count=len(rows),
-            shown_count=len(rendered_rows),
             error_message=error_message,
             is_finalized=is_finalized(db, summary.year, summary.month) if summary else False,
             snapshots=list_snapshots(db, summary.year, summary.month) if summary else [],
-            customers=customers,
-            risk_levels=_risk_levels(rendered_rows),
+            **template_context.__dict__,
         )
 
     @app.patch("/forecast/row/<path:row_id>")
@@ -212,7 +186,7 @@ def create_app(config: dict | None = None) -> Flask:
             row=row,
             year=year,
             month=month,
-            risk_levels={row.row_id: _forecast_row_risk(row)},
+            risk_levels={row.row_id: forecast_row_risk(row)},
         )
 
     @app.get("/monitor/products")
@@ -251,10 +225,7 @@ def create_app(config: dict | None = None) -> Flask:
         except FormValidationError:
             return redirect(url_for("product_monitor", import_error="年月範圍不合法。"))
         try:
-            ctx = build_forecast_page_context(
-                forecast_config, db,
-                {"year": str(year), "month": str(month)},
-            )
+            ctx = _build_cached_context(year, month)
             snapshot_rows = serialize_forecast_rows_for_snapshot(ctx.summary.rows)
             execute_close_month(db, year, month, snapshot_rows, note=note)
             ctx_cache.invalidate(year, month)
@@ -304,7 +275,7 @@ def create_app(config: dict | None = None) -> Flask:
             adjustment_reasons = parse_manual_quantities(request.form, key_prefix="adjustment_reason__", type_cast=str)
 
             _validate_submitted_row_ids(summary, set(manual_adjustments))
-            _validate_forecast_signature(summary, request.form.get("forecast_signature", ""))
+            validate_forecast_signature(summary, request.form.get("forecast_signature", ""))
 
             summary = prepare_export_summary(summary, manual_adjustments, adjustment_reasons)
         except (FileNotFoundError, ValueError, FormValidationError) as exc:
@@ -362,34 +333,22 @@ def create_app(config: dict | None = None) -> Flask:
     @app.get("/settings")
     def settings() -> str:
         try:
-            context = build_forecast_page_context(forecast_config, db, request.args)
-            items = context.items
-            health = context.health
-            data_issues = validate_health(health)
-            with db.get_connection() as conn:
-                budget_rows = conn.execute(
-                    "SELECT DISTINCT product_code FROM budget_targets WHERE year = ?",
-                    (context.target.year,),
-                ).fetchall()
-            budget_codes = {r["product_code"] for r in budget_rows}
-            sales_codes = {item["product_code"] for item in items}
-            data_issues += validate_budget_coverage(sales_codes, budget_codes)
-            error_message = None
+            settings_context = build_settings_page_context(forecast_config, db, request.args)
         except (FileNotFoundError, ValueError, FormValidationError) as exc:
-            context = None
-            items = []
-            health = None
-            data_issues = []
-            error_message = f"載入系統設定失敗：{exc}"
+            settings_context = build_settings_error_context(
+                exc,
+                fallback_year=request.args.get("year", ""),
+                fallback_month=request.args.get("month", ""),
+            )
 
         return render_template(
             "settings.html",
-            items=items,
-            health=health,
-            data_issues=data_issues,
-            year=context.target.year if context else request.args.get("year", ""),
-            month=context.target.month if context else request.args.get("month", ""),
-            error_message=error_message,
+            items=settings_context.items,
+            health=settings_context.health,
+            data_issues=settings_context.data_issues,
+            year=settings_context.year,
+            month=settings_context.month,
+            error_message=settings_context.error_message,
         )
 
     @app.get("/monthly-review")
@@ -397,33 +356,23 @@ def create_app(config: dict | None = None) -> Flask:
         reviewable = list_reviewable_months(db)
         year  = request.args.get("year",  type=int) or (reviewable[0][0] if reviewable else 0)
         month = request.args.get("month", type=int) or (reviewable[0][1] if reviewable else 0)
-        summary = None
-        action_lists = None
-        customer_summary = None
-        product_summary = None
-        forecast_bias = None
-        trend_chart = None
+        review_context = None
         error_message = None
         if year and month:
             try:
-                summary = build_monthly_review(db, year, month)
-                action_lists = build_action_lists(db, year, month)
-                customer_summary = build_customer_summary(db, year, month)
-                product_summary = build_product_summary(db, year, month)
-                forecast_bias = build_forecast_bias(db, year, month)
-                trend_chart = build_trend_chart(build_trend(db, year, month))
+                review_context = build_monthly_review_context(db, year, month)
             except (ValueError, LookupError, KeyError, TypeError) as exc:
                 error_message = str(exc)
         return render_template(
             "monthly_review.html",
             year=year,
             month=month,
-            summary=summary,
-            action_lists=action_lists,
-            customer_summary=customer_summary,
-            product_summary=product_summary,
-            forecast_bias=forecast_bias,
-            trend_chart=trend_chart,
+            summary=review_context.summary if review_context else None,
+            action_lists=review_context.action_lists if review_context else None,
+            customer_summary=review_context.customer_summary if review_context else None,
+            product_summary=review_context.product_summary if review_context else None,
+            forecast_bias=review_context.forecast_bias if review_context else None,
+            trend_chart=review_context.trend_chart if review_context else None,
             reviewable_months=reviewable,
             error_message=error_message,
         )
@@ -435,16 +384,16 @@ def create_app(config: dict | None = None) -> Flask:
         if not (year and month):
             return Response("missing year/month", status=400)
         try:
-            summary = build_monthly_review(db, year, month)
-        except Exception as exc:
+            review_context = build_monthly_review_context(db, year, month, include_chart=False)
+        except (ValueError, LookupError, KeyError, TypeError) as exc:
             return Response(str(exc), status=400)
         wb = export_monthly_review(
-            summary,
-            actions=build_action_lists(db, year, month),
-            customers=build_customer_summary(db, year, month),
-            products=build_product_summary(db, year, month),
-            bias=build_forecast_bias(db, year, month),
-            trend=build_trend(db, year, month),
+            review_context.summary,
+            actions=review_context.action_lists,
+            customers=review_context.customer_summary,
+            products=review_context.product_summary,
+            bias=review_context.forecast_bias,
+            trend=review_context.trend,
         )
         filename = f"monthly_review_{year}-{month:02d}.xlsx"
         return Response(
@@ -538,11 +487,7 @@ def create_app(config: dict | None = None) -> Flask:
             snapshot_name = f"{'定稿' if snapshot_type == 'Final' else '草稿'} {year}/{month:02d}"
 
         try:
-            context = build_forecast_page_context(
-                forecast_config,
-                db,
-                {"year": str(year), "month": str(month)},
-            )
+            context = _build_cached_context(year, month)
             summary = context.summary
 
             snapshot_rows = serialize_forecast_rows_for_snapshot(summary.rows)
@@ -576,32 +521,5 @@ def _validate_submitted_row_ids(summary: ForecastSummary, submitted_row_ids: set
         raise FormValidationError(f"Unknown forecast row: {', '.join(unknown_row_ids)}")
 
 
-def _validate_forecast_signature(summary: ForecastSummary, submitted_signature: object) -> None:
-    if not submitted_signature:
-        return
-    if str(submitted_signature) != _forecast_signature(summary):
-        raise FormValidationError("Forecast review changed. Reload the page before exporting.")
-
-
-def _forecast_signature(summary: ForecastSummary) -> str:
-    lines = [f"{summary.year}-{summary.month:02d}"]
-    for row in summary.rows:
-        lines.append(
-            "|".join(
-                [
-                    row.row_id,
-                    f"{row.system_forecast:.8f}",
-                    f"{row.latest_price:.8f}",
-                    f"{row.estimated_amount:.8f}",
-                    row.forecast_basis,
-                ]
-            )
-        )
-    return hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()
-
-
-app = create_app()
-
-
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000, debug=False, use_reloader=False)
+    create_app().run(host="127.0.0.1", port=5000, debug=False, use_reloader=False)

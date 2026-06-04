@@ -19,8 +19,8 @@ current_month_records 中相同月份的記錄會被自動清除。
     SHPB `銷售數量` + `贈品數量` = 業績明細 `銷+贈S量`
     兩者語意相同，合算後寫入 `quantity`。
 """
-import json
 import logging
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -45,7 +45,7 @@ SALES_COLUMNS = {
     "amount": "含稅總額(淨)",
 }
 
-BUDGET_FILE_PATTERN = "2026預算報表*.xlsx"
+BUDGET_FILE_PATTERN = "*預算報表*.xlsx"
 BUDGET_COLUMNS = {
     "year": "年",
     "customer_name": "客戶簡稱",
@@ -149,7 +149,12 @@ def import_current_month(db: MORDatabase, df_shpb: pd.DataFrame) -> int:
     return len(insert_rows)
 
 
-def sync_excel_to_db(db: MORDatabase, project_root: Path, config_file: str = "excluded_items.json"):
+def sync_excel_to_db(
+    db: MORDatabase,
+    project_root: Path,
+    *,
+    default_budget_year: int | None = None,
+):
     """月底同步：從業績明細 Excel 整批覆蓋 sales_records。
 
     同步完成後會自動清除 current_month_records 中已被業績明細涵蓋的月份，
@@ -162,18 +167,15 @@ def sync_excel_to_db(db: MORDatabase, project_root: Path, config_file: str = "ex
     if sales_file:
         sales_rows = normalize_sales_records(pd.read_excel(sales_file, sheet_name=SALES_SHEET_NAME))
 
-    excluded_ids: list = []
-    json_path = project_root / config_file
-    if json_path.exists():
-        with open(json_path, "r", encoding="utf-8") as f:
-            excluded_ids = json.load(f)
-
     budget_rows = None
-    budget_file = _find_first_file(project_root, BUDGET_FILE_PATTERN)
+    budget_file = _find_budget_file(project_root, default_budget_year)
     if budget_file:
         xl = pd.ExcelFile(budget_file)
         df_budget = pd.read_excel(budget_file, sheet_name=xl.sheet_names[0])
-        budget_rows = normalize_budget_targets(df_budget, default_year=2026)
+        budget_rows = normalize_budget_targets(
+            df_budget,
+            default_year=default_budget_year or _infer_budget_year_from_filename(budget_file),
+        )
 
     # ── Step 2: All DB writes in one transaction; rollback on any failure ──────
     with db.get_connection() as conn:
@@ -181,23 +183,6 @@ def sync_excel_to_db(db: MORDatabase, project_root: Path, config_file: str = "ex
             conn.execute("DELETE FROM sales_records")
             sales_rows.to_sql("sales_records", conn, if_exists="append", index=False)
             logger.info("Synced %d sales records.", len(sales_rows))
-
-        if excluded_ids:
-            for pid in excluded_ids:
-                product_code = normalize_product_code(pid)
-                conn.execute(
-                    """
-                    INSERT OR IGNORE INTO item_configs
-                    (product_code, is_excluded, is_budgeted, is_visible, price_quantity, item_status, status_label, custom_category)
-                    VALUES (?, 0, 1, 1, 0, 'active', NULL, NULL)
-                    """,
-                    (product_code,),
-                )
-                conn.execute(
-                    "UPDATE item_configs SET is_excluded = 1 WHERE product_code = ?",
-                    (product_code,),
-                )
-            logger.info("Migrated %d exclusions from JSON.", len(excluded_ids))
 
         if budget_rows is not None:
             budget_years = budget_rows["year"].unique().tolist()
@@ -251,11 +236,18 @@ def normalize_sales_records(df_sales: pd.DataFrame) -> pd.DataFrame:
     return normalized.dropna(subset=["order_date", "customer_name", "product_code"])
 
 
-def normalize_budget_targets(df_budget: pd.DataFrame, default_year: int) -> pd.DataFrame:
-    _require_columns(df_budget, BUDGET_COLUMNS.values())
+def normalize_budget_targets(df_budget: pd.DataFrame, default_year: int | None) -> pd.DataFrame:
+    required_columns = [
+        BUDGET_COLUMNS["customer_name"],
+        BUDGET_COLUMNS["product_code"],
+        BUDGET_COLUMNS["title"],
+    ]
+    _require_columns(df_budget, required_columns)
     month_cols = _month_columns(df_budget.columns)
     if not month_cols:
         raise ValueError("No month columns found in budget sheet.")
+    if default_year is None and BUDGET_COLUMNS["year"] not in df_budget.columns:
+        raise ValueError("Budget year is required when the budget sheet has no year column.")
 
     id_vars = [
         BUDGET_COLUMNS["customer_name"],
@@ -331,6 +323,24 @@ def _clear_covered_current_month_records(db: MORDatabase, sales_rows: pd.DataFra
         ).rowcount
     if deleted:
         logger.info("Cleared %d current_month_records rows covered by sales sync.", deleted)
+
+
+def _find_budget_file(project_root: Path, target_year: int | None = None) -> "Path | None":
+    matches = sorted(project_root.glob(BUDGET_FILE_PATTERN))
+    if not matches:
+        return None
+
+    if target_year is not None:
+        exact_matches = [path for path in matches if _infer_budget_year_from_filename(path) == target_year]
+        if exact_matches:
+            return exact_matches[0]
+
+    return max(matches, key=lambda path: (_infer_budget_year_from_filename(path) or 0, path.name))
+
+
+def _infer_budget_year_from_filename(path: Path) -> int | None:
+    match = re.search(r"(20\d{2})", path.name)
+    return int(match.group(1)) if match else None
 
 
 def _find_first_file(project_root: Path, pattern: str) -> "Path | None":

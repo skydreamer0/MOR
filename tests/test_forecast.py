@@ -60,6 +60,13 @@ def test_user_adjustments_override_quantity_and_exclusion_removes_amount():
     assert excluded.total == 0
 
 
+def test_forecast_options_excluded_item_ids_are_frozen_and_hashable():
+    options = ForecastOptions(excluded_item_ids={"P1"})
+
+    assert options.excluded_item_ids == frozenset({"P1"})
+    assert hash(options) == hash(ForecastOptions(excluded_item_ids=frozenset({"P1"})))
+
+
 def test_excluded_item_ids_match_numeric_excel_product_codes():
     data = sample_sales_data().assign(**{"商品號": 1001})
 

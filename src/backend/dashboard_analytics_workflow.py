@@ -5,7 +5,7 @@ from datetime import date
 
 from src.backend.data_validator import validate_health
 from src.backend.forecast_workbench_context import ForecastPageContext
-from src.backend.operational_views import (
+from src.backend.analytics import (
     aggregate_to_analytics,
     build_customer_risk_ranking,
     build_status_distribution,

@@ -160,16 +160,6 @@ def _average_cycle_days(order_dates: list[pd.Timestamp], max_cycle_interval_days
     return max(1, int(round(sum(intervals) / len(intervals))))
 
 
-def _month_quantity(group: pd.DataFrame, year: int, month: int) -> float:
-    matched = group[(group["年"] == year) & (group["月"] == month)]
-    return float(matched["銷+贈S量"].sum())
-
-
-def _month_amount(group: pd.DataFrame, year: int, month: int) -> float:
-    matched = group[(group["年"] == year) & (group["月"] == month)]
-    return float(matched["含稅總額(淨)"].sum())
-
-
 def _month_price(group: pd.DataFrame, year: int, month: int) -> float:
     matched = group[(group["年"] == year) & (group["月"] == month)]
     if matched.empty:

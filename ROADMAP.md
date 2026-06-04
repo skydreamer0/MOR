@@ -19,17 +19,23 @@ Architecture direction:
 ## Current Module Boundaries
 
 - `src/backend/forecast_workbench_context.py` builds the workbench-ready forecast context, owns `ForecastPageContext`, and owns summary-local latest-order-date enrichment.
+- `src/backend/forecast_page_context.py` owns Forecast page render-data assembly, risk levels, visible/discontinued row split, visible totals, and forecast review signatures.
 - `src/backend/forecast_workbench_inputs.py` owns DB input loading and budget target records for the forecast workbench context.
 - `src/backend/amount_calculation.py` owns forecast row amount inclusion and quantity-to-amount calculation.
+- `src/backend/dashboard_metrics.py` owns dashboard KPI metrics.
+- `src/backend/data_health_summary.py` owns data health summary view model and builder.
 - `src/backend/forecast_write_workflow.py` owns forecast row override persistence.
 - `src/backend/forecast_export_workflow.py` owns export summary preparation.
+- `src/backend/monthly_review_context.py` owns Monthly Review page/export context assembly.
 - `src/backend/snapshot_service.py` owns snapshot persistence, forecast-row snapshot serialization, and final/close-month snapshot immutability.
 - `src/backend/item_settings_workflow.py` owns item/settings request-form parsing and item config payload normalization.
-- `src/backend/dashboard_analytics_workflow.py` owns dashboard analytics/template context assembly.
+- `src/backend/item_settings_repository.py` owns item setting persistence.
+- `src/backend/settings_context.py` owns Settings page data-health, budget-coverage, target, and error fallback context assembly.
+- `src/backend/dashboard_analytics_workflow.py` owns dashboard template context assembly.
+- `src/backend/analytics.py` owns reusable analytics slices plus dashboard status distribution and customer risk ranking helpers.
 - `src/backend/product_monitor_workflow.py` owns product monitor template context assembly.
 - `src/backend/product_monitor_rows.py` owns product monitor row view models, row calculation, status labels, and monthly history lookup.
 - `src/backend/row_identity.py` owns canonical forecast row identity make/parse helpers.
-- `src/backend/operational_views.py` still owns shared operational view models, analytics helpers, remaining budget/history presentation helpers, and compatibility facades.
 - `src/backend/app.py` still owns Flask request/response wiring, redirects, cache invalidation, and remaining route-local workflow glue.
 
 ## Completed Architecture Seams
@@ -49,6 +55,11 @@ Architecture direction:
 13. Close-month snapshot immutability and Forecast UI delete guard.
 14. Forecast workbench input loader ownership cleanup.
 15. Amount calculation seam foundation.
+16. Dashboard analytics helper relocation.
+17. Forecast page presentation context extraction.
+18. Monthly Review context package foundation.
+19. Settings data-health context extraction.
+20. `operational_views.py` retirement.
 
 ## Cloud Agent Architecture Roadmaps
 
@@ -176,9 +187,16 @@ Verification:
 D:\AI\python.exe -m pytest tests\test_forecast_workbench_context.py tests\test_operational_views.py tests\test_app.py -q --basetemp=.pytest-tmp
 ```
 
-### Phase 3: Dashboard and Analytics Helper Relocation
+### Phase 3: Dashboard and Analytics Helper Relocation - Completed 2026-06-03
 
 Goal: move dashboard-facing analytics helpers out of `operational_views.py` into modules whose names match their purpose.
+
+Completed result:
+
+- `aggregate_to_analytics`, `build_status_distribution`, `build_customer_risk_ranking`, and `CustomerRiskItem` now live in `analytics.py`.
+- `app.py` and `dashboard_analytics_workflow.py` import dashboard analytics helpers from `analytics.py`.
+- `operational_views.py` no longer exports the dashboard analytics helper facades.
+- Architecture tests guard the canonical import path.
 
 Tasks:
 
@@ -209,9 +227,16 @@ Verification:
 D:\AI\python.exe -m pytest tests\test_dashboard_analytics_workflow.py tests\test_operational_views.py tests\test_app.py -q --basetemp=.pytest-tmp
 ```
 
-### Phase 4: Forecast Page Presentation Context
+### Phase 4: Forecast Page Presentation Context - Completed 2026-06-03
 
 Goal: move Forecast page render-data assembly out of the `/forecast` route.
+
+Completed result:
+
+- Added `forecast_page_context.py` for Forecast page render-data assembly.
+- Moved row sorting, active/discontinued split, visible row limit, visible/unrendered totals, customer list, risk levels, and forecast review signature validation behind backend helpers.
+- Kept `/forecast` responsible for loading context, finalized/snapshot lookup, and template rendering.
+- Added characterization tests for presentation output and architecture guards for canonical imports.
 
 Tasks:
 
@@ -243,9 +268,17 @@ Verification:
 D:\AI\python.exe -m pytest tests\test_app.py tests\test_forecast_presenter.py -q --basetemp=.pytest-tmp
 ```
 
-### Phase 5: Monthly Review Context Package
+### Phase 5: Monthly Review Context Package - Completed 2026-06-03
 
 Goal: collapse repeated Monthly Review route orchestration into one backend context package.
+
+Completed result:
+
+- Added `monthly_review_context.py` to assemble summary, action lists, customer summary, product summary, forecast bias, trend, and optional trend chart.
+- Updated Monthly Review HTML and export routes to use the same context builder.
+- Kept `monthly_review.py` DB-only behavior unchanged.
+- Replaced Monthly Review export broad exception handling with current route-level known error types.
+- Added context tests and architecture guards for the shared route seam.
 
 Tasks:
 
@@ -282,9 +315,17 @@ Verification:
 D:\AI\python.exe -m pytest tests\test_monthly_review.py tests\test_monthly_review_actions.py tests\test_monthly_review_chart.py tests\test_monthly_review_customers.py tests\test_monthly_review_products.py tests\test_monthly_review_forecast_bias.py tests\test_monthly_review_trend.py -q --basetemp=.pytest-tmp
 ```
 
-### Phase 6: Settings Data Health Context
+### Phase 6: Settings Data Health Context - Completed 2026-06-03
 
 Goal: move Settings page data-health and budget-coverage assembly out of the route.
+
+Completed result:
+
+- Added `settings_context.py` to assemble Settings items, health, data issues, target year/month, and error fallback shape.
+- Moved budget coverage SQL out of `app.py`.
+- Kept Settings template variable names stable.
+- Kept `item_settings_workflow.py` focused on form parsing and payload normalization.
+- Added Settings context tests and architecture guards for the route seam.
 
 Tasks:
 
@@ -316,9 +357,24 @@ Verification:
 D:\AI\python.exe -m pytest tests\test_item_settings_workflow.py tests\test_data_validator.py tests\test_app.py -q --basetemp=.pytest-tmp
 ```
 
-### Phase 7: Final operational_views Deletion or Minimal Shim
+### Phase 7: Final operational_views Deletion or Minimal Shim - Completed 2026-06-03
 
 Goal: finish the retirement of `operational_views.py`.
+
+Completed result:
+
+- Re-ran import search for `operational_views`.
+- Deleted `src/backend/operational_views.py`; no compatibility shim remains.
+- Moved remaining production callers to canonical modules:
+  - `dashboard_metrics.py`
+  - `data_health_summary.py`
+  - `forecast_workbench_context.py`
+  - `forecast_workbench_inputs.py`
+  - `item_settings_repository.py`
+  - `product_monitor_rows.py`
+- Moved remaining tests to canonical module imports and renamed `tests/test_operational_views.py` to `tests/test_forecast_workbench_helpers.py`.
+- Updated `docs/architecture/current-architecture.md` and this roadmap.
+- Added architecture guards that require the retired module to stay deleted and prevent runtime/unit-test imports from returning.
 
 Tasks:
 
@@ -336,7 +392,7 @@ Likely files:
 - `src/backend/app.py`
 - `docs/architecture/current-architecture.md`
 - `ROADMAP.md`
-- `tests/test_operational_views.py`
+- `tests/test_forecast_workbench_helpers.py`
 
 Verification:
 
@@ -457,47 +513,47 @@ Goal: extract cache key/invalidation state from `app.py` into a small `ContextCa
 
 架構審查（2026-06-02）發現的具體問題，按優先順序修正。每個修正獨立 commit 可單獨驗證。
 
-#### AH-1: ETL 年份寫死（高優先，靜默失效）
+#### AH-1: ETL 年份寫死（高優先，靜默失效）✅ 完成
 
 - 症狀：`BUDGET_FILE_PATTERN = "2026預算報表*.xlsx"` 和 `default_year=2026` 寫死在 `etl.py`，2027 年起靜默失效，需手動改源碼。
-- 修正：從 `ForecastConfig` 讀取 `current_year`，或從 Excel 檔名自動推斷年份；`default_year` 改為參數化。
-- 涉及檔案：`src/backend/etl.py`、`src/backend/forecast_config.py`。
+- 修正：預算檔搜尋改為跨年份 pattern，從預算 Excel 檔名推斷年份，並讓 `sync_excel_to_db()` 可用 `default_budget_year` 明確覆寫；`normalize_budget_targets()` 的 `default_year` 改為參數化且支援無「年」欄預算表。
+- 涉及檔案：`src/backend/etl.py`、`tests/test_etl.py`。
 
-#### AH-2: `/close-month` 與 `/snapshots/save` 繞過 ContextCache
+#### AH-2: `/close-month` 與 `/snapshots/save` 繞過 ContextCache ✅ 完成
 
 - 症狀：`close_product_monitor_month` 和 `save_snapshot_route` 直接呼叫 `build_forecast_page_context()`，不走 `_build_cached_context()`，每次執行都重建整個上下文，與其他路由行為不一致。
-- 修正：改為呼叫 `_build_cached_context(year, month)`。
+- 修正：改為呼叫 `_build_cached_context(year, month)`，並補路由 cache seam regression tests。
 - 涉及檔案：`src/backend/app.py`（兩個路由函式）。
 
-#### AH-3: `build_forecast_page_context` 的 `data_base_path` 是死參數
+#### AH-3: `build_forecast_page_context` 的 `data_base_path` 是死參數 ✅ 完成
 
-- 症狀：`operational_views.build_forecast_page_context()` 接受 `data_base_path: Path`，但立刻轉給 `forecast_workbench_context.build()`，後者完全不使用它；`app.py` 多處傳入此參數都是無效呼叫。
-- 修正：移除 `operational_views.build_forecast_page_context()` 的 `data_base_path` 參數，同步更新 `app.py` 的五個呼叫點。
-- 涉及檔案：`src/backend/operational_views.py`、`src/backend/app.py`。
+- 症狀：舊 `operational_views.build_forecast_page_context()` 曾接受 `data_base_path: Path`，但該參數不參與 context build；容易讓 route 呼叫看起來仍依賴 Excel base path。
+- 修正：canonical `forecast_workbench_context.build()` 簽名只保留 `forecast_config`、`db`、`target_source` 與 keyword-only `today`；補 architecture guard 防止 `data_base_path` 參數回流。
+- 涉及檔案：`src/backend/forecast_workbench_context.py`、`src/backend/app.py`、`tests/test_architecture_imports.py`。
 
-#### AH-4: `src/backend/app.py` 模組層級副作用
+#### AH-4: `src/backend/app.py` 模組層級副作用 ✅ 完成
 
-- 症狀：第 606 行 `app = create_app()` 在模組層級執行，import 此模組即觸發 DB 初始化與 Flask 應用建立；根目錄 `app.py` import `create_app` 時已隱含觸發一次建立。
-- 修正：刪除 `src/backend/app.py` 的模組層級 `app = create_app()`；統一由根目錄 `app.py` 或 `if __name__ == "__main__"` 啟動。
-- 涉及檔案：`src/backend/app.py`。
+- 症狀：`app = create_app()` 在 backend 模組層級執行，import `src.backend.app` 即觸發 DB 初始化與 Flask 應用建立；根目錄 `app.py` import `create_app` 時已隱含觸發一次建立。
+- 修正：刪除 `src/backend/app.py` 的模組層級 `app = create_app()`；直接執行 backend 模組時改由 `if __name__ == "__main__"` 呼叫 `create_app().run(...)`，並補 architecture guard。
+- 涉及檔案：`src/backend/app.py`、`tests/test_architecture_imports.py`。
 
-#### AH-5: `forecast_engine.py` 死代碼函式
+#### AH-5: `forecast_engine.py` 死代碼函式 ✅ 完成
 
-- 症狀：`_month_quantity()` 和 `_month_amount()`（第 163–178 行）從未被呼叫；實際使用的是函式內部定義的 `_pqty`/`_pamt` closure。
-- 修正：直接刪除兩個函式。
-- 涉及檔案：`src/backend/forecast_engine.py`。
+- 症狀：`_month_quantity()` 和 `_month_amount()` 從未被呼叫；實際使用的是函式內部定義的 `_pqty`/`_pamt` closure。
+- 修正：刪除兩個函式，並補 architecture guard 防止 dead helpers 回流。
+- 涉及檔案：`src/backend/forecast_engine.py`、`tests/test_architecture_imports.py`。
 
-#### AH-6: `ForecastOptions.excluded_item_ids` 應為 `frozenset`
+#### AH-6: `ForecastOptions.excluded_item_ids` 應為 `frozenset` ✅ 完成
 
 - 症狀：`@dataclass(frozen=True)` 中的 `set[str]` 欄位不可雜湊，違反 `frozen` 的語意預期（frozen dataclass 理應可做 dict key / set member）。
-- 修正：型別改為 `frozenset[str]`，更新 `forecast_workbench_context.py` 傳入端。
-- 涉及檔案：`src/backend/forecast_models.py`、`src/backend/forecast_workbench_context.py`。
+- 修正：型別改為 `frozenset[str]`，預設值改為 `frozenset()`，並在 `__post_init__` 將既有 set/list 呼叫端正規化為 `frozenset`。
+- 涉及檔案：`src/backend/forecast_models.py`、`tests/test_forecast.py`。
 
-#### AH-7: `excluded_items.json` 舊版遷移碼
+#### AH-7: `excluded_items.json` 舊版遷移碼 ✅ 完成
 
 - 症狀：`sync_excel_to_db()` 仍讀取並遷移 `excluded_items.json`（舊格式）；現有部署早已完成遷移，此段碼只增加混淆。
-- 修正：確認無現存 `excluded_items.json` 後，移除對應的讀取與 INSERT 邏輯。
-- 涉及檔案：`src/backend/etl.py`。
+- 修正：確認 repo 無現存 `excluded_items.json` 後，移除對應的讀取與 `item_configs` INSERT/UPDATE 遷移邏輯，並補 regression test 確認舊 JSON 不再影響 DB。
+- 涉及檔案：`src/backend/etl.py`、`tests/test_etl.py`。
 
 #### AH-8: ContextCache 不支援多 Worker（文件限制）
 
@@ -553,7 +609,7 @@ Use subagents only for broad audits, independent investigations, or explicit use
 Focused backend route/service validation:
 
 ```powershell
-D:\AI\python.exe -m pytest tests\test_operational_views.py -q --basetemp=.pytest-tmp
+D:\AI\python.exe -m pytest tests\test_forecast_workbench_helpers.py -q --basetemp=.pytest-tmp
 D:\AI\python.exe -m pytest tests\test_app.py -q --basetemp=.pytest-tmp
 D:\AI\python.exe -m pytest tests\test_exporter.py tests\test_snapshot_service.py -q --basetemp=.pytest-tmp
 ```
@@ -561,7 +617,7 @@ D:\AI\python.exe -m pytest tests\test_exporter.py tests\test_snapshot_service.py
 Quick syntax validation:
 
 ```powershell
-D:\AI\python.exe -m py_compile app.py src\backend\app.py src\backend\sales_forecast.py src\backend\forecast_config.py src\backend\forecast_models.py src\backend\data_loader.py src\backend\forecast_engine.py src\backend\projection_engine.py src\backend\operational_views.py src\backend\etl.py src\backend\exporter.py src\backend\web\form_parser.py src\backend\web\forecast_presenter.py
+D:\AI\python.exe -m py_compile app.py src\backend\app.py src\backend\sales_forecast.py src\backend\forecast_config.py src\backend\forecast_models.py src\backend\data_loader.py src\backend\forecast_engine.py src\backend\projection_engine.py src\backend\forecast_workbench_context.py src\backend\forecast_page_context.py src\backend\dashboard_metrics.py src\backend\data_health_summary.py src\backend\monthly_review_context.py src\backend\settings_context.py src\backend\etl.py src\backend\exporter.py src\backend\web\form_parser.py src\backend\web\forecast_presenter.py
 ```
 
 Full validation before broad backend completion claims:
