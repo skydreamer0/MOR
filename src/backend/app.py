@@ -47,26 +47,23 @@ from src.backend.snapshot_service import (
     save_snapshot,
     serialize_forecast_rows_for_snapshot,
 )
+from src.backend import runtime_paths
 
 
 logger = logging.getLogger(__name__)
 
-BASE_PATH = Path(__file__).resolve().parent
-
-
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-
 
 def create_app(config: dict | None = None) -> Flask:
+    resource_root = runtime_paths.resource_root()
+    data_base_path = Path((config or {}).get("DATA_BASE_PATH", runtime_paths.default_data_root()))
+    db_base_path = Path((config or {}).get("DB_BASE_PATH", data_base_path))
     app = Flask(
         __name__,
-        template_folder=str(PROJECT_ROOT / "templates"),
-        static_folder=str(PROJECT_ROOT / "static"),
+        template_folder=str(resource_root / "templates"),
+        static_folder=str(resource_root / "static"),
     )
     app.config.update(config or {})
     forecast_config = app.config.get("FORECAST_CONFIG", ForecastConfig())
-    data_base_path = Path(app.config.get("DATA_BASE_PATH", PROJECT_ROOT))
-    db_base_path = Path(app.config.get("DB_BASE_PATH", PROJECT_ROOT))
     db = get_db(db_base_path)
     flask_cache = Cache(config={"CACHE_TYPE": "SimpleCache", "CACHE_DEFAULT_TIMEOUT": 0, "CACHE_THRESHOLD": 500})
     flask_cache.init_app(app)

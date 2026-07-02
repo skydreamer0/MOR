@@ -362,6 +362,17 @@ python -m pytest -q
 - 新增第三方套件需經核准，並更新 `requirements.txt`。
 - 詳細的 AI Agent 開發規範請參考 [AGENTS.md](AGENTS.md)。
 
+## GitHub Releases
+
+- Download the Windows or macOS zip from GitHub Releases.
+- Unzip the archive and launch the bundled app from the extracted folder.
+- Release builds do not include personal Excel or SQLite data files.
+- Mutable runtime data lives outside the bundle:
+  - Windows: `%LOCALAPPDATA%\MOR`
+  - macOS: `~/Library/Application Support/MOR`
+  - Linux and source checkouts: `~/.local/share/MOR` or the repo root for legacy local-dev runs
+- To use your own Excel inputs with a release build, import them through the app or copy them into the app-data folder.
+
 ## License
 
 Internal use only.

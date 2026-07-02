@@ -90,7 +90,7 @@ Expected local Excel files:
 - `三年報表-George-20260430.xlsx`
 - `2026預算報表-George-20260430.xlsx`
 
-Treat these files as source data. Do not overwrite them unless explicitly requested.
+Treat these files as source data for a source checkout only. Do not overwrite them unless explicitly requested.
 
 ## Browser Verification Checklist
 
@@ -109,3 +109,14 @@ After frontend changes, verify in the browser:
 - Edited/excluded counters update.
 - Invalid manual quantity is blocked client-side and rejected server-side.
 - Export downloads an Excel workbook.
+
+## Release Bundle Notes
+
+These instructions describe a source checkout. Packaged GitHub Releases do not ship personal Excel or SQLite data and use the user app-data directory for mutable runtime files.
+
+For a release build:
+
+- Windows bundles run from the extracted release folder.
+- macOS bundles run from the extracted release folder.
+- Mutable data lives under `%LOCALAPPDATA%\MOR` on Windows and `~/Library/Application Support/MOR` on macOS.
+- You can import Excel inputs through the app or copy them into the app-data directory before syncing.
