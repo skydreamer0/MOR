@@ -5,13 +5,12 @@ import pandas as pd
 import pytest
 
 from src.backend.daily_sales_importer import DailyActualAggregate
-from src.backend.forecast_models import ForecastRow, ForecastSummary
+from src.backend.forecast_models import ForecastRow, ForecastSummary, ForecastTarget
 from src.backend.row_identity import make_row_id
-from src.backend.forecast_workbench_context import _patch_latest_order_dates
 from src.backend.amount_calculation import amount_for_quantity
 from src.backend.dashboard_metrics import build_dashboard_metrics
 from src.backend.data_health_summary import build_data_health_summary
-from src.backend.forecast_workbench_context import apply_reasons_and_budgets
+from src.backend.forecast_workbench_context import apply_reasons_and_budgets, _patch_target_month_actuals
 from src.backend.forecast_workbench_inputs import (
     BudgetTarget,
     load_adjustments,
@@ -597,7 +596,7 @@ def test_build_forecast_page_context_accepts_today_parameter():
 
 
 # ---------------------------------------------------------------------------
-# _patch_latest_order_dates — current-month daily actuals update ForecastRow
+# _patch_target_month_actuals — current-month daily actuals update ForecastRow
 # ---------------------------------------------------------------------------
 
 def test_forecast_workbench_context_build_returns_complete_context():
@@ -624,7 +623,7 @@ def _summary_with_rows(rows: list) -> ForecastSummary:
     return ForecastSummary(year=2026, month=5, rows=rows, total=0.0)
 
 
-def test_patch_latest_order_dates_updates_when_actual_is_newer():
+def test_patch_target_month_actuals_updates_when_actual_is_newer():
     row = _row(
         row_id="A__P1", customer="A", product_code="P1", product_name="X",
         last_year=100, last_month=80, current=20, final=80, budget=100, price=10,
@@ -632,15 +631,20 @@ def test_patch_latest_order_dates_updates_when_actual_is_newer():
     # row.latest_order_date is 2026-04-20 (set in _row helper)
     actuals = {
         "A__P1": DailyActualAggregate(
-            actual_quantity=30, taxed_amount=0, latest_sales_date="2026-05-08"
+            actual_quantity=30, taxed_amount=900, latest_sales_date="2026-05-08"
         )
     }
-    patched = _patch_latest_order_dates(_summary_with_rows([row]), actuals)
+    patched = _patch_target_month_actuals(
+        _summary_with_rows([row]), actuals, ForecastTarget(2026, 5)
+    )
 
     assert patched.rows[0].latest_order_date == date(2026, 5, 8)
+    assert patched.rows[0].this_year_same_month_qty == 30
+    assert patched.rows[0].ty_monthly[4] == 30
+    assert patched.rows[0].ty_monthly_amount[4] == 900
 
 
-def test_patch_latest_order_dates_keeps_original_when_actual_is_older():
+def test_patch_target_month_actuals_keeps_original_when_actual_is_older():
     row = _row(
         row_id="A__P1", customer="A", product_code="P1", product_name="X",
         last_year=100, last_month=80, current=20, final=80, budget=100, price=10,
@@ -651,22 +655,26 @@ def test_patch_latest_order_dates_keeps_original_when_actual_is_older():
             actual_quantity=10, taxed_amount=0, latest_sales_date="2026-04-01"
         )
     }
-    patched = _patch_latest_order_dates(_summary_with_rows([row]), actuals)
+    patched = _patch_target_month_actuals(
+        _summary_with_rows([row]), actuals, ForecastTarget(2026, 5)
+    )
 
     assert patched.rows[0].latest_order_date == date(2026, 4, 20)
 
 
-def test_patch_latest_order_dates_no_change_when_no_actual():
+def test_patch_target_month_actuals_no_change_when_no_actual():
     row = _row(
         row_id="A__P1", customer="A", product_code="P1", product_name="X",
         last_year=100, last_month=80, current=20, final=80, budget=100, price=10,
     )
-    patched = _patch_latest_order_dates(_summary_with_rows([row]), {})
+    patched = _patch_target_month_actuals(
+        _summary_with_rows([row]), {}, ForecastTarget(2026, 5)
+    )
 
     assert patched.rows[0].latest_order_date == date(2026, 4, 20)
 
 
-def test_patch_latest_order_dates_uses_actual_when_row_date_is_none():
+def test_patch_target_month_actuals_uses_actual_when_row_date_is_none():
     row = _row(
         row_id="A__P1", customer="A", product_code="P1", product_name="X",
         last_year=100, last_month=80, current=20, final=80, budget=100, price=10,
@@ -677,12 +685,14 @@ def test_patch_latest_order_dates_uses_actual_when_row_date_is_none():
             actual_quantity=15, taxed_amount=0, latest_sales_date="2026-05-02"
         )
     }
-    patched = _patch_latest_order_dates(_summary_with_rows([row]), actuals)
+    patched = _patch_target_month_actuals(
+        _summary_with_rows([row]), actuals, ForecastTarget(2026, 5)
+    )
 
     assert patched.rows[0].latest_order_date == date(2026, 5, 2)
 
 
-def test_patch_latest_order_dates_skips_row_when_actual_sales_date_is_none():
+def test_patch_target_month_actuals_keeps_date_when_actual_sales_date_is_none():
     row = _row(
         row_id="A__P1", customer="A", product_code="P1", product_name="X",
         last_year=100, last_month=80, current=20, final=80, budget=100, price=10,
@@ -692,7 +702,9 @@ def test_patch_latest_order_dates_skips_row_when_actual_sales_date_is_none():
             actual_quantity=10, taxed_amount=0, latest_sales_date=None
         )
     }
-    patched = _patch_latest_order_dates(_summary_with_rows([row]), actuals)
+    patched = _patch_target_month_actuals(
+        _summary_with_rows([row]), actuals, ForecastTarget(2026, 5)
+    )
 
     assert patched.rows[0].latest_order_date == date(2026, 4, 20)
 

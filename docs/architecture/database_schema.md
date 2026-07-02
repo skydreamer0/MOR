@@ -11,6 +11,9 @@
 
 All normal user-facing page requests and the export use:
 - `load_sales_detail_from_db(db)` — queries `sales_records UNION ALL current_month_records`
+- `ForecastPageContext._patch_target_month_actuals()` — overlays target-month
+  `daily_sales_actuals` quantity/amount onto forecast rows for dashboard,
+  customer, and product analytics
 - `default_target_from_db(db)` — cheap MAX(order_date) query for default forecast target
 
 ---
@@ -124,6 +127,10 @@ One row per daily sales import workbook.
 
 ### `daily_sales_actuals`
 Current-month daily sales imported from monitor workbooks.
+For the selected target month, forecast page context overlays these imported
+actuals onto `ForecastRow.ty_monthly` and `ForecastRow.ty_monthly_amount` so
+customer/product analytics show the same current quantity and taxed amount as
+the monitor import.
 
 | Column | Type |
 |---|---|

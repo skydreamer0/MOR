@@ -11,6 +11,7 @@ Covers gaps not addressed by test_app.py:
 """
 from __future__ import annotations
 
+import json
 import re
 import shutil
 import uuid
@@ -63,6 +64,56 @@ def _seed_budget(db_base: Path, rows: list[dict]) -> None:
                  r["qty"], r.get("amount", 0), r.get("base_qty", r["qty"])),
             )
         conn.commit()
+
+
+def _seed_daily_actuals(db_base: Path, year: int, month: int, rows: list[dict]) -> None:
+    """Insert imported daily actuals. Each dict: date, customer, product, qty, amount."""
+    db = get_db(db_base)
+    with db.get_connection() as conn:
+        conn.execute(
+            """INSERT INTO daily_import_batches
+            (source_filename, source_hash, sales_year, sales_month,
+             row_count, quantity_total, taxed_amount_total, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'success')""",
+            (
+                f"{year}-{month:02d}.xlsx",
+                f"{year}-{month:02d}",
+                year,
+                month,
+                len(rows),
+                sum(r["qty"] for r in rows),
+                sum(r["amount"] for r in rows),
+            ),
+        )
+        batch_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        for r in rows:
+            conn.execute(
+                """INSERT INTO daily_sales_actuals
+                (sales_year, sales_month, sales_date, customer_name, product_code,
+                 actual_quantity, taxed_amount, bonus_basis_amount, net_unit_price,
+                 import_batch_id, customer_code, product_name, sales_quantity, gift_quantity)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, '', ?, ?, 0)""",
+                (
+                    year,
+                    month,
+                    r["date"],
+                    r["customer"],
+                    r["product"],
+                    r["qty"],
+                    r["amount"],
+                    r["amount"] / r["qty"],
+                    batch_id,
+                    r.get("name", r["product"]),
+                    r["qty"],
+                ),
+            )
+        conn.commit()
+
+
+def _extract_slices(html: str) -> list[dict]:
+    match = re.search(r"const SLICES = (.*?);\s*const TARGET_MONTH", html, re.S)
+    assert match, "SLICES JSON was not embedded"
+    return json.loads(match.group(1))
 
 
 def _sales_rows() -> list[dict]:
@@ -236,6 +287,36 @@ class TestCustomerView:
         # Slices are embedded as JSON for JS rendering
         assert "SLICES =" in html
         assert '"entity_label"' in html   # JSON keys are always ASCII
+
+    def test_page_embeds_imported_daily_actual_amounts(self):
+        base = _isolated_base()
+        _seed_sales(base, [
+            {
+                "order_date": "2026-04-10",
+                "customer": "Hospital A",
+                "product": "P1",
+                "name": "Product One",
+                "qty": 2,
+                "amount": 200,
+            },
+        ])
+        _seed_daily_actuals(base, 2026, 5, [
+            {
+                "date": "2026-05-04",
+                "customer": "Hospital A",
+                "product": "P1",
+                "name": "Product One",
+                "qty": 6,
+                "amount": 600,
+            },
+        ])
+        client = _client(base)
+
+        html = client.get("/customers?year=2026&month=5").get_data(as_text=True)
+        slices = _extract_slices(html)
+
+        hospital = next(s for s in slices if s["entity_id"] == "Hospital A")
+        assert hospital["ty_monthly_amount"][4] == 600
 
     def test_page_shows_empty_state_without_data(self):
         client = _client()

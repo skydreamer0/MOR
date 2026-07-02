@@ -86,18 +86,41 @@ def _resolve_target(db, target_source: Mapping[str, object]) -> ForecastTarget:
     return parse_target_period(target_source, default_target)
 
 
-def _patch_latest_order_dates(
+def _patch_target_month_actuals(
     summary: ForecastSummary,
     daily_actuals: Mapping[str, DailyActualAggregate],
+    target: ForecastTarget,
 ) -> ForecastSummary:
-    """Update ForecastRow.latest_order_date using current-month daily actuals."""
+    """Patch target-month actual quantity/amount from imported daily actuals."""
     patched = []
+    month_index = target.month - 1
     for row in summary.rows:
         actual = daily_actuals.get(row.row_id)
-        if actual is not None and actual.latest_sales_date is not None:
+        if actual is None:
+            patched.append(row)
+            continue
+
+        updates = {}
+        if 0 <= month_index < 12:
+            ty_monthly = list(row.ty_monthly)
+            ty_monthly[month_index] = actual.actual_quantity
+            ty_monthly_amount = list(row.ty_monthly_amount)
+            ty_monthly_amount[month_index] = actual.taxed_amount
+            updates.update(
+                {
+                    "this_year_same_month_qty": actual.actual_quantity,
+                    "ty_monthly": ty_monthly,
+                    "ty_monthly_amount": ty_monthly_amount,
+                }
+            )
+
+        if actual.latest_sales_date is not None:
             new_date = date.fromisoformat(str(actual.latest_sales_date)[:10])
             if row.latest_order_date is None or new_date > row.latest_order_date:
-                row = replace(row, latest_order_date=new_date)
+                updates["latest_order_date"] = new_date
+
+        if updates:
+            row = replace(row, **updates)
         patched.append(row)
     return replace(summary, rows=patched)
 
@@ -133,7 +156,7 @@ def _build_summary(
     )
     summary = _filter_visible_rows(summary, inputs.item_configs)
     summary = replace(summary, rows=enrich_rows_with_history(summary.rows, db, target.year, target.month))
-    summary = _patch_latest_order_dates(summary, inputs.daily_actuals)
+    summary = _patch_target_month_actuals(summary, inputs.daily_actuals, target)
     summary = apply_user_adjustments(summary, manual_adjustments=inputs.manual_adjustments, excluded_ids=set())
     summary = apply_reasons_and_budgets(
         summary,
