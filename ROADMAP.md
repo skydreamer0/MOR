@@ -1,6 +1,6 @@
 # MOR Roadmap
 
-Last reviewed: 2026-06-03
+Last reviewed: 2026-07-02
 
 This file is the active source of truth for MOR planning. Historical implementation plans and architecture review artifacts should not be used as implementation context unless this roadmap explicitly points to them.
 
@@ -60,6 +60,24 @@ Architecture direction:
 18. Monthly Review context package foundation.
 19. Settings data-health context extraction.
 20. `operational_views.py` retirement.
+
+## Release Packaging Roadmap
+
+Goal:
+
+- Ship MOR as clean Windows and macOS GitHub Releases without bundling local Excel files, SQLite databases, logs, or cache.
+- Keep the app directly runnable from the release bundle while storing mutable runtime data in a user-writable location outside the packaged files.
+
+Planned slices:
+
+1. Remove tracked local data files from the release surface and keep the ignore rules explicit.
+2. Define a release/runtime path contract for app data, the SQLite workbench, and any optional imported files.
+3. Add a GitHub Actions release workflow that builds Windows and macOS artifacts separately.
+4. Update release and local-setup docs so the first-run and import/sync flows are obvious.
+
+Parallelization note:
+
+- Once the runtime path contract is defined, the packaging workflow, path/bootstrap work, and docs/update work can be split across subagents because they do not need to edit the same files at the same time.
 
 ## Cloud Agent Architecture Roadmaps
 
