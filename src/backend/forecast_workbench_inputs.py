@@ -17,6 +17,19 @@ class BudgetTarget:
     base_target_quantity: float = 0.0
 
 
+@dataclass(frozen=True)
+class ForecastRowMonthInput:
+    manual_adjustment: float | None
+    adjustment_reason: str | None
+    current_budget: BudgetTarget
+    budget_monthly: list[float]
+    budget_monthly_amount: list[float]
+    price_quantity: float
+    item_status: str
+    is_budgeted: bool
+    is_visible: bool
+
+
 @dataclass
 class ForecastWorkbenchInputs:
     """Raw DB inputs needed before forecast computation."""
@@ -31,6 +44,45 @@ class ForecastWorkbenchInputs:
     budget_year_amount_map: dict[str, list[float]]
     budget_months: list[tuple[int, int]]
     daily_actuals: dict
+
+    def row_month_input(self, row_id: str, product_code: str) -> ForecastRowMonthInput:
+        item_config = self.item_configs.get(product_code, {})
+        is_budgeted = bool(item_config.get("is_budgeted", True))
+        current_budget = self.budget_targets.get(row_id, BudgetTarget(0.0, 0.0))
+        budget_monthly = self.budget_year_map.get(row_id, [0.0] * 12)
+        budget_monthly_amount = self.budget_year_amount_map.get(row_id, [0.0] * 12)
+
+        if not is_budgeted:
+            current_budget = BudgetTarget(0.0, 0.0)
+            budget_monthly = [0.0] * 12
+            budget_monthly_amount = [0.0] * 12
+
+        return ForecastRowMonthInput(
+            manual_adjustment=self.manual_adjustments.get(row_id),
+            adjustment_reason=self.adjustment_reasons.get(row_id),
+            current_budget=current_budget,
+            budget_monthly=list(budget_monthly),
+            budget_monthly_amount=list(budget_monthly_amount),
+            price_quantity=float(item_config.get("price_quantity") or 0),
+            item_status=str(item_config.get("item_status") or "active"),
+            is_budgeted=is_budgeted,
+            is_visible=self.visible_product(product_code),
+        )
+
+    def visible_product(self, product_code: str) -> bool:
+        return bool(self.item_configs.get(product_code, {}).get("is_visible", True))
+
+    @property
+    def forecast_excluded_product_ids(self) -> frozenset[str]:
+        return self.excluded_item_ids
+
+    @property
+    def company_budgets(self) -> list[BudgetTarget]:
+        return list(self.budget_targets.values())
+
+    @property
+    def available_budget_months(self) -> list[tuple[int, int]]:
+        return list(self.budget_months)
 
 
 def load_forecast_workbench_inputs(db, target: ForecastTarget) -> ForecastWorkbenchInputs:

@@ -1,6 +1,6 @@
 # MOR Roadmap
 
-Last reviewed: 2026-07-02
+Last reviewed: 2026-07-03
 
 This file is the active source of truth for MOR planning. Historical implementation plans and architecture review artifacts should not be used as implementation context unless this roadmap explicitly points to them.
 
@@ -20,7 +20,7 @@ Architecture direction:
 
 - `src/backend/forecast_workbench_context.py` builds the workbench-ready forecast context, owns `ForecastPageContext`, and owns summary-local latest-order-date enrichment.
 - `src/backend/forecast_page_context.py` owns Forecast page render-data assembly, risk levels, visible/discontinued row split, visible totals, and forecast review signatures.
-- `src/backend/forecast_workbench_inputs.py` owns DB input loading and budget target records for the forecast workbench context.
+- `src/backend/forecast_workbench_inputs.py` owns DB input loading, budget target records, and the row-facing input interface for the forecast workbench context.
 - `src/backend/amount_calculation.py` owns forecast row amount inclusion and quantity-to-amount calculation.
 - `src/backend/dashboard_metrics.py` owns dashboard KPI metrics.
 - `src/backend/data_health_summary.py` owns data health summary view model and builder.
@@ -34,8 +34,10 @@ Architecture direction:
 - `src/backend/dashboard_analytics_workflow.py` owns dashboard template context assembly.
 - `src/backend/analytics.py` owns reusable analytics slices plus dashboard status distribution and customer risk ranking helpers.
 - `src/backend/product_monitor_workflow.py` owns product monitor template context assembly.
+- `src/backend/product_monitor_month_context.py` owns Product Monitor month-level projection, dashboard, and monitor-row orchestration.
 - `src/backend/product_monitor_rows.py` owns product monitor row view models, row calculation, status labels, and monthly history lookup.
 - `src/backend/row_identity.py` owns canonical forecast row identity make/parse helpers.
+- `src/backend/monthly_review_data.py` owns Monthly Review DB read rules for closed/open month fallback, budgets, actuals, forecasts, product names, price quantities, and historical unit-price fallback.
 - `src/backend/app.py` still owns Flask request/response wiring, redirects, cache invalidation, and remaining route-local workflow glue.
 
 ## Completed Architecture Seams
@@ -60,6 +62,9 @@ Architecture direction:
 18. Monthly Review context package foundation.
 19. Settings data-health context extraction.
 20. `operational_views.py` retirement.
+21. Monthly Review data read seam.
+22. Forecast workbench row-facing input interface.
+23. Product Monitor month context extraction.
 
 ## Release Packaging Roadmap
 

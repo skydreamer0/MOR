@@ -1,22 +1,4 @@
-"""Monthly review service.
-
-All data comes from the DB — no Excel file dependency.
-
-Data sources:
-  actual       → daily_sales_actuals   (the closed month's imported records)
-  forecast     → snapshot_items        (via month_close_records.final_snapshot_id)
-  budget       → budget_targets
-  last year    → daily_sales_actuals   if (year-1, month) is closed,
-                 else sales_records    (synced from Excel)
-
-Amounts:
-  Primary amount is 含稅淨額 (tax-inclusive net of discount):
-    daily_sales_actuals.taxed_amount
-    sales_records.amount
-    budget_targets.target_amount (same convention)
-  Forecast amount is not stored at close time; it is derived via the
-  amount_calculation seam from the period's own average unit price.
-"""
+"""Monthly review service."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -26,46 +8,36 @@ from src.backend.amount_calculation import (
     review_forecast_amount,
 )
 from src.backend.database import MORDatabase
-from src.backend.row_identity import make_row_id, parse_row_id
+from src.backend.monthly_review_data import (
+    MonthlyReviewDataReader,
+    quantity_multiplier as _quantity_multiplier,
+)
+from src.backend.row_identity import parse_row_id
 
-
-# ---------------------------------------------------------------------------
-# Data classes
-# ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
 class ReviewRow:
-    """Per-row comparison: actual vs forecast vs budget vs last year.
-
-    All amounts are 含稅淨額 (taxed net of discount).
-    """
     customer_name: str
     product_code: str
     product_name: str
-    # Quantities
     actual_quantity: float
     forecast_quantity: float
     budget_quantity: float
     last_year_quantity: float
-    # Amounts (含稅淨額)
     actual_amount: float
-    forecast_amount: float           # derived via amount_calculation.review_forecast_amount
+    forecast_amount: float
     budget_amount: float
     last_year_amount: float
-    # Quantity-side ratios
-    forecast_gap: float              # actual_quantity - forecast_quantity
-    forecast_accuracy: float | None  # actual / forecast (quantity)
-    yoy_growth: float | None         # actual_qty / last_year_qty
-    budget_achievement: float | None # actual_qty / budget_qty
-    # Amount-side ratios
+    forecast_gap: float
+    forecast_accuracy: float | None
+    yoy_growth: float | None
+    budget_achievement: float | None
     forecast_amount_gap: float
     forecast_amount_accuracy: float | None
     yoy_amount_growth: float | None
     budget_amount_achievement: float | None
-    # Amount-side absolute deltas (used to surface "金額大且偏移大" rows
-    # ahead of "rate big but amount tiny" ones in growth/budget panels)
-    yoy_amount_delta: float          # actual - last_year
-    budget_amount_delta: float       # actual - budget
+    yoy_amount_delta: float
+    budget_amount_delta: float
 
 
 @dataclass(frozen=True)
@@ -73,310 +45,49 @@ class MonthlyReviewSummary:
     year: int
     month: int
     closed_at: str
-    # Quantity totals
     actual_quantity_total: float
     forecast_quantity_total: float
     budget_quantity_total: float
     last_year_quantity_total: float
-    # Amount totals (含稅淨額)
     actual_amount_total: float
     forecast_amount_total: float
     budget_amount_total: float
     last_year_amount_total: float
-    # Quantity-side rates
     forecast_accuracy_total: float | None
     yoy_growth_total: float | None
     budget_achievement_total: float | None
-    # Amount-side rates
     forecast_amount_accuracy_total: float | None
     yoy_amount_growth_total: float | None
     budget_amount_achievement_total: float | None
-    # Row details
     rows: list[ReviewRow]
 
-
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
 
 def build_monthly_review(
     db: MORDatabase,
     year: int,
     month: int,
 ) -> MonthlyReviewSummary:
-    """Build a complete monthly review from DB-only data.
-
-    Raises ValueError if the month is not closed.
-    """
-    close_rec = _get_close_record(db, year, month)
+    reader = MonthlyReviewDataReader(db)
+    close_rec = reader.close_record(year, month)
     if close_rec is None:
         raise ValueError(f"{year}/{month:02d} 尚未結月，無法產生月底檢討。")
 
-    actuals    = _load_actuals(db, year, month)
-    forecasts  = _load_forecasts(db, close_rec["final_snapshot_id"])
-    name_map   = _load_product_names(db)
-    price_quantities = _load_price_quantities(db)
-    budgets    = _load_budgets(db, year, month)
-    last_year  = _load_last_year(db, year, month, price_quantities)
-    fb_prices  = _load_fallback_prices(db, year, month, price_quantities)
-
-    rows = _merge_rows(actuals, forecasts, budgets, last_year, name_map, fb_prices, price_quantities)
+    price_quantities = reader.price_quantities()
+    rows = _merge_rows(
+        actuals=reader.actuals_by_row(year, month),
+        forecasts=reader.snapshot_forecasts_by_id(close_rec["final_snapshot_id"]),
+        budgets=reader.budget_rows(year, month),
+        last_year=reader.last_year_rows(year, month, price_quantities),
+        name_map=reader.product_names(),
+        fallback_prices=reader.fallback_unit_prices(year, month, price_quantities),
+        price_quantities=price_quantities,
+    )
     return _make_summary(year, month, close_rec["closed_at"], rows)
 
 
 def list_reviewable_months(db: MORDatabase) -> list[tuple[int, int]]:
-    """Return all closed months that have a final snapshot, newest first."""
-    with db.get_connection() as conn:
-        result = conn.execute(
-            """
-            SELECT year, month
-            FROM   month_close_records
-            WHERE  final_snapshot_id IS NOT NULL
-            ORDER  BY year DESC, month DESC
-            """
-        ).fetchall()
-    return [(r["year"], r["month"]) for r in result]
+    return MonthlyReviewDataReader(db).reviewable_months()
 
-
-# ---------------------------------------------------------------------------
-# Internal loaders
-# ---------------------------------------------------------------------------
-
-def _get_close_record(db: MORDatabase, year: int, month: int) -> dict | None:
-    with db.get_connection() as conn:
-        row = conn.execute(
-            """
-            SELECT year, month, closed_at, final_snapshot_id,
-                   actual_quantity_total, actual_amount_total
-            FROM   month_close_records
-            WHERE  year = ? AND month = ?
-            """,
-            (year, month),
-        ).fetchone()
-    return dict(row) if row else None
-
-
-def _load_actuals(db: MORDatabase, year: int, month: int) -> dict[str, dict]:
-    """key = row identity. Aggregates qty and 含稅淨額."""
-    with db.get_connection() as conn:
-        rows = conn.execute(
-            """
-            SELECT customer_name, product_code,
-                   MAX(product_name)    AS product_name,
-                   SUM(actual_quantity) AS qty,
-                   SUM(taxed_amount)    AS amount
-            FROM   daily_sales_actuals
-            WHERE  sales_year = ? AND sales_month = ?
-            GROUP  BY customer_name, product_code
-            """,
-            (year, month),
-        ).fetchall()
-    return {
-        make_row_id(r["customer_name"], r["product_code"]): {
-            "customer_name": r["customer_name"],
-            "product_code":  r["product_code"],
-            "product_name":  r["product_name"] or "",
-            "qty":           float(r["qty"] or 0),
-            "amount":        float(r["amount"] or 0),
-        }
-        for r in rows
-    }
-
-
-def _load_product_names(db: MORDatabase) -> dict[str, str]:
-    """Build product_code → product_name lookup from all available sources."""
-    name_map: dict[str, str] = {}
-    with db.get_connection() as conn:
-        for sql in (
-            "SELECT product_code, MAX(product_name) AS n FROM daily_sales_actuals "
-            "WHERE product_name IS NOT NULL AND product_name != '' GROUP BY product_code",
-            "SELECT product_code, MAX(product_name) AS n FROM sales_records "
-            "WHERE product_name IS NOT NULL AND product_name != '' GROUP BY product_code",
-            "SELECT product_code, MAX(product_name) AS n FROM current_month_records "
-            "WHERE product_name IS NOT NULL AND product_name != '' GROUP BY product_code",
-        ):
-            for r in conn.execute(sql).fetchall():
-                code = r["product_code"]
-                if code and code not in name_map and r["n"]:
-                    name_map[code] = r["n"]
-    return name_map
-
-
-def _load_price_quantities(db: MORDatabase) -> dict[str, float]:
-    with db.get_connection() as conn:
-        rows = conn.execute(
-            """
-            SELECT product_code, price_quantity
-            FROM   item_configs
-            WHERE  price_quantity > 0
-            """
-        ).fetchall()
-    return {r["product_code"]: float(r["price_quantity"] or 0) for r in rows if r["product_code"]}
-
-
-def _quantity_multiplier(product_code: str, price_quantities: dict[str, float]) -> float:
-    multiplier = price_quantities.get(product_code, 0.0)
-    return multiplier if multiplier > 0 else 1.0
-
-
-def _load_fallback_prices(
-    db: MORDatabase,
-    year: int,
-    month: int,
-    price_quantities: dict[str, float] | None = None,
-) -> dict[str, float]:
-    """Most recent net unit price observed before the reviewed month.
-
-    Used to derive a forecast amount for rows that had no actual sale this
-    month (snapshot quantity is present but no period price exists).
-    Keyed by row identity (customer, product).
-    """
-    prices: dict[str, float] = {}
-    price_quantities = price_quantities or {}
-    period_start = f"{year}-{month:02d}-01"
-    with db.get_connection() as conn:
-        # Closed months — weighted average 含稅淨額單價 over each row's history.
-        for r in conn.execute(
-            """
-            SELECT customer_name, product_code,
-                   SUM(taxed_amount)    AS amt,
-                   SUM(actual_quantity) AS qty
-            FROM   daily_sales_actuals
-            WHERE  sales_date < ?
-            GROUP  BY customer_name, product_code
-            """,
-            (period_start,),
-        ).fetchall():
-            qty = float(r["qty"] or 0) * _quantity_multiplier(r["product_code"], price_quantities)
-            amt = float(r["amt"] or 0)
-            if qty > 0 and amt > 0:
-                prices[make_row_id(r["customer_name"], r["product_code"])] = amt / qty
-        # sales_records — only fill rows still missing.
-        for r in conn.execute(
-            """
-            SELECT customer_name, product_code,
-                   SUM(quantity) AS qty,
-                   SUM(amount)   AS amt
-            FROM   sales_records
-            WHERE  order_date < ?
-            GROUP  BY customer_name, product_code
-            """,
-            (period_start,),
-        ).fetchall():
-            rid = make_row_id(r["customer_name"], r["product_code"])
-            if rid in prices:
-                continue
-            qty = float(r["qty"] or 0)
-            amt = float(r["amt"] or 0)
-            if qty > 0 and amt > 0:
-                prices[rid] = amt / qty
-    return prices
-
-
-def _load_forecasts(db: MORDatabase, snapshot_id: int | None) -> dict[str, dict]:
-    if snapshot_id is None:
-        return {}
-    with db.get_connection() as conn:
-        rows = conn.execute(
-            """
-            SELECT si.customer_name, si.product_code,
-                   si.final_forecast,
-                   fs.snapshot_name
-            FROM   snapshot_items si
-            JOIN   forecast_snapshots fs ON fs.id = si.snapshot_id
-            WHERE  si.snapshot_id = ?
-            """,
-            (snapshot_id,),
-        ).fetchall()
-    return {
-        make_row_id(r["customer_name"], r["product_code"]): {
-            "final_forecast": float(r["final_forecast"] or 0),
-        }
-        for r in rows
-    }
-
-
-def _load_budgets(db: MORDatabase, year: int, month: int) -> dict[str, dict]:
-    with db.get_connection() as conn:
-        rows = conn.execute(
-            """
-            SELECT customer_name, product_code,
-                   target_quantity, target_amount
-            FROM   budget_targets
-            WHERE  year = ? AND month = ?
-            """,
-            (year, month),
-        ).fetchall()
-    return {
-        make_row_id(r["customer_name"], r["product_code"]): {
-            "target_quantity": float(r["target_quantity"] or 0),
-            "target_amount":   float(r["target_amount"] or 0),
-        }
-        for r in rows
-    }
-
-
-def _load_last_year(
-    db: MORDatabase,
-    year: int,
-    month: int,
-    price_quantities: dict[str, float] | None = None,
-) -> dict[str, dict]:
-    """Prefer daily_sales_actuals for closed last-year months, fallback to sales_records.
-
-    All amounts are 含稅淨額.
-    """
-    ly_year = year - 1
-    price_quantities = price_quantities or {}
-
-    with db.get_connection() as conn:
-        closed = conn.execute(
-            "SELECT id FROM month_close_records WHERE year = ? AND month = ?",
-            (ly_year, month),
-        ).fetchone()
-
-        if closed:
-            rows = conn.execute(
-                """
-                SELECT customer_name, product_code,
-                       SUM(actual_quantity) AS qty,
-                       SUM(taxed_amount)    AS amount
-                FROM   daily_sales_actuals
-                WHERE  sales_year = ? AND sales_month = ?
-                GROUP  BY customer_name, product_code
-                """,
-                (ly_year, month),
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                """
-                SELECT customer_name, product_code,
-                       SUM(quantity) AS qty,
-                       SUM(amount)   AS amount
-                FROM   sales_records
-                WHERE  strftime('%Y', order_date) = ?
-                  AND  strftime('%m', order_date) = ?
-                GROUP  BY customer_name, product_code
-                """,
-                (str(ly_year), f"{month:02d}"),
-            ).fetchall()
-
-    result = {}
-    for r in rows:
-        product_code = r["product_code"]
-        qty = float(r["qty"] or 0)
-        if closed:
-            qty *= _quantity_multiplier(product_code, price_quantities)
-        result[make_row_id(r["customer_name"], product_code)] = {
-            "qty":    qty,
-            "amount": float(r["amount"] or 0),
-        }
-    return result
-
-
-# ---------------------------------------------------------------------------
-# Merge and compute
-# ---------------------------------------------------------------------------
 
 def _merge_rows(
     actuals: dict[str, dict],
@@ -394,57 +105,70 @@ def _merge_rows(
 
     rows = []
     for row_id in all_ids:
-        a  = actuals.get(row_id, {})
-        f  = forecasts.get(row_id, {})
-        b  = budgets.get(row_id, {})
-        ly = last_year.get(row_id, {})
+        actual = actuals.get(row_id, {})
+        forecast = forecasts.get(row_id, {})
+        budget = budgets.get(row_id, {})
+        last_year_row = last_year.get(row_id, {})
 
         identity = parse_row_id(row_id)
+        product_code = actual.get("product_code", identity.product_code)
 
-        product_code = a.get("product_code", identity.product_code)
-        act_qty  = a.get("qty", 0.0) * _quantity_multiplier(product_code, price_quantities)
-        act_amt  = a.get("amount", 0.0)
-        fcst_qty = f.get("final_forecast", 0.0)
-        bud_qty  = b.get("target_quantity", 0.0)
-        bud_amt  = b.get("target_amount", 0.0)
-        ly_qty   = ly.get("qty", 0.0)
-        ly_amt   = ly.get("amount", 0.0)
+        actual_quantity = float(actual.get("qty", 0.0)) * _quantity_multiplier(
+            product_code,
+            price_quantities,
+        )
+        actual_amount = float(actual.get("amount", 0.0))
+        forecast_quantity = float(forecast.get("final_forecast", 0.0))
+        budget_quantity = float(budget.get("target_quantity", 0.0))
+        budget_amount = float(budget.get("target_amount", 0.0))
+        last_year_quantity = float(last_year_row.get("qty", 0.0))
+        last_year_amount = float(last_year_row.get("amount", 0.0))
 
-        product_name = a.get("product_name") or name_map.get(product_code, "")
-
-        # 含稅淨額單價 — used solely to derive forecast amount; never displayed.
-        period_price = period_avg_unit_price(act_qty, act_amt)
-        fcst_amount  = review_forecast_amount(
-            fcst_qty,
+        product_name = actual.get("product_name") or name_map.get(product_code, "")
+        period_price = period_avg_unit_price(actual_quantity, actual_amount)
+        forecast_amount = review_forecast_amount(
+            forecast_quantity,
             period_unit_price=period_price,
             fallback_unit_price=fallback_prices.get(row_id, 0.0),
         )
 
         rows.append(ReviewRow(
-            customer_name=a.get("customer_name", identity.customer_name),
+            customer_name=actual.get("customer_name", identity.customer_name),
             product_code=product_code,
             product_name=product_name,
-            actual_quantity=act_qty,
-            forecast_quantity=fcst_qty,
-            budget_quantity=bud_qty,
-            last_year_quantity=ly_qty,
-            actual_amount=act_amt,
-            forecast_amount=fcst_amount,
-            budget_amount=bud_amt,
-            last_year_amount=ly_amt,
-            forecast_gap=act_qty - fcst_qty,
-            forecast_accuracy=(act_qty / fcst_qty) if fcst_qty > 0 else None,
-            yoy_growth=(act_qty / ly_qty) if ly_qty > 0 else None,
-            budget_achievement=(act_qty / bud_qty) if bud_qty > 0 else None,
-            forecast_amount_gap=act_amt - fcst_amount,
-            forecast_amount_accuracy=(act_amt / fcst_amount) if fcst_amount > 0 else None,
-            yoy_amount_growth=(act_amt / ly_amt) if ly_amt > 0 else None,
-            budget_amount_achievement=(act_amt / bud_amt) if bud_amt > 0 else None,
-            yoy_amount_delta=act_amt - ly_amt,
-            budget_amount_delta=act_amt - bud_amt,
+            actual_quantity=actual_quantity,
+            forecast_quantity=forecast_quantity,
+            budget_quantity=budget_quantity,
+            last_year_quantity=last_year_quantity,
+            actual_amount=actual_amount,
+            forecast_amount=forecast_amount,
+            budget_amount=budget_amount,
+            last_year_amount=last_year_amount,
+            forecast_gap=actual_quantity - forecast_quantity,
+            forecast_accuracy=(
+                actual_quantity / forecast_quantity if forecast_quantity > 0 else None
+            ),
+            yoy_growth=(
+                actual_quantity / last_year_quantity if last_year_quantity > 0 else None
+            ),
+            budget_achievement=(
+                actual_quantity / budget_quantity if budget_quantity > 0 else None
+            ),
+            forecast_amount_gap=actual_amount - forecast_amount,
+            forecast_amount_accuracy=(
+                actual_amount / forecast_amount if forecast_amount > 0 else None
+            ),
+            yoy_amount_growth=(
+                actual_amount / last_year_amount if last_year_amount > 0 else None
+            ),
+            budget_amount_achievement=(
+                actual_amount / budget_amount if budget_amount > 0 else None
+            ),
+            yoy_amount_delta=actual_amount - last_year_amount,
+            budget_amount_delta=actual_amount - budget_amount,
         ))
 
-    rows.sort(key=lambda r: (r.customer_name, r.product_code))
+    rows.sort(key=lambda row: (row.customer_name, row.product_code))
     return rows
 
 
@@ -454,32 +178,50 @@ def _make_summary(
     closed_at: str,
     rows: list[ReviewRow],
 ) -> MonthlyReviewSummary:
-    act_qty_total  = sum(r.actual_quantity    for r in rows)
-    act_amt_total  = sum(r.actual_amount      for r in rows)
-    fcst_qty_total = sum(r.forecast_quantity  for r in rows)
-    fcst_amt_total = sum(r.forecast_amount    for r in rows)
-    bud_qty_total  = sum(r.budget_quantity    for r in rows)
-    bud_amt_total  = sum(r.budget_amount      for r in rows)
-    ly_qty_total   = sum(r.last_year_quantity for r in rows)
-    ly_amt_total   = sum(r.last_year_amount   for r in rows)
+    actual_quantity_total = sum(row.actual_quantity for row in rows)
+    actual_amount_total = sum(row.actual_amount for row in rows)
+    forecast_quantity_total = sum(row.forecast_quantity for row in rows)
+    forecast_amount_total = sum(row.forecast_amount for row in rows)
+    budget_quantity_total = sum(row.budget_quantity for row in rows)
+    budget_amount_total = sum(row.budget_amount for row in rows)
+    last_year_quantity_total = sum(row.last_year_quantity for row in rows)
+    last_year_amount_total = sum(row.last_year_amount for row in rows)
 
     return MonthlyReviewSummary(
         year=year,
         month=month,
         closed_at=closed_at,
-        actual_quantity_total=act_qty_total,
-        forecast_quantity_total=fcst_qty_total,
-        budget_quantity_total=bud_qty_total,
-        last_year_quantity_total=ly_qty_total,
-        actual_amount_total=act_amt_total,
-        forecast_amount_total=fcst_amt_total,
-        budget_amount_total=bud_amt_total,
-        last_year_amount_total=ly_amt_total,
-        forecast_accuracy_total=(act_qty_total / fcst_qty_total) if fcst_qty_total > 0 else None,
-        yoy_growth_total=(act_qty_total / ly_qty_total) if ly_qty_total > 0 else None,
-        budget_achievement_total=(act_qty_total / bud_qty_total) if bud_qty_total > 0 else None,
-        forecast_amount_accuracy_total=(act_amt_total / fcst_amt_total) if fcst_amt_total > 0 else None,
-        yoy_amount_growth_total=(act_amt_total / ly_amt_total) if ly_amt_total > 0 else None,
-        budget_amount_achievement_total=(act_amt_total / bud_amt_total) if bud_amt_total > 0 else None,
+        actual_quantity_total=actual_quantity_total,
+        forecast_quantity_total=forecast_quantity_total,
+        budget_quantity_total=budget_quantity_total,
+        last_year_quantity_total=last_year_quantity_total,
+        actual_amount_total=actual_amount_total,
+        forecast_amount_total=forecast_amount_total,
+        budget_amount_total=budget_amount_total,
+        last_year_amount_total=last_year_amount_total,
+        forecast_accuracy_total=(
+            actual_quantity_total / forecast_quantity_total
+            if forecast_quantity_total > 0 else None
+        ),
+        yoy_growth_total=(
+            actual_quantity_total / last_year_quantity_total
+            if last_year_quantity_total > 0 else None
+        ),
+        budget_achievement_total=(
+            actual_quantity_total / budget_quantity_total
+            if budget_quantity_total > 0 else None
+        ),
+        forecast_amount_accuracy_total=(
+            actual_amount_total / forecast_amount_total
+            if forecast_amount_total > 0 else None
+        ),
+        yoy_amount_growth_total=(
+            actual_amount_total / last_year_amount_total
+            if last_year_amount_total > 0 else None
+        ),
+        budget_amount_achievement_total=(
+            actual_amount_total / budget_amount_total
+            if budget_amount_total > 0 else None
+        ),
         rows=rows,
     )

@@ -190,3 +190,55 @@ def test_settings_route_uses_settings_context_builder():
 
     app_source = (PROJECT_ROOT / "src/backend/app.py").read_text(encoding="utf-8")
     assert "SELECT DISTINCT product_code FROM budget_targets" not in app_source
+
+
+def test_forecast_context_uses_workbench_input_interface_not_raw_maps():
+    source = (PROJECT_ROOT / "src/backend/forecast_workbench_context.py").read_text(encoding="utf-8")
+    forbidden = [
+        "inputs.item_configs",
+        "inputs.excluded_item_ids",
+        "inputs.manual_adjustments",
+        "inputs.adjustment_reasons",
+        "inputs.budget_targets",
+        "inputs.budget_year_map",
+        "inputs.budget_year_amount_map",
+        "inputs.budget_months",
+    ]
+
+    assert [name for name in forbidden if name in source] == []
+
+
+def test_monthly_review_source_table_sql_stays_in_data_reader():
+    allowed = PROJECT_ROOT / "src/backend/monthly_review_data.py"
+    table_names = [
+        "daily_sales_actuals",
+        "sales_records",
+        "budget_targets",
+        "snapshot_items",
+        "month_close_records",
+        "item_configs",
+        "current_month_records",
+    ]
+    offenders: dict[str, list[str]] = {}
+    for path in (PROJECT_ROOT / "src/backend").glob("monthly_review*.py"):
+        if path == allowed:
+            continue
+        source = path.read_text(encoding="utf-8")
+        matches = [table for table in table_names if table in source]
+        if matches:
+            offenders[str(path.relative_to(PROJECT_ROOT))] = matches
+
+    assert offenders == {}
+
+
+def test_forecast_context_delegates_product_monitor_month_orchestration():
+    source = (PROJECT_ROOT / "src/backend/forecast_workbench_context.py").read_text(encoding="utf-8")
+    forbidden = [
+        "batch_project_eom",
+        "ensure_calendar_year",
+        "build_dashboard_metrics",
+        "build_product_monitor_rows",
+    ]
+
+    assert [name for name in forbidden if name in source] == []
+    assert "build_product_monitor_month_context" in source

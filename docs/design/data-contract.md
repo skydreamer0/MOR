@@ -2,11 +2,11 @@
 
 ## Purpose
 
-This document defines the source Excel columns, normalized field names, and export-facing row model used by MOR. It is the single place to resolve naming drift between loader, forecast engine, form parser, and exporter code.
+This document defines the source Excel columns, DB-first runtime fields, and export-facing row model used by MOR. It is the single place to resolve naming drift between importers, forecast engine, form parser, and exporter code.
 
 ## Source Excel Columns
 
-Raw input is read from the sales detail workbook.
+Raw input is read from sales detail workbooks only during explicit sync/import flows. Normal runtime reads use `mor_workbench.db`.
 
 | Raw Excel column | Meaning | Normalized field |
 | --- | --- | --- |
@@ -17,9 +17,9 @@ Raw input is read from the sales detail workbook.
 | `數量` | Sold quantity | `quantity` |
 | `售價` | Unit price | `unit_price` |
 
-## Normalized Row Shape
+## Runtime Row Shape
 
-The loader should normalize raw Excel data into a stable internal row shape.
+Importers normalize raw Excel data into DB rows. Forecast runtime code then reads a stable internal row shape from the workbench DB.
 
 Required fields:
 
@@ -57,22 +57,23 @@ next_order_date
 last_year_same_month_qty
 this_year_same_month_qty
 latest_price
-forecast_quantity
-manual_quantity
-effective_quantity
+system_forecast
+manual_adjustment
+final_forecast
 estimated_amount
 forecast_basis
+adjustment_reason
 excluded
 auto_in_month
 ```
 
 ## Review State Rules
 
-- `forecast_quantity` is the system-generated quantity before user edits.
-- `manual_quantity` is the submitted override quantity, if any.
-- `effective_quantity` is `manual_quantity` when present, otherwise `forecast_quantity`.
+- `system_forecast` is the generated quantity before user edits.
+- `manual_adjustment` is the submitted override quantity, if any.
+- `final_forecast` is `manual_adjustment` when present, otherwise `system_forecast`.
 - `excluded = true` forces exported amount to zero.
-- `estimated_amount` is derived from `effective_quantity * latest_price` unless excluded.
+- `estimated_amount` is derived from `final_forecast` and the row amount calculation seam unless excluded.
 
 ## Export Shape
 
@@ -84,5 +85,5 @@ The exported workbook should preserve the review state that was submitted from t
 
 ## Compatibility Notes
 
-- This document is a data contract, not a relational database schema.
-- If persistence is added later, the persistent storage schema should extend this contract rather than redefine it.
+- This document is a data contract, not a full relational database schema.
+- Runtime services should prefer backend context/input interfaces over direct table-shaped maps.
