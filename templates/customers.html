@@ -61,130 +61,14 @@
     window.addEventListener("resize", resize);
   })();
 
-  (function () {
-    const SLICES = {{ slices | tojson }};
-    const TARGET_MONTH = {{ month | int }};
-
-    const tbody = document.getElementById("cust-tbody");
-    if (!tbody || !SLICES.length) return;
-
-    const fmt0   = new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 0 });
-    const fmtPct = (v, decimals = 1) => v !== null ? v.toFixed(decimals) + "%" : "—";
-    const ARROWS  = { up: "↑ 上升", flat: "→ 持平", down: "↓ 下滑" };
-    const ARR_CLS = { up: "rising", flat: "", down: "falling" };
-
-    SLICES.forEach((s, idx) => {
-      const m = AnalyticsRenderer.computeMetrics(
-        s.ly_monthly_amount, s.ty_monthly_amount, s.budget_monthly_amount,
-        TARGET_MONTH, s.last_actual_month
-      );
-
-      // ── Summary row ──────────────────────────────────────────────────────────
-      const tr = document.createElement("tr");
-      tr.dataset.custIdx = idx;
-      tr.style.cursor = "pointer";
-      tr.title = "點擊展開月別明細";
-
-      const budRateCls = m.ytdBudget > 0
-        ? (m.ytdBudgetRate >= 100 ? "positive" : m.ytdBudgetRate < 80 ? "negative" : "")
-        : "";
-      const yoyCls = m.ytdLy > 0
-        ? (m.ytdRateVsLy >= 100 ? "rising" : "falling")
-        : "";
-
-      tr.innerHTML =
-        `<td><strong>${s.entity_label}</strong></td>` +
-        `<td class="num">${m.ytdLy > 0 ? fmt0.format(m.ytdLy) : "—"}</td>` +
-        `<td class="num">${m.ytdBudget > 0 ? fmt0.format(m.ytdBudget) : "—"}</td>` +
-        `<td class="num">${m.ytdTy > 0 ? fmt0.format(m.ytdTy) : "—"}</td>` +
-        `<td class="num ${budRateCls}">${m.ytdBudget > 0 ? fmtPct(m.ytdBudgetRate) : "—"}</td>` +
-        `<td class="num ${yoyCls}">${m.ytdLy > 0 ? fmtPct(m.ytdRateVsLy) : "—"}</td>` +
-        `<td class="num ${ARR_CLS[m.trendDir] || ""}">${ARROWS[m.trendDir] || "—"}</td>` +
-        `<td><canvas data-idx="${idx}" width="80" height="32" style="display:block;"></canvas></td>`;
-
-      tbody.appendChild(tr);
-
-      // Draw sparkline immediately (canvas is visible)
-      const spark = tr.querySelector("canvas");
-      AnalyticsRenderer.renderSparklineInCanvas(
-        spark, s.ly_monthly_amount, s.ty_monthly_amount, TARGET_MONTH, s.last_actual_month
-      );
-
-      // ── Detail row (hidden) ──────────────────────────────────────────────────
-      const detail = document.createElement("tr");
-      detail.dataset.custDetail = idx;
-      detail.style.display = "none";
-      detail.innerHTML = `<td colspan="8">
-        <div style="padding:var(--sp-4);background:var(--surface);border-radius:var(--radius);">
-          <div style="display:grid;grid-template-columns:1fr 280px;gap:var(--sp-5);margin-bottom:var(--sp-4);">
-            <div>
-              <canvas id="cust-chart-${idx}" style="width:100%;height:120px;display:block;"></canvas>
-              <div class="detail-chart-legend" style="margin-top:var(--sp-2);">
-                <span class="legend-ly">去年</span>
-                <span class="legend-budget">預算</span>
-                <span class="legend-ty">今年</span>
-              </div>
-            </div>
-            <div>
-              <div id="cust-ytd-${idx}"></div>
-              <div id="cust-assess-${idx}" style="margin-top:var(--sp-3);"></div>
-            </div>
-          </div>
-          <table class="dash-analytics-table management-table" style="font-size:var(--text-sm);">
-            <thead>
-              <tr>
-                <th>月</th>
-                <th class="num">去年金額</th>
-                <th class="num">預算金額</th>
-                <th class="num">今年金額</th>
-                <th class="num">達成%</th>
-                <th class="num">YoY%</th>
-              </tr>
-            </thead>
-            <tbody id="cust-monthly-${idx}"></tbody>
-          </table>
-        </div>
-      </td>`;
-      tbody.appendChild(detail);
-
-      // ── Toggle detail on click ───────────────────────────────────────────────
-      tr.addEventListener("click", () => {
-        const isOpen = detail.style.display !== "none";
-        detail.style.display = isOpen ? "none" : "";
-        if (!isOpen) {
-          const fcstMonthly = new Array(12).fill(0);
-          fcstMonthly[TARGET_MONTH - 1] = s.forecast_amount || 0;
-
-          AnalyticsRenderer.renderTrendChart(
-            document.getElementById(`cust-chart-${idx}`),
-            {
-              lyMonthly:      s.ly_monthly_amount,
-              tyMonthly:      s.ty_monthly_amount,
-              budgetMonthly:  s.budget_monthly_amount,
-              forecastMonthly: fcstMonthly,
-              targetMonth:    TARGET_MONTH,
-              lastActualMonth: s.last_actual_month,
-            }
-          );
-          AnalyticsRenderer.renderYtd(
-            document.getElementById(`cust-ytd-${idx}`), m, TARGET_MONTH, s.last_actual_month
-          );
-          AnalyticsRenderer.renderAssessment(
-            document.getElementById(`cust-assess-${idx}`), m
-          );
-          AnalyticsRenderer.renderMonthlyTable(
-            document.getElementById(`cust-monthly-${idx}`),
-            {
-              lyMonthly:     s.ly_monthly_amount,
-              tyMonthly:     s.ty_monthly_amount,
-              budgetMonthly: s.budget_monthly_amount,
-              targetMonth:   TARGET_MONTH,
-            }
-          );
-        }
-      });
-    });
-  })();
+  AnalyticsTable.mount(document.getElementById("cust-tbody"), {{ slices | tojson }}, {
+    targetMonth: {{ month | int }},
+    idPrefix: "cust",
+    columns: ["lyAmount", "budgetAmount", "tyAmount", "budgetRate", "yoyRatio", "trendLabel", "spark"],
+    boldLabel: true,
+    expandable: true,
+    sparkSeries: "amount",
+  });
   </script>
 </body>
 </html>
