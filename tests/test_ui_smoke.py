@@ -111,8 +111,12 @@ def _seed_daily_actuals(db_base: Path, year: int, month: int, rows: list[dict]) 
 
 
 def _extract_slices(html: str) -> list[dict]:
-    match = re.search(r"const SLICES = (.*?);\s*const TARGET_MONTH", html, re.S)
-    assert match, "SLICES JSON was not embedded"
+    match = re.search(
+        r'AnalyticsTable\.mount\(\s*document\.getElementById\("cust-tbody"\),\s*(.*?),\s*\{\s*targetMonth',
+        html,
+        re.S,
+    )
+    assert match, "slices JSON was not embedded in the AnalyticsTable.mount call"
     return json.loads(match.group(1))
 
 
@@ -284,8 +288,8 @@ class TestCustomerView:
 
         html = client.get("/customers?year=2026&month=5").get_data(as_text=True)
 
-        # Slices are embedded as JSON for JS rendering
-        assert "SLICES =" in html
+        # Slices are embedded as JSON for JS rendering via the shared table module
+        assert "AnalyticsTable.mount" in html
         assert '"entity_label"' in html   # JSON keys are always ASCII
 
     def test_page_embeds_imported_daily_actual_amounts(self):

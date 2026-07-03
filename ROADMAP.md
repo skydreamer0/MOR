@@ -1,6 +1,6 @@
 # MOR Roadmap
 
-Last reviewed: 2026-07-02
+Last reviewed: 2026-07-03
 
 This file is the active source of truth for MOR planning. Historical implementation plans and architecture review artifacts should not be used as implementation context unless this roadmap explicitly points to them.
 
@@ -20,7 +20,7 @@ Architecture direction:
 
 - `src/backend/forecast_workbench_context.py` builds the workbench-ready forecast context, owns `ForecastPageContext`, and owns summary-local latest-order-date enrichment.
 - `src/backend/forecast_page_context.py` owns Forecast page render-data assembly, risk levels, visible/discontinued row split, visible totals, and forecast review signatures.
-- `src/backend/forecast_workbench_inputs.py` owns DB input loading and budget target records for the forecast workbench context.
+- `src/backend/forecast_workbench_inputs.py` owns DB input loading, budget target records, and the row-facing input interface for the forecast workbench context.
 - `src/backend/amount_calculation.py` owns forecast row amount inclusion and quantity-to-amount calculation.
 - `src/backend/dashboard_metrics.py` owns dashboard KPI metrics.
 - `src/backend/data_health_summary.py` owns data health summary view model and builder.
@@ -34,8 +34,10 @@ Architecture direction:
 - `src/backend/dashboard_analytics_workflow.py` owns dashboard template context assembly.
 - `src/backend/analytics.py` owns reusable analytics slices plus dashboard status distribution and customer risk ranking helpers.
 - `src/backend/product_monitor_workflow.py` owns product monitor template context assembly.
+- `src/backend/product_monitor_month_context.py` owns Product Monitor month-level projection, dashboard, and monitor-row orchestration.
 - `src/backend/product_monitor_rows.py` owns product monitor row view models, row calculation, status labels, and monthly history lookup.
 - `src/backend/row_identity.py` owns canonical forecast row identity make/parse helpers.
+- `src/backend/monthly_review_data.py` owns Monthly Review DB read rules for closed/open month fallback, budgets, actuals, forecasts, product names, price quantities, and historical unit-price fallback.
 - `src/backend/app.py` still owns Flask request/response wiring, redirects, cache invalidation, and remaining route-local workflow glue.
 
 ## Completed Architecture Seams
@@ -60,6 +62,9 @@ Architecture direction:
 18. Monthly Review context package foundation.
 19. Settings data-health context extraction.
 20. `operational_views.py` retirement.
+21. Monthly Review data read seam.
+22. Forecast workbench row-facing input interface.
+23. Product Monitor month context extraction.
 
 ## Release Packaging Roadmap
 
@@ -578,6 +583,127 @@ Goal: extract cache key/invalidation state from `app.py` into a small `ContextCa
 - 症狀：`_global_version` / `_month_versions` 存在 Python 物件、`SimpleCache` 為 in-process；若部署多 Worker（gunicorn multi-process），invalidation 不跨進程傳播，不同 Worker 會返回不同版本資料。
 - 修正（文件層面）：在 `context_cache.py` 加上說明「必須單 Worker 部署」；未來若需多 Worker 再評估改用 Redis/Memcached 後端。
 - 涉及檔案：`src/backend/context_cache.py`。
+
+---
+
+## Frontend Architecture Roadmap (2026-07-03)
+
+前端接縫深化，來自 2026-07-03 架構審查（audit 報告候選 1–4）。與後端的
+`codex/architecture-deepening` 分支（monthly_review_data reader、
+ForecastRowMonthInput、product_monitor_month_context）**零檔案交集**，可獨立合併。
+本節工作都在 `claude/epic-nightingale-9238a1` 分支上進行。
+
+前端模組邊界（新增）：
+
+- `static/js/fmt.js` owns semantic value formatting: 台灣慣例漲跌配色
+  （rising/falling）與達成語意（positive/negative）的唯一 JS 定義點，門檻常數集中。
+- `static/js/analytics-table.js` owns the analytics table controller:
+  summary row rendering, sparkline scheduling, expandable detail rows,
+  HTML escaping of entity labels, keyboard access. 介面：
+  `AnalyticsTable.mount(tbody, slices, options)`。
+- `templates/_value_macros.html` owns Jinja-side semantic formatting
+  (yoy / achievement / accuracy / rank_change / signed_amount_gap)，
+  是 `fmt.js` 的模板雙生，門檻必須與之同步。
+- `static/js/analytics-renderer.js` 不變：owns canvas 繪圖與 metrics 計算。
+
+### FE-1: 分析表控制器統一 ✅ 完成（commit 86ffec8）
+
+- 症狀：customers.html、products.html、_dashboard_metrics.html 各有一份
+  ~135 行幾乎相同的 inline 表格控制器；`entity_label` 未轉義直接進 innerHTML（XSS）；
+  可展開列無鍵盤路徑。
+- 完成內容：三份 inline script 收斂為 `analytics-table.js` 的 mount 呼叫
+  （淨刪 385 行模板碼）；模組內統一 `escapeHtml`；可展開列加上
+  tabindex / aria-expanded / Enter / Space。
+- 測試：`tests/js/analytics-table.test.js`（node:test，經 `tests/test_frontend_js.py`
+  pytest wrapper 執行，無 node 時 skip）。`buildRowCells` 為純函式，是測試面。
+
+### FE-2: 漲跌/達成語意單一定義 ✅ 完成（commit 86ffec8）
+
+- 症狀：「漲=紅、跌=綠；達成=綠、未達=紅」規則散落六處
+  （Jinja macro、裸 Jinja 條件、三處 JS），門檻互相漂移。
+- 完成內容：`_monthly_review_macros.html` 升格為全站 `_value_macros.html`
+  （4 個 monthly review partial 的 import 已更新）；新增 `fmt.js` JS 雙生；
+  product_monitor.html 與 _dashboard_metrics.html 中**完全等價**的
+  inline 條件式改用 macro（YoY、達成率、signed gap 共 8 處）。
+- 測試：`tests/js/fmt.test.js` 窮舉門檻邊界。
+
+### FE-3: Forecast 列 data-state JSON 契約（待做，有前置條件）
+
+- ⚠️ 前置條件：**等 `codex/architecture-deepening` 合併進 main 之後再做**。
+  該分支正在改 `forecast_workbench_context.py` / `forecast_workbench_inputs.py`
+  的預算語意（ForecastRowMonthInput），本項的上游正是這些模組。
+- 症狀：Flask 與預估工作台之間的介面是 `_forecast_row.html` 上手寫的
+  ~24 個 data-* 屬性，`forecast-table.js readRowState()` 逐一還原；
+  衍生值（final forecast、diff、achievement rate）在
+  `web/forecast_presenter._serialize_row`（Python，有測試）與
+  `renderRow / refreshDetailBudget`（JS，無測試）各算一遍；
+  htmx PATCH 換列與 JS recalculate() 是兩條更新路徑。
+- 方案：每列狀態收斂成單一 `data-state='{{ row_state | tojson }}'`，
+  內容直接由 `_serialize_row` 產生（schema 即該 dict，已被
+  `tests/test_forecast_presenter.py` 覆蓋）；衍生數學只留 JS 一側；
+  filter 用的 data-customer / data-search / data-status 保留為獨立屬性
+  以維持 CSS selector。
+- 涉及檔案：`templates/_forecast_row.html`、`static/js/forecast-table.js`、
+  `src/backend/web/forecast_presenter.py`、`src/backend/app.py`
+  （patch_forecast_row）。
+- 先寫 characterization tests 鎖住 readRowState 對衍生值的現有輸出再動。
+
+### FE-4: 版面行為去重（待做，快贏，無前置條件）
+
+- 症狀：「main 高度 = 視窗 − sticky header」的 resize IIFE 複製在
+  forecast.html、product_monitor.html、settings.html、customers.html、
+  products.html 共 5 處；「捲動收合 summary/工具列」wheel+scroll 模式
+  在 forecast.html 與 product_monitor.html 各一份。
+- 方案：刪 5 個 IIFE，改純 CSS（`body { display:flex; flex-direction:column;
+  height:100dvh }` + `main { flex:1; min-height:0 }`，header 已 sticky）；
+  scroll-collapse 收成一個 `static/js/behaviors.js`，以
+  `data-collapse-on-scroll` 屬性宣告。
+- 涉及檔案：上列 5 個模板、`static/css/mor.css`（284–311 行的版面區塊）。
+- 驗收：視覺不變、無 JS 高度覆寫；`test_ui_smoke.py` 全過。
+
+### FE-5: 待使用者拍板的兩個語意分歧（決策項，非程式項）
+
+重構時浮出、**刻意保留現狀**的行為分歧。統一任一者都是使用者可見的變更：
+
+1. 達成率警戒門檻：`_value_macros.achievement` 與 monitor 主列用 **90**；
+   product_monitor.html 月別對照表（近 6 月表格）與 `fmt.budgetRate` 用 **80**。
+   同一個 85% 在不同表格呈現黃色或無色。
+2. YoY 表示法：儀表板用 signed delta（`fmt.yoyDelta`，"+10.0%"）；
+   客戶/商品分析頁用 ratio（`fmt.yoyRatio`，"110.0%"）。欄名都叫「YoY」。
+
+拍板後改 `fmt.js` 常數 + `_value_macros.html` 對應 macro 即可（單點修改）。
+
+### FE-6: Web Interface Guidelines 修正批次（backlog，2026-07-03 審查）
+
+已修：三處 innerHTML XSS、分析頁可展開列鍵盤化（隨 FE-1）。未修，按優先序：
+
+1. `mor.css` 全檔無 `@media (prefers-reduced-motion: reduce)`；
+   `pulse-dot` 無限動畫、flash、save-pulse 不會停用。
+2. forecast.html `#save-status` 缺 `aria-live="polite"`（儲存狀態 SR 聽不到）；
+   index.html `#metrics-zone`（htmx swap 目標）同。
+3. product_monitor.html 展開列：`aria-expanded` 在不可聚焦的 `<tr>` 上、
+   只綁 click 無鍵盤路徑（比照 FE-1 的做法補 tabindex + keydown）。
+4. forecast-table.js snapshot modal 無 Escape 關閉、無 focus trap；
+   row-detail 抽屜同樣無 Escape。
+5. `_header.html:22` 檔案上傳 input 用 `display:none`（鍵盤不可達），
+   改 `.sr-only`（product_monitor.html 的 import 表單已是正確範例）。
+6. items.html checkbox 未包 label（此頁疑似被 settings.html 取代，
+   先確認是否直接刪除頁面）。
+7. 全站缺 skip link；forecast 篩選狀態不反映在 URL；
+   `.summary` 收合動畫 transition max-height（應改 transform/opacity）。
+
+### Frontend Validation
+
+```powershell
+# JS 單元測試（node 22+，無 build step）
+node --test tests/js/fmt.test.js tests/js/analytics-table.test.js
+
+# 經 pytest（含模板 smoke）
+D:\AI\python.exe -m pytest tests\test_frontend_js.py tests\test_ui_smoke.py tests\test_app.py -q --basetemp=.pytest-tmp
+```
+
+Frontend stop rules：改 `fmt.js` 或 `_value_macros.html` 的門檻常數屬於
+行為變更，需 FE-5 拍板；模板改動後必跑 `test_ui_smoke.py` + `test_app.py`。
 
 ---
 

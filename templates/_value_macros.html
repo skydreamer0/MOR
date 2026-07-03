@@ -1,3 +1,6 @@
+{# _value_macros.html — semantic value formatting, defined once for all templates.
+   台灣慣例（方向性）：漲=紅(.rising)、跌=綠(.falling)；達成語意：達成=綠、未達=紅。
+   JS-side twin: static/js/fmt.js — keep thresholds in sync with it. #}
 {% macro yoy(growth) -%}
   {%- if growth is not none -%}
     {%- set y = (growth - 1) * 100 -%}

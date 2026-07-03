@@ -1,6 +1,6 @@
 # MOR Current Architecture
 
-Last reviewed: 2026-05-29
+Last reviewed: 2026-07-03
 
 This file is the active architecture entry point. Use `ROADMAP.md` for implementation order and backlog decisions.
 
@@ -49,7 +49,8 @@ Routes should not own:
 
 ## Active Services
 
-- `forecast_workbench_context.py`: workbench context builder and forecast row reason/budget enrichment.
+- `forecast_workbench_context.py`: workbench context builder and forecast row enrichment.
+- `forecast_workbench_inputs.py`: DB input loading and row-facing workbench input interface.
 - `forecast_write_workflow.py`: forecast row override persistence.
 - `forecast_export_workflow.py`: export summary preparation.
 - `forecast_page_context.py`: Forecast page render context, row visibility split, risk levels, and review signature validation.
@@ -62,9 +63,11 @@ Routes should not own:
 - `analytics.py`: reusable analytics slices and dashboard risk/status helpers.
 - `data_health_summary.py`: data health summary view model and builder.
 - `product_monitor_workflow.py`: product monitor template context.
+- `product_monitor_month_context.py`: Product Monitor month-level projection, dashboard, and monitor-row orchestration.
 - `product_monitor_rows.py`: product monitor row view models, status labels, and row calculation.
 - `row_identity.py`: canonical forecast row identity helpers.
 - `monthly_review_context.py`: Monthly Review page/export context assembly.
+- `monthly_review_data.py`: Monthly Review DB read seam for closed-month, budget, actual, forecast, product-name, and unit-price reads.
 
 ## Data Rule
 

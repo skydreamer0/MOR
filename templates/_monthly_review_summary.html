@@ -1,5 +1,5 @@
 {# ── 月度總覽（含稅淨額為主） ── #}
-{% import "_monthly_review_macros.html" as review_ui %}
+{% import "_value_macros.html" as review_ui %}
 {% set budget_risk = summary.budget_amount_achievement_total is not none and summary.budget_amount_achievement_total < 1 %}
 {% set yoy_risk = summary.yoy_amount_growth_total is not none and summary.yoy_amount_growth_total < 1 %}
 {% set forecast_risk = summary.forecast_amount_accuracy_total is not none and (summary.forecast_amount_accuracy_total < 0.85 or summary.forecast_amount_accuracy_total > 1.15) %}

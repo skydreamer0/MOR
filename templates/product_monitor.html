@@ -11,6 +11,7 @@
   {% set active_page = "product_monitor" %}
   {% set show_period_toolbar = true %}
   {% include "_header.html" %}
+  {% import "_value_macros.html" as fmt_ui %}
 
   <main class="monitor-main">
     {% if error_message %}
@@ -194,21 +195,11 @@
                 <div class="metric-cell">
                   <div class="metric-row">
                     <span class="metric-label">YoY</span>
-                    {% if row.yoy_growth_rate is none %}
-                      <span class="muted">-</span>
-                    {% else %}
-                      {% set pct = (row.yoy_growth_rate - 1) * 100 %}
-                      <span class="gap-value {% if pct < 0 %}falling{% elif pct > 0 %}rising{% endif %}">{{ "{:+.1f}%".format(pct) }}</span>
-                    {% endif %}
+                    {{ fmt_ui.yoy(row.yoy_growth_rate) }}
                   </div>
                   <div class="metric-row">
                     <span class="metric-label">預算</span>
-                    {% if row.budget_achievement_rate is none %}
-                      <span class="muted">-</span>
-                    {% else %}
-                      {% set bpct = row.budget_achievement_rate * 100 %}
-                      <span class="{% if bpct < 90 %}danger-text{% elif bpct < 100 %}rate-warning{% else %}success-text{% endif %}">{{ "{:.1f}%".format(bpct) }}</span>
-                    {% endif %}
+                    {{ fmt_ui.achievement(row.budget_achievement_rate) }}
                   </div>
                 </div>
               </td>
@@ -293,23 +284,20 @@
                             <tr>
                               <th>最終預估</th>
                               <td class="muted">{{ "{:,.0f}".format(row.forecast_quantity) }}</td>
-                              {% set gap_fcst = row.estimated_eom_qty - row.forecast_quantity %}
-                              <td class="gap-value {% if gap_fcst < 0 %}falling{% elif gap_fcst > 0 %}rising{% endif %}">{{ "{:+,.0f}".format(gap_fcst) }}</td>
+                              <td>{{ fmt_ui.signed_amount_gap(row.estimated_eom_qty - row.forecast_quantity) }}</td>
                             </tr>
                             {% if row.last_year_quantity > 0 %}
                             <tr>
                               <th>去年同期</th>
                               <td class="muted">{{ "{:,.0f}".format(row.last_year_quantity) }}</td>
-                              {% set gap_yoy = row.estimated_eom_qty - row.last_year_quantity %}
-                              <td class="gap-value {% if gap_yoy < 0 %}falling{% elif gap_yoy > 0 %}rising{% endif %}">{{ "{:+,.0f}".format(gap_yoy) }}</td>
+                              <td>{{ fmt_ui.signed_amount_gap(row.estimated_eom_qty - row.last_year_quantity) }}</td>
                             </tr>
                             {% endif %}
                             {% if row.budget_quantity > 0 %}
                             <tr>
                               <th>本月預算</th>
                               <td class="muted">{{ "{:,.0f}".format(row.budget_quantity) }}</td>
-                              {% set gap_bud = row.estimated_eom_qty - row.budget_quantity %}
-                              <td class="gap-value {% if gap_bud < 0 %}falling{% elif gap_bud > 0 %}rising{% endif %}">{{ "{:+,.0f}".format(gap_bud) }}</td>
+                              <td>{{ fmt_ui.signed_amount_gap(row.estimated_eom_qty - row.budget_quantity) }}</td>
                             </tr>
                             {% endif %}
                           </tbody>
@@ -456,10 +444,7 @@
                           </td>
                           <td class="num">
                             {% if m.last_year > 0 and m.actual > 0 %}
-                              {% set yoy = (m.actual / m.last_year - 1) * 100 %}
-                              <span class="gap-value {% if yoy < 0 %}falling{% elif yoy > 0 %}rising{% endif %}">
-                                {{ "{:+.1f}%".format(yoy) }}
-                              </span>
+                              {{ fmt_ui.yoy(m.actual / m.last_year) }}
                             {% else %}<span class="muted">-</span>{% endif %}
                           </td>
                         </tr>

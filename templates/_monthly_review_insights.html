@@ -1,5 +1,5 @@
 {# ── 本月優先處理：業務、月會、模型檢討共用的入口 ── #}
-{% import "_monthly_review_macros.html" as review_ui %}
+{% import "_value_macros.html" as review_ui %}
 {% set yoy_below = summary.rows | selectattr("yoy_amount_growth", "ne", none)
    | selectattr("yoy_amount_delta", "lt", 0.0)
    | sort(attribute="yoy_amount_delta") | list %}

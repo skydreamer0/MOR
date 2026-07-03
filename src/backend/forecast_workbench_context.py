@@ -10,24 +10,23 @@ from src.backend.daily_sales_importer import DailyActualAggregate
 from src.backend.data_loader import default_target_from_db
 from src.backend.amount_calculation import amount_for_quantity, forecast_amount_total
 from src.backend.forecast_config import ForecastConfig
-from src.backend.forecast_engine import ForecastOptions, apply_user_adjustments, build_forecast
+from src.backend.forecast_engine import ForecastOptions, build_forecast
 from src.backend.forecast_models import ForecastRow, ForecastSummary, ForecastTarget
 from src.backend.forecast_workbench_inputs import (
     BudgetTarget,
+    ForecastRowMonthInput,
     ForecastWorkbenchInputs,
     load_forecast_workbench_inputs,
 )
 from src.backend.history_service import enrich_rows_with_history
-from src.backend.dashboard_metrics import DashboardMetrics, build_dashboard_metrics
+from src.backend.dashboard_metrics import DashboardMetrics
 from src.backend.data_health_summary import DataHealthSummary, build_data_health_summary
 from src.backend.forecast_workbench_inputs import build_items_from_sales_data
-from src.backend.product_monitor_rows import (
-    ProductMonitorRow,
-    build_product_monitor_rows,
+from src.backend.product_monitor_month_context import (
+    build_product_monitor_month_context,
 )
-from src.backend.projection_engine import ProjectionResult, batch_project_eom
+from src.backend.product_monitor_rows import ProductMonitorRow
 from src.backend.web.form_parser import parse_target_period
-from src.backend.workday_calendar import ensure_calendar_year
 
 
 @dataclass(frozen=True)
@@ -56,27 +55,22 @@ def build(
     inputs = load_forecast_workbench_inputs(db, target)
     summary = _build_summary(inputs, db, target, forecast_config)
     context_today = today or date.today()
-    projections = _build_projections(db, summary, inputs.daily_actuals, context_today, target)
+    monitor_context = build_product_monitor_month_context(
+        db=db,
+        rows=summary.rows,
+        daily_actuals=inputs.daily_actuals,
+        company_budgets=inputs.company_budgets,
+        target=target,
+        today=context_today,
+        amount_for_quantity=amount_for_quantity,
+    )
     return ForecastPageContext(
         target=target,
         sales_data=inputs.data,
         summary=summary,
-        dashboard=build_dashboard_metrics(
-            summary.rows,
-            inputs.budget_targets.values(),
-            projections,
-            inputs.daily_actuals,
-        ),
-        monitor_rows=build_product_monitor_rows(
-            summary.rows,
-            daily_actuals=inputs.daily_actuals,
-            db=db,
-            today=context_today,
-            projections=projections,
-            target_month=target.month,
-            amount_for_quantity=amount_for_quantity,
-        ),
-        health=build_data_health_summary(inputs.data, summary, inputs.budget_months),
+        dashboard=monitor_context.dashboard,
+        monitor_rows=monitor_context.monitor_rows,
+        health=build_data_health_summary(inputs.data, summary, inputs.available_budget_months),
         items=build_items_from_sales_data(inputs.data, db),
     )
 
@@ -125,11 +119,14 @@ def _patch_target_month_actuals(
     return replace(summary, rows=patched)
 
 
-def _filter_visible_rows(summary: ForecastSummary, item_configs: dict) -> ForecastSummary:
-    """Remove rows whose product_code is marked is_visible=False in item_configs."""
+def _filter_visible_rows(
+    summary: ForecastSummary,
+    inputs: ForecastWorkbenchInputs,
+) -> ForecastSummary:
+    """Remove rows whose product_code is marked is_visible=False."""
     visible = [
         row for row in summary.rows
-        if item_configs.get(row.product_code, {}).get("is_visible", True)
+        if inputs.visible_product(row.product_code)
     ]
     return replace(
         summary,
@@ -150,23 +147,56 @@ def _build_summary(
         ForecastOptions(
             include_all=True,
             max_cycle_interval_days=forecast_config.max_cycle_interval_days,
-            excluded_item_ids=inputs.excluded_item_ids,
+            excluded_item_ids=inputs.forecast_excluded_product_ids,
         ),
         forecast_config,
     )
-    summary = _filter_visible_rows(summary, inputs.item_configs)
+    summary = _filter_visible_rows(summary, inputs)
     summary = replace(summary, rows=enrich_rows_with_history(summary.rows, db, target.year, target.month))
     summary = _patch_target_month_actuals(summary, inputs.daily_actuals, target)
-    summary = apply_user_adjustments(summary, manual_adjustments=inputs.manual_adjustments, excluded_ids=set())
-    summary = apply_reasons_and_budgets(
-        summary,
-        inputs.adjustment_reasons,
-        inputs.budget_targets,
-        inputs.item_configs,
-        inputs.budget_year_map,
-        inputs.budget_year_amount_map,
-    )
+    summary = apply_workbench_row_inputs(summary, inputs)
     return replace(summary, total=forecast_amount_total(summary.rows))
+
+
+def apply_workbench_row_inputs(
+    summary: ForecastSummary,
+    inputs: ForecastWorkbenchInputs,
+) -> ForecastSummary:
+    rows = [
+        _apply_workbench_row_input(
+            row,
+            inputs.row_month_input(row.row_id, row.product_code),
+        )
+        for row in summary.rows
+    ]
+    return replace(summary, rows=rows)
+
+
+def _apply_workbench_row_input(
+    row: ForecastRow,
+    row_input: ForecastRowMonthInput,
+) -> ForecastRow:
+    manual_adjustment = (
+        row_input.manual_adjustment
+        if row_input.manual_adjustment is not None
+        else row.manual_adjustment
+    )
+    row = row.with_adjustment(manual_adjustment, row.excluded)
+    row = replace(
+        row,
+        adjustment_reason=row_input.adjustment_reason or row.adjustment_reason,
+        budget_quantity=row_input.current_budget.target_quantity,
+        budget_amount=row_input.current_budget.target_amount,
+        base_budget_quantity=row_input.current_budget.base_target_quantity,
+        price_quantity=row_input.price_quantity,
+        item_status=row_input.item_status,
+        budget_monthly=row_input.budget_monthly,
+        budget_monthly_amount=row_input.budget_monthly_amount,
+    )
+    return replace(
+        row,
+        estimated_amount=0.0 if row.excluded else amount_for_quantity(row.final_forecast, row),
+    )
 
 
 def apply_reasons_and_budgets(
@@ -226,13 +256,3 @@ def _apply_reason_and_budget(
     )
     return replace(row, estimated_amount=0.0 if row.excluded else amount_for_quantity(row.final_forecast, row))
 
-
-def _build_projections(
-    db,
-    summary: ForecastSummary,
-    daily_actuals: Mapping[str, DailyActualAggregate],
-    today: date,
-    target: ForecastTarget,
-) -> dict[str, ProjectionResult]:
-    ensure_calendar_year(db, today.year)
-    return batch_project_eom(db, summary.rows, daily_actuals, today, target.year, target.month)
