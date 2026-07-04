@@ -19,7 +19,7 @@ $templatesPath = Join-Path $repoRoot "templates"
 $staticPath = Join-Path $repoRoot "static"
 $venvDir = Join-Path $repoRoot "build\\release-venv"
 $venvPython = Join-Path $venvDir "Scripts\\python.exe"
-$pyinstallerRoot = Join-Path $env:TEMP ("MOR-pyinstaller-" + [guid]::NewGuid().ToString("N"))
+$pyinstallerRoot = Join-Path $repoRoot ("build\\pyinstaller-" + [guid]::NewGuid().ToString("N"))
 $pyinstallerBuildDir = Join-Path $pyinstallerRoot "work"
 $pyinstallerSpecDir = Join-Path $pyinstallerRoot "spec"
 
