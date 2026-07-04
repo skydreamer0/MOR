@@ -84,6 +84,20 @@ Parallelization note:
 
 - Once the runtime path contract is defined, the packaging workflow, path/bootstrap work, and docs/update work can be split across subagents because they do not need to edit the same files at the same time.
 
+## Frontend UI/UX Improvement Roadmap
+
+Goal:
+
+- Improve operation safety (confirm dialogs, header action separation), input efficiency (month switcher, keyboard navigation, sorting), and polish (fonts, focus, empty states) without changing forecast logic, Excel schema, or backend behavior.
+
+Plan:
+
+- Active plan: `docs/design/2026-07-04-frontend-uiux-improvement-roadmap.md` (6 work packages, WP1–WP6, priority P0–P2, designed so each WP can be executed by a different agent).
+
+Parallelization note:
+
+- WP1 and WP2 both touch `templates/_header.html` and `static/css/mor.css` and must run sequentially; WP3 (`forecast-table.js`) and WP4 (`monitor-table.js`) can run in parallel with them; WP5/WP6 go last to reduce rebase cost.
+
 ## Cloud Agent Architecture Roadmaps
 
 Use this section as the current staged roadmap for cloud/remote agents. Work one phase at a time, keep behavior stable, and update this section after each completed phase.

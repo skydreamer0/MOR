@@ -14,6 +14,7 @@ Use this file to keep AI and human collaborators from reading stale plans by def
 - Backend routes or forecast behavior: `src/backend/*`, `tests/*`, then `docs/architecture/current-architecture.md` only if architectural context is needed.
 - Database or DB-first request work: `docs/architecture/database_schema.md`.
 - UI work: `DESIGN.md`, `docs/design/ui-design-system-roadmap.md` when changing shared UI structure, and relevant templates/static files.
+- UI/UX improvement execution: `docs/design/2026-07-04-frontend-uiux-improvement-roadmap.md` (active WP1–WP6 work packages).
 - Local setup or browser verification: `docs/workflows/local-setup.md`.
 - Agent workflow: `docs/workflows/codex-operation-guardrails.md` and `docs/workflows/mor-skills.md`.
 
