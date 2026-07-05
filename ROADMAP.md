@@ -614,10 +614,11 @@ Goal: extract cache key/invalidation state from `app.py` into a small `ContextCa
 
 ## Frontend Architecture Roadmap (2026-07-03)
 
-前端接縫深化，來自 2026-07-03 架構審查（audit 報告候選 1–4）。與後端的
-`codex/architecture-deepening` 分支（monthly_review_data reader、
-ForecastRowMonthInput、product_monitor_month_context）**零檔案交集**，可獨立合併。
-本節工作都在 `claude/epic-nightingale-9238a1` 分支上進行。
+前端接縫深化，來自 2026-07-03 架構審查（audit 報告候選 1–4）。後端的
+`codex/architecture-deepening` 工作已進 main（monthly_review_data reader、
+ForecastRowMonthInput、product_monitor_month_context），FE-3 前置條件已滿足。
+舊實驗分支 `origin/codex/frontend-roadmap-fe3-fe5` 不直接合併；只借鏡其驗收點，
+後續從最新 main 重新分批實作。
 
 前端模組邊界（新增）：
 
@@ -653,26 +654,28 @@ ForecastRowMonthInput、product_monitor_month_context）**零檔案交集**，�
   inline 條件式改用 macro（YoY、達成率、signed gap 共 8 處）。
 - 測試：`tests/js/fmt.test.js` 窮舉門檻邊界。
 
-### FE-3: Forecast 列 data-state JSON 契約（待做，有前置條件）
+### FE-3: Forecast 列 data-state JSON 契約（待做）
 
-- ⚠️ 前置條件：**等 `codex/architecture-deepening` 合併進 main 之後再做**。
-  該分支正在改 `forecast_workbench_context.py` / `forecast_workbench_inputs.py`
-  的預算語意（ForecastRowMonthInput），本項的上游正是這些模組。
 - 症狀：Flask 與預估工作台之間的介面是 `_forecast_row.html` 上手寫的
   ~24 個 data-* 屬性，`forecast-table.js readRowState()` 逐一還原；
   衍生值（final forecast、diff、achievement rate）在
   `web/forecast_presenter._serialize_row`（Python，有測試）與
   `renderRow / refreshDetailBudget`（JS，無測試）各算一遍；
   htmx PATCH 換列與 JS recalculate() 是兩條更新路徑。
-- 方案：每列狀態收斂成單一 `data-state='{{ row_state | tojson }}'`，
-  內容直接由 `_serialize_row` 產生（schema 即該 dict，已被
-  `tests/test_forecast_presenter.py` 覆蓋）；衍生數學只留 JS 一側；
-  filter 用的 data-customer / data-search / data-status 保留為獨立屬性
-  以維持 CSS selector。
+- 方案：每列狀態收斂成單一 `data-state='{{ row_states[row_id] | tojson }}'`，
+  內容由 `serialize_row_state()` / `_serialize_row()` 產生（schema 即該 dict）；
+  `forecast-table.js readRowState()` 改讀 JSON payload；衍生數學只留 JS 一側。
+- 保留獨立 attributes：filter / selector 仍需要 `data-customer`、`data-search`、
+  `data-status`、`data-risk`；其他運算用欄位（如 price、budget、trend、monthly arrays）
+  移進 `data-state`。
+- 金額契約：`data-state.price_quantity` 必須使用 `amount_calculation.latest_price_quantity(row)`
+  的同一套 fallback，避免 forecast 金額與 monthly review / product monitor 的包裝量邏輯漂移。
 - 涉及檔案：`templates/_forecast_row.html`、`static/js/forecast-table.js`、
   `src/backend/web/forecast_presenter.py`、`src/backend/app.py`
-  （patch_forecast_row）。
-- 先寫 characterization tests 鎖住 readRowState 對衍生值的現有輸出再動。
+  （patch_forecast_row）、`src/backend/forecast_page_context.py`。
+- 測試：先寫 characterization tests 鎖住 `readRowState()` 現有輸出與 pack-size
+  amount rule；`tests/test_forecast_presenter.py` 鎖 schema；
+  route tests 鎖模板輸出 contract（有 `data-state`，無舊運算用 data-* 回流）。
 
 ### FE-4: 版面行為去重（待做，快贏，無前置條件）
 
@@ -683,9 +686,12 @@ ForecastRowMonthInput、product_monitor_month_context）**零檔案交集**，�
 - 方案：刪 5 個 IIFE，改純 CSS（`body { display:flex; flex-direction:column;
   height:100dvh }` + `main { flex:1; min-height:0 }`，header 已 sticky）；
   scroll-collapse 收成一個 `static/js/behaviors.js`，以
-  `data-collapse-on-scroll` 屬性宣告。
-- 涉及檔案：上列 5 個模板、`static/css/mor.css`（284–311 行的版面區塊）。
-- 驗收：視覺不變、無 JS 高度覆寫；`test_ui_smoke.py` 全過。
+  `data-collapse-on-scroll` / `data-collapse-target` / `data-collapse-class`
+  屬性宣告。
+- 涉及檔案：上列 5 個模板、`templates/_head_assets.html`、
+  `static/css/mor.css`（版面區塊）、新增 `static/js/behaviors.js`。
+- 測試：`tests/js/behaviors.test.js` 鎖 scroll-collapse；route/static contract
+  test 鎖無 JS 高度覆寫；`test_ui_smoke.py` 驗證頁面仍可渲染。
 
 ### FE-5: 待使用者拍板的兩個語意分歧（決策項，非程式項）
 
@@ -697,7 +703,13 @@ ForecastRowMonthInput、product_monitor_month_context）**零檔案交集**，�
 2. YoY 表示法：儀表板用 signed delta（`fmt.yoyDelta`，"+10.0%"）；
    客戶/商品分析頁用 ratio（`fmt.yoyRatio`，"110.0%"）。欄名都叫「YoY」。
 
-拍板後改 `fmt.js` 常數 + `_value_macros.html` 對應 macro 即可（單點修改）。
+建議決策：達成率統一為四級視覺語意：`>=100` success、`90-99` warning、
+`80-89` caution、`<80` danger。套用範圍包含 `fmt.budgetRate`、
+`_value_macros.achievement`、dashboard/monthly-review progress bars、
+Product Monitor budget bars、monthly-history achievement cells、
+`analytics-renderer.js` rate classes。YoY delta-vs-ratio 分歧仍獨立拍板。
+
+拍板後改 `fmt.js` 常數 + `_value_macros.html` 對應 macro + CSS class 即可（單點修改）。
 
 ### FE-6: Web Interface Guidelines 修正批次（backlog，2026-07-03 審查）
 
