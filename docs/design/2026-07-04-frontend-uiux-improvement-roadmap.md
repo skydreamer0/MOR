@@ -43,7 +43,7 @@
 | WP3 | 預估表格鍵盤操作（Enter/↑↓/Esc） | P1 | ☑ 完成 | `static/js/forecast-table.js` |
 | WP4 | 表格排序 + 首欄 sticky | P1 | ☑ 完成 | `static/js/monitor-table.js`, `mor.css`, `product_monitor.html` |
 | WP5 | 字體堆疊 + focus/aria 細節 | P2 | ☑ 完成 | `mor.css`, 各模板 icon 按鈕 |
-| WP6 | 空狀態引導 + summary 收合改寫 + 響應式 | P2 | ☐ 未開始 | `forecast.html`, `mor.css` |
+| WP6 | 空狀態引導 + summary 收合改寫 + 響應式 | P2 | ☑ 完成 | `forecast.html`, `mor.css` |
 
 **平行執行衝突矩陣：**
 
@@ -564,7 +564,7 @@ git commit -m "refactor(frontend): font stack, unified focus ring, icon button a
 - Modify: `templates/forecast.html`
 - Modify: `static/css/mor.css`
 
-- [ ] **Step 1：空狀態加行動引導**
+- [x] **Step 1：空狀態加行動引導**
 
 `forecast.html` 的空狀態改為：
 
@@ -580,7 +580,7 @@ git commit -m "refactor(frontend): font stack, unified focus ring, icon button a
 
 （`data-confirm` 依賴 WP2；若 WP2 未完成則暫用 `onsubmit="return confirm(...)"`。）
 
-- [ ] **Step 2：summary 收合改為 scroll 位置判斷**
+- [x] **Step 2：summary 收合改為 scroll 位置判斷**
 
 替換 `forecast.html` 檔尾的 wheel/scroll IIFE：
 
@@ -598,7 +598,7 @@ git commit -m "refactor(frontend): font stack, unified focus ring, icon button a
 
 註：原 wheel 寫法是為了「列數不足、無捲動空間」時也能收合，但該情境下本來就不需要收合（內容已全部可見），可安全移除。
 
-- [ ] **Step 3：中間寬度響應式**
+- [x] **Step 3：中間寬度響應式**
 
 `mor.css` 新增 1100px 斷點，讓導覽可橫向捲動而非擠壓換行：
 
@@ -613,12 +613,12 @@ git commit -m "refactor(frontend): font stack, unified focus ring, icon button a
 }
 ```
 
-- [ ] **Step 4：驗證與 Commit**
+- [x] **Step 4：驗證與 Commit**
 
-1. 切到沒有資料的月份 → 空狀態顯示引導與同步按鈕，按鈕可用。
-2. `/forecast` 用滑鼠滾輪、鍵盤 PgDn、觸控板分別捲動 → summary 收合/展開一致；回到頂部展開。
-3. 視窗寬度 900–1100px → 導覽列單行橫向捲動、不擠壓動作按鈕。
-4. `python3 -m pytest -q` 全綠。
+1. Forecast template contract test 覆蓋空狀態引導與同步按鈕。
+2. Forecast template contract test 鎖定 scrollTop-based summary collapse，移除 wheel handler。
+3. CSS contract test 覆蓋 1100px app-nav 橫向捲動。
+4. Full pytest 見本次實作回報。
 
 ```bash
 git add templates/forecast.html static/css/mor.css

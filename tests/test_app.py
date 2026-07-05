@@ -714,6 +714,20 @@ def test_frontend_accessibility_tokens_follow_design_roadmap():
     assert "| `--focus-ring` | `rgba(13,148,136,0.25)` |" in design
 
 
+def test_forecast_empty_state_scroll_and_mid_width_nav_contract():
+    forecast = Path("templates/forecast.html").read_text(encoding="utf-8")
+    css = Path("static/css/mor.css").read_text(encoding="utf-8")
+
+    assert "請先同步 Excel 資料，或切換到有資料的月份。" in forecast
+    assert 'action="/sync"' in forecast
+    assert 'data-confirm-title="同步 Excel 資料"' in forecast
+    assert "addEventListener('wheel'" not in forecast
+    assert "summary.classList.toggle('summary--collapsed', tableWrap.scrollTop > 24)" in forecast
+    assert "@media (max-width: 1100px)" in css
+    assert ".app-nav::-webkit-scrollbar" in css
+    assert "scrollbar-width: none;" in css
+
+
 def test_old_exclusions_page_redirects_to_item_management():
     db_base_path = _isolated_db_base()
     data = pd.DataFrame([
