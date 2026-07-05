@@ -26,7 +26,7 @@
 | WP | 主題 | 優先 | 狀態 | 主要檔案 |
 | --- | --- | --- | --- | --- |
 | WP1 | Header：導覽/動作分離 + 年月切換器 | P0 | ☑ 完成 | `_header.html`, `mor.css` |
-| WP2 | 確認 dialog 元件 + 送出 loading 狀態 | P0 | ☐ 未開始 | `_header.html`, `forecast.html`, `product_monitor.html`, 新 `static/js/ui-feedback.js`, `mor.css` |
+| WP2 | 確認 dialog 元件 + 送出 loading 狀態 | P0 | ☑ 完成 | `_header.html`, `forecast.html`, `product_monitor.html`, 新 `static/js/ui-feedback.js`, `mor.css` |
 | WP3 | 預估表格鍵盤操作（Enter/↑↓/Esc） | P1 | ☐ 未開始 | `static/js/forecast-table.js` |
 | WP4 | 表格排序 + 首欄 sticky | P1 | ☐ 未開始 | `static/js/monitor-table.js`, `mor.css`, `product_monitor.html` |
 | WP5 | 字體堆疊 + focus/aria 細節 | P2 | ☐ 未開始 | `mor.css`, 各模板 icon 按鈕 |
@@ -185,7 +185,7 @@ git commit -m "feat(frontend): separate header actions from nav and add prev/nex
 - Modify: `templates/product_monitor.html`（結月 form）
 - Modify: `static/css/mor.css`
 
-- [ ] **Step 1：建立共用 dialog markup**
+- [x] **Step 1：建立共用 dialog markup**
 
 在 `templates/_header.html` 檔尾（`</header>` 之後）加入全站共用 dialog：
 
@@ -202,7 +202,7 @@ git commit -m "feat(frontend): separate header actions from nav and add prev/nex
 </dialog>
 ```
 
-- [ ] **Step 2：建立 `static/js/ui-feedback.js`**
+- [x] **Step 2：建立 `static/js/ui-feedback.js`**
 
 ```js
 /* ── 共用確認 dialog + form 送出 loading 狀態 ─────────────────
@@ -260,7 +260,7 @@ git commit -m "feat(frontend): separate header actions from nav and add prev/nex
 })();
 ```
 
-- [ ] **Step 3：`_head_assets.html` 引入**
+- [x] **Step 3：`_head_assets.html` 引入**
 
 在既有 script/style 引用後加：
 
@@ -268,14 +268,14 @@ git commit -m "feat(frontend): separate header actions from nav and add prev/nex
 <script src="{{ url_for('static', filename='js/ui-feedback.js') }}" defer></script>
 ```
 
-- [ ] **Step 4：替換各處 `confirm()` 為 `data-confirm`**
+- [x] **Step 4：替換各處 `confirm()` 為 `data-confirm`**
 
 - `_header.html` 同步 form：移除 `onsubmit`，改用 Step 1 之 `data-confirm`（WP1 已預埋屬性則只需移除 onsubmit）。
 - `forecast.html:45` 刪除草稿 form：移除 `onsubmit`，加 `data-confirm="確定刪除此草稿？此動作無法復原。" data-confirm-title="刪除草稿" data-confirm-ok="刪除"`。
 - `product_monitor.html` 結月 form：移除 `onsubmit`，加 `data-confirm="結月後無法再匯入或覆蓋本月實績，快照將被鎖定。" data-confirm-title="確認結月 {{ year }}/{{ '%02d'|format(month) }}" data-confirm-ok="結月"`。
 - 檢查 `static/js/forecast-table.js` 內「定稿」（`#btn-finalize`）流程：若使用 `window.confirm`，改為 `await window.appConfirm({ title: "定稿本月預估", message: "定稿後本月預估將鎖定，無法再調整。", okLabel: "定稿" })`。
 
-- [ ] **Step 5：dialog 與 loading CSS**
+- [x] **Step 5：dialog 與 loading CSS**
 
 ```css
 .app-confirm {
@@ -318,7 +318,7 @@ button.is-loading::after {
 @keyframes mor-spin { to { transform: rotate(360deg); } }
 ```
 
-- [ ] **Step 6：驗證**
+- [x] **Step 6：驗證**
 
 1. `python3 -m pytest -q` 全綠。
 2. 同步資料：出現自訂 dialog → 取消不送出、確認送出且按鈕轉 loading、無法連點。
@@ -326,7 +326,7 @@ button.is-loading::after {
 4. htmx 的 row patch（人工調整輸入）不受影響（`hx-patch` 不觸發 loading 全域邏輯，因其非 form submit）。
 5. 用 Safari 與 Chrome 各驗一次（`<dialog>` 支援度）。
 
-- [ ] **Step 7：Commit**
+- [x] **Step 7：Commit**
 
 ```bash
 git add static/js/ui-feedback.js templates static/css/mor.css

@@ -75,7 +75,9 @@
 
         {% if latest_batch and not close_record %}
         <form method="post" action="{{ url_for('close_product_monitor_month') }}"
-              onsubmit="return confirm('確認結月 {{ year }}/{{ '%02d'|format(month) }}？結月後無法再匯入或覆蓋。')">
+              data-confirm="結月後無法再匯入或覆蓋本月實績，快照將被鎖定。"
+              data-confirm-title="確認結月 {{ year }}/{{ '%02d'|format(month) }}"
+              data-confirm-ok="結月">
           <input type="hidden" name="year" value="{{ year }}">
           <input type="hidden" name="month" value="{{ month }}">
           <button type="submit" class="btn-close-month">結月</button>

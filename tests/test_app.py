@@ -679,6 +679,28 @@ def test_templates_use_shared_head_assets_and_no_static_inline_layout():
     assert ".item-code" in css
 
 
+def test_shared_confirm_dialog_assets_replace_inline_confirm_handlers():
+    head_assets = Path("templates/_head_assets.html").read_text(encoding="utf-8")
+    header = Path("templates/_header.html").read_text(encoding="utf-8")
+    forecast = Path("templates/forecast.html").read_text(encoding="utf-8")
+    monitor = Path("templates/product_monitor.html").read_text(encoding="utf-8")
+    forecast_js = Path("static/js/forecast-table.js").read_text(encoding="utf-8")
+    css = Path("static/css/mor.css").read_text(encoding="utf-8")
+
+    assert "js/ui-feedback.js" in head_assets
+    assert '<dialog id="app-confirm" class="app-confirm">' in header
+    assert "confirm(" not in header
+    assert "confirm(" not in forecast
+    assert "confirm(" not in monitor
+    assert "window.appConfirm" in forecast_js
+
+    assert 'data-confirm-title="同步 Excel 資料"' in header
+    assert 'data-confirm-title="刪除草稿"' in forecast
+    assert 'data-confirm-ok="結月"' in monitor
+    assert ".app-confirm" in css
+    assert "button.is-loading" in css
+
+
 def test_old_exclusions_page_redirects_to_item_management():
     db_base_path = _isolated_db_base()
     data = pd.DataFrame([

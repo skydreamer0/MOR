@@ -319,6 +319,59 @@ button:active {
   box-shadow: var(--shadow-xs);
 }
 
+button.is-loading {
+  position: relative;
+  color: transparent !important;
+  pointer-events: none;
+}
+
+button.is-loading::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--line);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: mor-spin 0.6s linear infinite;
+}
+
+@keyframes mor-spin {
+  to { transform: rotate(360deg); }
+}
+
+.app-confirm {
+  min-width: 320px;
+  max-width: 420px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  padding: var(--sp-6);
+  box-shadow: var(--shadow-lg);
+}
+
+.app-confirm::backdrop {
+  background: rgba(15, 23, 42, 0.35);
+  backdrop-filter: blur(2px);
+}
+
+.app-confirm__title {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--text-lg);
+}
+
+.app-confirm__message {
+  margin: 0 0 var(--sp-5);
+  color: var(--muted);
+}
+
+.app-confirm__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+}
+
 
 /* ── Main content ───────────────────────────────────────────── */
 main {

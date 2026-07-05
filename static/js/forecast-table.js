@@ -655,7 +655,16 @@ function showSnapshotModal(snapshotType) {
   backdrop.querySelector("#modal-cancel").addEventListener("click", () => backdrop.remove());
   backdrop.addEventListener("click", (e) => { if (e.target === backdrop) backdrop.remove(); });
 
-  backdrop.querySelector("#modal-confirm").addEventListener("click", () => {
+  backdrop.querySelector("#modal-confirm").addEventListener("click", async () => {
+    if (isFinalize && window.appConfirm) {
+      const ok = await window.appConfirm({
+        title: "定稿本月預估",
+        message: "定稿後本月預估將鎖定，無法再調整。",
+        okLabel: "定稿",
+      });
+      if (!ok) return;
+    }
+
     const form = document.createElement("form");
     form.method = "POST";
     form.action = "/snapshots/save";

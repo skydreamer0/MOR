@@ -13,7 +13,9 @@
       <a href="/settings" {% if active_page == "settings" %}aria-current="page"{% endif %}>系統設定</a>
     </nav>
     <div class="header-actions">
-      <form action="/sync" method="post" class="nav-action-form" onsubmit="return confirm('確定要同步 Excel 資料到工作台？')">
+      <form action="/sync" method="post" class="nav-action-form"
+            data-confirm="確定要同步 Excel 資料到工作台？既有工作台資料將以 Excel 內容為準重建。"
+            data-confirm-title="同步 Excel 資料">
         <button type="submit" class="nav-action-btn">同步資料</button>
       </form>
       <form action="/upload/current-month" method="post" enctype="multipart/form-data"
@@ -46,3 +48,13 @@
     </form>
   {% endif %}
 </header>
+<dialog id="app-confirm" class="app-confirm">
+  <form method="dialog">
+    <h3 class="app-confirm__title" data-confirm-title>確認操作</h3>
+    <p class="app-confirm__message" data-confirm-message></p>
+    <div class="app-confirm__actions">
+      <button value="cancel" class="btn-secondary">取消</button>
+      <button value="ok" class="btn-danger" data-confirm-ok>確認</button>
+    </div>
+  </form>
+</dialog>
