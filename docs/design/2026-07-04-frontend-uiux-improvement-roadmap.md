@@ -41,7 +41,7 @@
 | WP1 | Header：導覽/動作分離 + 年月切換器 | P0 | ☑ 完成 | `_header.html`, `mor.css` |
 | WP2 | 確認 dialog 元件 + 送出 loading 狀態 | P0 | ☑ 完成 | `_header.html`, `forecast.html`, `product_monitor.html`, 新 `static/js/ui-feedback.js`, `mor.css` |
 | WP3 | 預估表格鍵盤操作（Enter/↑↓/Esc） | P1 | ☑ 完成 | `static/js/forecast-table.js` |
-| WP4 | 表格排序 + 首欄 sticky | P1 | ☐ 未開始 | `static/js/monitor-table.js`, `mor.css`, `product_monitor.html` |
+| WP4 | 表格排序 + 首欄 sticky | P1 | ☑ 完成 | `static/js/monitor-table.js`, `mor.css`, `product_monitor.html` |
 | WP5 | 字體堆疊 + focus/aria 細節 | P2 | ☐ 未開始 | `mor.css`, 各模板 icon 按鈕 |
 | WP6 | 空狀態引導 + summary 收合改寫 + 響應式 | P2 | ☐ 未開始 | `forecast.html`, `mor.css` |
 
@@ -424,7 +424,7 @@ git commit -m "feat(frontend): spreadsheet-style keyboard navigation for forecas
 - Modify: `templates/product_monitor.html`（表頭加 `data-sort` 屬性）
 - Modify: `static/css/mor.css`
 
-- [ ] **Step 1：monitor 表頭標記可排序欄**
+- [x] **Step 1：monitor 表頭標記可排序欄**
 
 `product_monitor.html` 跳單明細表 `<thead>` 的數值欄（去年同期、預估月底、差異、金額影響等）與文字欄（客戶）加上：
 
@@ -433,9 +433,9 @@ git commit -m "feat(frontend): spreadsheet-style keyboard navigation for forecas
 <th class="sortable" data-sort="text" role="button" tabindex="0" aria-sort="none">客戶</th>
 ```
 
-（依實際欄位逐一標記；不可排序的欄不加屬性。）
+完成：依目前 Product Monitor 實際欄位標記狀態、客戶、品項、最近出貨日、出貨週期、本月目前、推估月底、最終預估、間隔趨勢；複合的「達成指標」暫不排序。
 
-- [ ] **Step 2：`monitor-table.js` 加排序邏輯**
+- [x] **Step 2：`monitor-table.js` 加排序邏輯**
 
 ```js
 function bindSorting(table) {
@@ -468,9 +468,9 @@ function bindSorting(table) {
 }
 ```
 
-在現有 monitor 表初始化處呼叫 `bindSorting(document.querySelector(".monitor-table 或實際 class"))`（以檔案內實際 selector 為準）。排序需與現有搜尋/篩選共存：排序只重排 DOM 順序，不影響 display 隱藏邏輯。
+完成：排序使用 `[data-monitor-sort]` 與列上的 `data-sort-*` 契約，不解析複合中文文字；主列與 `[data-monitor-detail]` 詳情列成對移動；hidden/filter 狀態維持不變。
 
-- [ ] **Step 3：排序視覺 + 首欄 sticky CSS**
+- [x] **Step 3：排序視覺 + 首欄 sticky CSS**
 
 ```css
 th.sortable { cursor: pointer; user-select: none; }
@@ -490,15 +490,15 @@ th.sortable[aria-sort="descending"]::after { content: " ↓"; color: var(--accen
 .forecast-table thead th:first-child { z-index: 3; }
 ```
 
-注意：列 hover 底色（`--row-hover`）與狀態 accent bar 若因 sticky 背景被遮蓋，需將對應背景規則同步套到 `td:first-child`（以實際樣式為準，hover 時 `background: var(--row-hover)`）。監控表若同樣會橫向捲動，比照辦理。
+完成：維持現有 Product Monitor 三欄 sticky（狀態、客戶、品項），新增 scoped sortable header button、hover/focus、`aria-sort` 箭頭狀態。Forecast 首欄 sticky 未納入本批，避免擴張到 WP3/WP6 之外的表格行為。
 
-- [ ] **Step 4：驗證**
+- [x] **Step 4：驗證**
 
-1. 跳單明細表點「差異」表頭 → 依數值升冪，再點降冪，箭頭指示正確；千分位與 `+/-` 符號不影響排序。
+1. 跳單明細表點可排序表頭 → 依欄位型別升冪，再點降冪，箭頭指示正確；數值欄使用 `data-sort-*` 值，不受千分位或中文 badge 影響。
 2. 排序後套用搜尋/狀態篩選 → 隱藏邏輯正常、計數正確。
-3. `/forecast` 橫向捲動 → 客戶欄固定在左側、hover 底色一致、與 sticky 表頭交會處無破版。
+3. Product Monitor 橫向捲動 → 狀態、客戶、品項欄維持 sticky，hover/expanded 底色一致。
 4. 鍵盤 Tab 到表頭按 Enter 可排序（無障礙）。
-5. `python3 -m pytest -q` 全綠。
+5. Focused JS/Python tests 通過；full pytest 見本次實作回報。
 
 - [ ] **Step 5：Commit**
 

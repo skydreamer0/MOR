@@ -1783,6 +1783,54 @@ details[open] .discontinued-toggle {
   padding-bottom: 8px;
 }
 
+.monitor-table th.sortable {
+  padding: 0;
+}
+
+.monitor-table th.sortable button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: inherit;
+  gap: var(--sp-1);
+  width: 100%;
+  min-height: 34px;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.monitor-table th.sortable button:hover {
+  color: var(--accent);
+}
+
+.monitor-table th.sortable button:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.monitor-table th.sortable [data-monitor-sort-indicator]::before {
+  content: "↕";
+  color: var(--muted-light);
+  font-size: 11px;
+}
+
+.monitor-table th.sortable[aria-sort="ascending"] [data-monitor-sort-indicator]::before {
+  content: "↑";
+  color: var(--accent);
+}
+
+.monitor-table th.sortable[aria-sort="descending"] [data-monitor-sort-indicator]::before {
+  content: "↓";
+  color: var(--accent);
+}
+
 .monitor-table th:nth-child(3),
 .monitor-table td:nth-child(3) {
   border-right: 1px solid var(--line-subtle);

@@ -1268,6 +1268,9 @@ def test_product_monitor_page_renders_drop_table():
     assert "高風險" in html
     assert html.index("monitor-sticky--status") < html.index("monitor-sticky--customer")
     assert html.index("monitor-sticky--customer") < html.index("monitor-sticky--product")
+    assert 'data-monitor-sort="status"' in html
+    assert 'data-monitor-sort="forecast"' in html
+    assert 'aria-sort="none"' in html
     assert 'title="ELI 22.5癌立佳">ELI 22.5</td>' in html
     assert "ID: P1" not in html
     assert "data-monitor-search" in html

@@ -126,16 +126,16 @@
         <table class="monitor-table">
           <thead>
             <tr>
-              <th class="monitor-sticky monitor-sticky--status">狀態</th>
-              <th class="monitor-sticky monitor-sticky--customer">客戶</th>
-              <th class="monitor-sticky monitor-sticky--product">品項</th>
-              <th class="num">最近出貨日</th>
-              <th class="num" title="距最近出貨工作日數 / 週期狀態">出貨週期</th>
-              <th class="num">本月目前</th>
-              <th class="num" title="系統推估月底數量">推估月底</th>
-              <th class="num">最終預估</th>
+              <th class="monitor-sticky monitor-sticky--status sortable" data-monitor-sort="status" data-monitor-sort-column="0" data-monitor-sort-type="number" aria-sort="none"><button type="button">狀態 <span data-monitor-sort-indicator></span></button></th>
+              <th class="monitor-sticky monitor-sticky--customer sortable" data-monitor-sort="customer" data-monitor-sort-column="1" aria-sort="none"><button type="button">客戶 <span data-monitor-sort-indicator></span></button></th>
+              <th class="monitor-sticky monitor-sticky--product sortable" data-monitor-sort="product" data-monitor-sort-column="2" aria-sort="none"><button type="button">品項 <span data-monitor-sort-indicator></span></button></th>
+              <th class="num sortable" data-monitor-sort="date" data-monitor-sort-column="3" data-monitor-sort-type="date" aria-sort="none"><button type="button">最近出貨日 <span data-monitor-sort-indicator></span></button></th>
+              <th class="num sortable" data-monitor-sort="cycle" data-monitor-sort-column="4" data-monitor-sort-type="number" aria-sort="none" title="距最近出貨工作日數 / 週期狀態"><button type="button">出貨週期 <span data-monitor-sort-indicator></span></button></th>
+              <th class="num sortable" data-monitor-sort="current" data-monitor-sort-column="5" data-monitor-sort-type="number" aria-sort="none"><button type="button">本月目前 <span data-monitor-sort-indicator></span></button></th>
+              <th class="num sortable" data-monitor-sort="eom" data-monitor-sort-column="6" data-monitor-sort-type="number" aria-sort="none" title="系統推估月底數量"><button type="button">推估月底 <span data-monitor-sort-indicator></span></button></th>
+              <th class="num sortable" data-monitor-sort="forecast" data-monitor-sort-column="7" data-monitor-sort-type="number" aria-sort="none"><button type="button">最終預估 <span data-monitor-sort-indicator></span></button></th>
               <th class="num" title="去年成長率 / 預算達成率">達成指標</th>
-              <th class="num">間隔趨勢</th>
+              <th class="num sortable" data-monitor-sort="gap" data-monitor-sort-column="9" data-monitor-sort-type="number" aria-sort="none"><button type="button">間隔趨勢 <span data-monitor-sort-indicator></span></button></th>
             </tr>
           </thead>
           <tbody>
@@ -145,6 +145,15 @@
                 data-status="{{ row.status_key }}"
                 data-cycle-status="{{ row.cycle_status }}"
                 data-gap-trend="{{ row.gap_trend }}"
+                data-sort-status="{% if row.status_key == 'high' %}1{% elif row.status_key == 'caution' %}2{% elif row.status_key == 'no_history' %}3{% else %}4{% endif %}"
+                data-sort-customer="{{ row.customer }}"
+                data-sort-product="{{ row.product_name }}"
+                data-sort-date="{{ row.latest_order_date.strftime('%Y-%m-%d') if row.latest_order_date else '' }}"
+                data-sort-cycle="{{ row.days_since_last_shipment_workdays if row.days_since_last_shipment_workdays is not none else '' }}"
+                data-sort-current="{{ row.current_quantity }}"
+                data-sort-eom="{{ row.estimated_eom_qty }}"
+                data-sort-forecast="{{ row.forecast_quantity }}"
+                data-sort-gap="{{ row.gap_trend_delta }}"
                 data-search="{{ row.customer }} {{ row.product_name }} {{ row.product_code }}"
                 data-gap-history="{{ row.gap_history | tojson }}"
                 data-gap-avg="{{ row.cycle_days or 0 }}"
