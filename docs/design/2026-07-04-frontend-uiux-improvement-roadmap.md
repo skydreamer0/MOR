@@ -12,14 +12,27 @@
 
 ## 執行規則（每個 WP 都適用）
 
-1. 一個 WP = 一個 branch = 一個 agent，不要跨 WP 混改。
-2. 動工前先讀：`DESIGN.md`（token 與元件規則）、本 WP 列出的所有檔案。
-3. 改 CSS 前先確認 selector 是否被 JS/htmx 引用（`static/js/*.js` 內 `querySelector`、模板內 `hx-*`）。
-4. 驗證方式：
+1. Roadmap/spec 變更獨立成小 PR；實作 WP 可以依相容性批次累在同一個 implementation PR，不必一 WP 一 PR。
+2. 實作批次內仍保持「一 WP 或一小子任務 = 一 commit」，方便 review、revert、cherry-pick。
+3. 動工前先讀：`DESIGN.md`（token 與元件規則）、本 WP 列出的所有檔案。
+4. 改 CSS 前先確認 selector 是否被 JS/htmx 引用（`static/js/*.js` 內 `querySelector`、模板內 `hx-*`）。
+5. 驗證方式：
    - 後端測試不得變紅：macOS `python3 -m pytest -q`、Windows `D:\AI\python.exe -m pytest -q`。
    - 瀏覽器手動驗證：依 `docs/workflows/local-setup.md` 啟動 `app.py`，逐項執行 WP 內的「驗證」清單。
-5. 完成後：更新本文件的 WP 狀態、若動到 token 或共用元件則同步更新 `DESIGN.md`。
-6. Commit 訊息格式沿用現有慣例（如 `refactor(frontend): ...`、`feat(frontend): ...`）。
+6. 完成後：更新本文件的 WP 狀態、若動到 token 或共用元件則同步更新 `DESIGN.md`。
+7. Commit 訊息格式沿用現有慣例（如 `refactor(frontend): ...`、`feat(frontend): ...`）。
+
+## 實作 PR 批次建議
+
+- Batch A：WP3 + WP4，主題是輸入與表格操作效率。可累在同一 PR；若已存在 WP3 PR，可直接在該分支疊 WP4。
+- Batch B：WP5 + WP6，主題是 polish、focus/aria、empty states、responsive cleanup。建議在 WP3/WP4 合併後再做。
+- Speed mode：若 review 壓力可接受，WP3-WP6 可累在同一 implementation PR，但每個 WP 必須是獨立 commit，且 PR body 要列出每個 WP 的驗證結果。
+
+## 子代理平行化規則
+
+- 適合用子代理：WP4 的 template/table markup、monitor-table JS sorting、CSS sticky/sortable styling；WP5/WP6 的 accessibility audit、responsive CSS、empty-state template review。
+- 不適合用子代理：同一檔案同一段 CSS 的競爭修改、需要即時手動瀏覽器操作的細節、尚未決定產品方向的開放問題。
+- 主代理必須整合所有子代理結果，跑 focused tests + full `pytest`，並在 PR body 說明哪些驗證是自動、哪些因本地資料不足只能做靜態或模板檢查。
 
 ## WP 總覽與優先序
 
@@ -35,9 +48,9 @@
 **平行執行衝突矩陣：**
 
 - WP1 與 WP2 都會改 `templates/_header.html` 與 `mor.css` → 必須依序執行（先 WP1 後 WP2），或由同一 agent 承接。
-- WP3 只改 `forecast-table.js` → 可與 WP1/WP2/WP4 平行。
-- WP4 改 `monitor-table.js` + `mor.css`（表格區塊）→ 可與 WP3 平行；與 WP5/WP6 的 `mor.css` 修改區塊不同，平行時注意 merge。
-- WP5、WP6 建議放最後，避免 rebase 成本。
+- WP3 只改 `forecast-table.js` → 可與 WP4 累同一 PR，也可由不同子代理先調查。
+- WP4 改 `monitor-table.js` + `product_monitor.html` + `mor.css`（表格區塊）→ 可和 WP3 累同一 PR；若和 WP5/WP6 平行，CSS 區塊需主代理最後整合。
+- WP5、WP6 建議放最後，可累成一個 polish PR；若平行，請拆成 accessibility/template 與 CSS/responsive 兩條子代理工作。
 
 ---
 

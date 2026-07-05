@@ -94,9 +94,21 @@ Plan:
 
 - Active plan: `docs/design/2026-07-04-frontend-uiux-improvement-roadmap.md` (6 work packages, WP1–WP6, priority P0–P2, designed so each WP can be executed by a different agent).
 
+Execution and PR note:
+
+- Keep analysis/planning roadmap updates in their own small PR when the plan changes.
+- For implementation, prefer batching compatible WPs into fewer PRs instead of opening one PR per WP. Keep one commit per WP or subtask so review can still be sliced.
+- Recommended implementation batches:
+  1. WP3 + WP4: table/input interaction efficiency.
+  2. WP5 + WP6: visual polish, focus/aria, empty states, responsive cleanup.
+- If speed matters more than review isolation, WP3-WP6 may be accumulated into one implementation PR as long as each WP remains a separate commit and the roadmap checkboxes stay current.
+
 Parallelization note:
 
-- WP1 and WP2 both touch `templates/_header.html` and `static/css/mor.css` and must run sequentially; WP3 (`forecast-table.js`) and WP4 (`monitor-table.js`) can run in parallel with them; WP5/WP6 go last to reduce rebase cost.
+- WP1 and WP2 both touch `templates/_header.html` and `static/css/mor.css` and must run sequentially.
+- WP3 (`forecast-table.js`) and WP4 (`monitor-table.js`, `product_monitor.html`, table CSS) are independent enough to investigate or implement with parallel subagents, then integrate in one PR.
+- WP5 and WP6 both touch CSS and shared visual polish. Run them after WP3/WP4, either sequentially in one PR or with subagents assigned to non-overlapping files/sections.
+- Use subagents for separable tracks such as template markup, JavaScript behavior, CSS/sticky layout, and focused test review. The main agent owns final integration, conflict resolution, full test runs, and PR packaging.
 
 ## Cloud Agent Architecture Roadmaps
 
