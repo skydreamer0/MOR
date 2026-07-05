@@ -11,6 +11,8 @@
       <a href="/monitor/products" {% if active_page == "product_monitor" %}aria-current="page"{% endif %}>產品跳單監控</a>
       <a href="/monthly-review" {% if active_page == "monthly_review" %}aria-current="page"{% endif %}>月底檢討</a>
       <a href="/settings" {% if active_page == "settings" %}aria-current="page"{% endif %}>系統設定</a>
+    </nav>
+    <div class="header-actions">
       <form action="/sync" method="post" class="nav-action-form" onsubmit="return confirm('確定要同步 Excel 資料到工作台？')">
         <button type="submit" class="nav-action-btn">同步資料</button>
       </form>
@@ -23,15 +25,24 @@
                  onchange="this.closest('form').submit()">
         </label>
       </form>
-    </nav>
+    </div>
   </div>
   {% if show_period_toolbar %}
-    <form class="toolbar" method="get" action="{{ period_action | default(request.path, true) }}">
-      <label>年度 <input name="year" type="number" min="2024" max="2030" value="{{ year }}"
+    {% set current_year = year|int %}
+    {% set current_month = month|int %}
+    {% set prev_year = current_year - 1 if current_month == 1 else current_year %}
+    {% set prev_month = 12 if current_month == 1 else current_month - 1 %}
+    {% set next_year = current_year + 1 if current_month == 12 else current_year %}
+    {% set next_month = 1 if current_month == 12 else current_month + 1 %}
+    {% set period_url = period_action | default(request.path, true) %}
+    <form class="toolbar" method="get" action="{{ period_url }}">
+      <a class="period-nav-btn" href="{{ period_url }}?year={{ prev_year }}&month={{ prev_month }}" aria-label="上一月">‹</a>
+      <label>年度 <input name="year" type="number" min="2024" max="2030" value="{{ current_year }}"
         {% if active_page == "dashboard" %}hx-get="/dashboard/metrics" hx-target="#metrics-zone" hx-include="closest form" hx-swap="innerHTML" hx-trigger="change"{% endif %}></label>
-      <label>月份 <input name="month" type="number" min="1" max="12" value="{{ month }}"
+      <label>月份 <input name="month" type="number" min="1" max="12" value="{{ current_month }}"
         {% if active_page == "dashboard" %}hx-get="/dashboard/metrics" hx-target="#metrics-zone" hx-include="closest form" hx-swap="innerHTML" hx-trigger="change"{% endif %}></label>
       <button type="submit">套用</button>
+      <a class="period-nav-btn" href="{{ period_url }}?year={{ next_year }}&month={{ next_month }}" aria-label="下一月">›</a>
     </form>
   {% endif %}
 </header>

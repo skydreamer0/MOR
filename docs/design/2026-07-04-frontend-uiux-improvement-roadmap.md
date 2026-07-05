@@ -25,7 +25,7 @@
 
 | WP | 主題 | 優先 | 狀態 | 主要檔案 |
 | --- | --- | --- | --- | --- |
-| WP1 | Header：導覽/動作分離 + 年月切換器 | P0 | ☐ 未開始 | `_header.html`, `mor.css` |
+| WP1 | Header：導覽/動作分離 + 年月切換器 | P0 | ☑ 完成 | `_header.html`, `mor.css` |
 | WP2 | 確認 dialog 元件 + 送出 loading 狀態 | P0 | ☐ 未開始 | `_header.html`, `forecast.html`, `product_monitor.html`, 新 `static/js/ui-feedback.js`, `mor.css` |
 | WP3 | 預估表格鍵盤操作（Enter/↑↓/Esc） | P1 | ☐ 未開始 | `static/js/forecast-table.js` |
 | WP4 | 表格排序 + 首欄 sticky | P1 | ☐ 未開始 | `static/js/monitor-table.js`, `mor.css`, `product_monitor.html` |
@@ -49,7 +49,7 @@
 - Modify: `templates/_header.html`
 - Modify: `static/css/mor.css`（header 區塊，約 115–260 行附近）
 
-- [ ] **Step 1：把動作按鈕移出 `<nav>`，獨立成 `.header-actions` 區**
+- [x] **Step 1：把動作按鈕移出 `<nav>`，獨立成 `.header-actions` 區**
 
 `templates/_header.html` 的 `<nav class="app-nav">` 只保留 7 個頁面連結；兩個 form 移到 nav 之後的新容器：
 
@@ -78,7 +78,7 @@
 
 註：`data-confirm` 屬性在 WP2 才會被 JS 接手；WP1 階段先保留原本的 `onsubmit="return confirm(...)"` 寫法，等 WP2 完成後移除（若 WP2 已先完成，直接用 `data-confirm`）。
 
-- [ ] **Step 2：CSS — 動作區加分隔線與次要按鈕樣式**
+- [x] **Step 2：CSS — 動作區加分隔線與次要按鈕樣式**
 
 `mor.css` header 區塊新增：
 
@@ -106,7 +106,7 @@
 }
 ```
 
-- [ ] **Step 3：年月切換器 — 前後月箭頭 + 保留輸入框**
+- [x] **Step 3：年月切換器 — 前後月箭頭 + 保留輸入框**
 
 `_header.html` 的 period toolbar 改為：
 
@@ -131,7 +131,7 @@
 
 註：箭頭是一般連結（整頁導航），Dashboard 上不需要走 htmx——整頁 reload 時 metrics 一併更新，行為一致。
 
-- [ ] **Step 4：CSS — 箭頭按鈕**
+- [x] **Step 4：CSS — 箭頭按鈕**
 
 ```css
 .period-nav-btn {
@@ -156,7 +156,7 @@
 }
 ```
 
-- [ ] **Step 5：驗證**
+- [x] **Step 5：驗證**
 
 1. `python3 -m pytest -q`（或 Windows 對應指令）全綠。
 2. 啟動 app，逐頁（/、/forecast、/monitor/products、/monthly-review、/settings）確認：導覽連結與動作按鈕視覺分離、`aria-current` 高亮正常。
@@ -164,7 +164,7 @@
 4. Dashboard 改月份輸入框仍走 htmx 局部更新（觀察 network 只打 `/dashboard/metrics`）。
 5. 縮小視窗寬度至約 1100px，確認 header 換行時動作區不會蓋住導覽。
 
-- [ ] **Step 6：Commit**
+- [x] **Step 6：Commit**
 
 ```bash
 git add templates/_header.html static/css/mor.css
