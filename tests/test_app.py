@@ -1467,6 +1467,22 @@ def test_forecast_table_rebinds_row_events_after_htmx_swap():
     assert "data-forecast-bound" in script
 
 
+def test_forecast_table_supports_keyboard_navigation_for_manual_inputs():
+    script = Path("static/js/forecast-table.js").read_text(encoding="utf-8")
+
+    assert "function visibleDataRows()" in script
+    assert "function bindKeyboardNavigation()" in script
+    assert '"Enter"' in script
+    assert '"ArrowDown"' in script
+    assert '"ArrowUp"' in script
+    assert '"Escape"' in script
+    assert "e.preventDefault()" in script
+    assert "target.focus()" in script
+    assert "target.select()" in script
+    assert "restore.click()" in script
+    assert "bindKeyboardNavigation();" in script
+
+
 # ---------------------------------------------------------------------------
 # Daily sales import route and upload UI
 # ---------------------------------------------------------------------------

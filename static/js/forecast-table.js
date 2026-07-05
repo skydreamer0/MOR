@@ -596,10 +596,45 @@ function bindHtmxRowSwapHandler() {
   });
 }
 
+function visibleDataRows() {
+  return Array.from(document.querySelectorAll("[data-row]"))
+    .filter((row) => row.style.display !== "none" && !row.hidden);
+}
+
+function bindKeyboardNavigation() {
+  if (!markForecastBound(document.body, "data-forecast-keyboard-bound")) return;
+  document.addEventListener("keydown", (e) => {
+    const input = e.target instanceof Element ? e.target.closest("[data-manual]") : null;
+    if (!input) return;
+
+    if (e.key === "Escape") {
+      const restore = input.closest("[data-row]")?.querySelector("[data-restore]");
+      if (restore && !restore.hidden) restore.click();
+      return;
+    }
+
+    if (e.key !== "Enter" && e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+
+    e.preventDefault();
+    const rows = visibleDataRows();
+    const row = input.closest("[data-row]");
+    const index = rows.indexOf(row);
+    if (index === -1) return;
+
+    const targetIndex = e.key === "ArrowUp" ? index - 1 : index + 1;
+    const target = rows[targetIndex]?.querySelector("[data-manual]");
+    if (!target) return;
+
+    target.focus();
+    target.select();
+  });
+}
+
 function bindForecastTable() {
   bindForecastControls();
   bindForecastRows();
   bindHtmxRowSwapHandler();
+  bindKeyboardNavigation();
 
   const highRiskCount = document.querySelectorAll("tr[data-risk='high']").length;
   const totalRows     = document.querySelectorAll("tr[data-risk]").length;

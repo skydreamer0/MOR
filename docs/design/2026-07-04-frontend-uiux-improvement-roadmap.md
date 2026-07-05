@@ -27,7 +27,7 @@
 | --- | --- | --- | --- | --- |
 | WP1 | Header：導覽/動作分離 + 年月切換器 | P0 | ☑ 完成 | `_header.html`, `mor.css` |
 | WP2 | 確認 dialog 元件 + 送出 loading 狀態 | P0 | ☑ 完成 | `_header.html`, `forecast.html`, `product_monitor.html`, 新 `static/js/ui-feedback.js`, `mor.css` |
-| WP3 | 預估表格鍵盤操作（Enter/↑↓/Esc） | P1 | ☐ 未開始 | `static/js/forecast-table.js` |
+| WP3 | 預估表格鍵盤操作（Enter/↑↓/Esc） | P1 | ☑ 完成 | `static/js/forecast-table.js` |
 | WP4 | 表格排序 + 首欄 sticky | P1 | ☐ 未開始 | `static/js/monitor-table.js`, `mor.css`, `product_monitor.html` |
 | WP5 | 字體堆疊 + focus/aria 細節 | P2 | ☐ 未開始 | `mor.css`, 各模板 icon 按鈕 |
 | WP6 | 空狀態引導 + summary 收合改寫 + 響應式 | P2 | ☐ 未開始 | `forecast.html`, `mor.css` |
@@ -347,7 +347,7 @@ git commit -m "feat(frontend): shared confirm dialog and submit loading states"
 - 置換後的列需要重綁 sparkline 等（檢查現有 `htmx:afterSwap` 或等效處理；若透過事件委派則不需重綁）。
 - 篩選隱藏的列以 `style.display === "none"`（確認 `recalculate()` 內實際做法後對齊）。
 
-- [ ] **Step 1：新增鍵盤導航函式**
+- [x] **Step 1：新增鍵盤導航函式**
 
 在 `forecast-table.js` 中加入，並在初始化流程（現有 `bindForecastTable()` 或等效入口）呼叫：
 
@@ -385,7 +385,7 @@ function bindKeyboardNavigation() {
 
 使用 document 層級委派：htmx 以 `outerHTML` 置換列之後不需重綁。
 
-- [ ] **Step 2：驗證**
+- [x] **Step 2：驗證**
 
 1. `/forecast` 頁：在任一數量欄按 Enter → 焦點移到下一可見列的數量欄且全選；↑/↓ 對應上下移動；數值不被方向鍵改動。
 2. Enter 移動後，原列因 change 觸發 `hx-patch` 置換 → 確認置換不奪走新焦點、最後預估/差異即時更新。
@@ -393,7 +393,7 @@ function bindKeyboardNavigation() {
 4. 有人工值的列按 Esc → 觸發「還原」按鈕。
 5. `python3 -m pytest -q` 全綠（此 WP 不動後端，屬回歸保險）。
 
-- [ ] **Step 3：Commit**
+- [x] **Step 3：Commit**
 
 ```bash
 git add static/js/forecast-table.js
