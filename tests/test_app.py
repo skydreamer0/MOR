@@ -696,9 +696,22 @@ def test_shared_confirm_dialog_assets_replace_inline_confirm_handlers():
 
     assert 'data-confirm-title="同步 Excel 資料"' in header
     assert 'data-confirm-title="刪除草稿"' in forecast
+    assert 'aria-label="刪除草稿"' in forecast
+    assert 'id="rd-close" title="關閉" aria-label="關閉詳細資料"' in forecast
     assert 'data-confirm-ok="結月"' in monitor
     assert ".app-confirm" in css
     assert "button.is-loading" in css
+
+
+def test_frontend_accessibility_tokens_follow_design_roadmap():
+    css = Path("static/css/mor.css").read_text(encoding="utf-8")
+    design = Path("DESIGN.md").read_text(encoding="utf-8")
+
+    assert 'font-family: "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", "Segoe UI", system-ui, Arial, sans-serif;' in css
+    assert "--focus:            #0d9488;" in css
+    assert "--focus-ring:       rgba(13, 148, 136, 0.25);" in css
+    assert "| `--focus` | `#0d9488` |" in design
+    assert "| `--focus-ring` | `rgba(13,148,136,0.25)` |" in design
 
 
 def test_old_exclusions_page_redirects_to_item_management():

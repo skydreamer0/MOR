@@ -43,8 +43,8 @@
   --warning-border:   #fde68a;
 
   /* Focus ring */
-  --focus:            #38bdf8;
-  --focus-ring:       rgba(56, 189, 248, 0.25);
+  --focus:            #0d9488;
+  --focus-ring:       rgba(13, 148, 136, 0.25);
 
   /* Interactive row states — #eef6ff/#e0f0ff kept blue-tinted intentionally for contrast with teal accent */
   --row-hover:        #eef6ff;
@@ -104,7 +104,7 @@ body {
   margin: 0;
   color: var(--ink);
   background: var(--bg);
-  font-family: "Microsoft JhengHei", "Segoe UI", Arial, sans-serif;
+  font-family: "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", "Segoe UI", system-ui, Arial, sans-serif;
   font-size: var(--text-base);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;

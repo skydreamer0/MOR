@@ -49,7 +49,7 @@
               <input type="hidden" name="snapshot_id" value="{{ snap.id }}">
               <input type="hidden" name="year" value="{{ year }}">
               <input type="hidden" name="month" value="{{ month }}">
-              <button type="submit" class="icon-btn" title="刪除草稿">X</button>
+              <button type="submit" class="icon-btn" title="刪除草稿" aria-label="刪除草稿">✕</button>
             </form>
             {% endif %}
           </div>
@@ -146,7 +146,7 @@
           <p class="row-detail__customer" id="rd-customer"></p>
           <h3 class="row-detail__product" id="rd-product"></h3>
         </div>
-        <button type="button" class="icon-btn rd-close-btn" id="rd-close" title="關閉">✕</button>
+        <button type="button" class="icon-btn rd-close-btn" id="rd-close" title="關閉" aria-label="關閉詳細資料">✕</button>
       </div>
       <div class="row-detail__body">
         <div class="detail-section" id="rd-lm-section">
