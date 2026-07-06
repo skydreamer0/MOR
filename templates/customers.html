@@ -35,7 +35,7 @@
               <th class="num">預算YTD金額</th>
               <th class="num">今年YTD金額</th>
               <th class="num">預算達成</th>
-              <th class="num">YoY</th>
+              <th class="num">YoY 成長率</th>
               <th class="num">趨勢</th>
               <th class="num">走勢</th>
             </tr>
@@ -50,21 +50,10 @@
   </main>
 
   <script>
-  (function () {
-    const header = document.querySelector("header");
-    const main = document.querySelector(".customer-analytics-main");
-    if (!header || !main) return;
-    function resize() {
-      main.style.height = (window.innerHeight - header.offsetHeight) + "px";
-    }
-    resize();
-    window.addEventListener("resize", resize);
-  })();
-
   AnalyticsTable.mount(document.getElementById("cust-tbody"), {{ slices | tojson }}, {
     targetMonth: {{ month | int }},
     idPrefix: "cust",
-    columns: ["lyAmount", "budgetAmount", "tyAmount", "budgetRate", "yoyRatio", "trendLabel", "spark"],
+    columns: ["lyAmount", "budgetAmount", "tyAmount", "budgetRate", "yoyDelta", "trendLabel", "spark"],
     boldLabel: true,
     expandable: true,
     sparkSeries: "amount",

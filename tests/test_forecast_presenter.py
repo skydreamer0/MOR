@@ -2,7 +2,7 @@ from dataclasses import replace
 from datetime import date
 
 from src.backend.forecast_models import ForecastRow, ForecastSummary
-from src.backend.web.forecast_presenter import column_schema, product_display_name, serialize_summary
+from src.backend.web.forecast_presenter import column_schema, product_display_name, serialize_row_state, serialize_summary
 
 
 def sample_summary() -> ForecastSummary:
@@ -57,6 +57,31 @@ def test_serialize_summary_compares_forecast_gap_to_budget():
 
     assert payload["rows"][0]["achievement_rate"] == 10 / 7 * 100
     assert payload["rows"][0]["diff"] == 3
+
+
+def test_serialize_row_state_uses_amount_pack_size_fallback():
+    row = replace(
+        sample_summary().rows[0],
+        latest_price=250,
+        price_quantity=0,
+        budget_quantity=120,
+        base_budget_quantity=12,
+        trend_6m=None,
+        ly_monthly=[1, 2],
+        ty_monthly=[3, 4],
+        budget_monthly=[5, 6],
+    )
+
+    state = serialize_row_state(row)
+
+    assert state["price"] == 250
+    assert state["price_quantity"] == 10
+    assert state["system_forecast"] == 10
+    assert state["budget_quantity"] == 120
+    assert state["trend"] == [0.0] * 6
+    assert state["ly_monthly"] == [1, 2]
+    assert state["ty_monthly"] == [3, 4]
+    assert state["budget_monthly"] == [5, 6]
 
 
 def test_column_schema_describes_review_grid_fields():

@@ -19,7 +19,10 @@
     {% endif %}
 
     {# ── 匯入工具列（整合狀態 + 操作）── #}
-    <section id="import-toolbar" class="workbench-toolbar import-toolbar" aria-label="業績匯入">
+    <section id="import-toolbar" class="workbench-toolbar import-toolbar" aria-label="業績匯入"
+             data-collapse-on-wheel=".monitor-table-wrap"
+             data-collapse-class="import-toolbar--collapsed"
+             data-collapse-expand-threshold="8">
 
       {# 左側：月份 + 狀態摘要 #}
       <div class="import-summary">
@@ -490,39 +493,6 @@
       document.getElementById('file-pick-name').textContent = name;
     });
 
-    // 捲動隱藏匯入列
-    // wheel 偵測向下方向（列數不足時也能正確觸發）
-    // scroll 偵測回到頂部才展開
-    (function () {
-      const toolbar   = document.getElementById('import-toolbar');
-      const tableWrap = document.querySelector('.monitor-table-wrap');
-      if (!toolbar || !tableWrap) return;
-      let collapsed = false;
-      tableWrap.addEventListener('wheel', (e) => {
-        if (e.deltaY > 0 && !collapsed) {
-          collapsed = true;
-          toolbar.classList.add('import-toolbar--collapsed');
-        }
-      }, { passive: true });
-      tableWrap.addEventListener('scroll', () => {
-        if (collapsed && tableWrap.scrollTop < 8) {
-          collapsed = false;
-          toolbar.classList.remove('import-toolbar--collapsed');
-        }
-      }, { passive: true });
-    })();
-
-    // 填滿視窗高度（扣掉 sticky header），與預估調整表格一致。
-    (function () {
-      const header = document.querySelector('header');
-      const main = document.querySelector('.monitor-main');
-      if (!header || !main) return;
-      function resize() {
-        main.style.height = (window.innerHeight - header.offsetHeight) + 'px';
-      }
-      resize();
-      window.addEventListener('resize', resize);
-    })();
   </script>
 </body>
 </html>

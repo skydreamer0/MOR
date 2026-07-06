@@ -17,7 +17,7 @@
       <section class="alert" role="alert">{{ error_message }}</section>
     {% endif %}
 
-    <section class="summary">
+    <section class="summary" data-collapse-on-scroll=".table-wrap" data-collapse-class="summary--collapsed" data-collapse-threshold="24">
       <div class="metric"><span>預估月份</span><strong>{% if year and month %}{{ year }}/{{ "%02d"|format(month|int) }}{% else %}--{% endif %}</strong></div>
       <div class="metric"><span>總列數</span><strong>{{ shown_count }} / {{ row_count }}</strong></div>
       <div class="metric"><span>自動預估列</span><strong>{{ rows|selectattr("auto_in_month")|list|length }}</strong></div>
@@ -240,28 +240,5 @@
   </main>
 
   <script src="{{ url_for('static', filename='js/forecast-table.js') }}"></script>
-  <script>
-    // 填滿視窗高度（扣掉 sticky header）
-    (function () {
-      const header = document.querySelector('header');
-      const main   = document.querySelector('.forecast-main');
-      if (!header || !main) return;
-      function resize() {
-        main.style.height = (window.innerHeight - header.offsetHeight) + 'px';
-      }
-      resize();
-      window.addEventListener('resize', resize);
-    })();
-
-    // 捲動 table-wrap 收合 summary：鍵盤/觸控/滑鼠捲動皆適用
-    (function () {
-      const summary   = document.querySelector('.summary');
-      const tableWrap = document.querySelector('.table-wrap');
-      if (!summary || !tableWrap) return;
-      tableWrap.addEventListener('scroll', () => {
-        summary.classList.toggle('summary--collapsed', tableWrap.scrollTop > 24);
-      }, { passive: true });
-    })();
-  </script>
 </body>
 </html>

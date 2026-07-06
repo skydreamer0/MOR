@@ -123,18 +123,5 @@
   </main>
 
   <script src="{{ url_for('static', filename='js/item-settings.js') }}"></script>
-  <script>
-    // 填滿視窗高度（扣掉 sticky header），維持表格工作區一致。
-    (function () {
-      const header = document.querySelector('header');
-      const main = document.querySelector('.settings-main');
-      if (!header || !main) return;
-      function resize() {
-        main.style.height = (window.innerHeight - header.offsetHeight) + 'px';
-      }
-      resize();
-      window.addEventListener('resize', resize);
-    })();
-  </script>
 </body>
 </html>
