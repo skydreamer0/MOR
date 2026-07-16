@@ -60,6 +60,24 @@ const MonitorTable = (() => {
     });
   }
 
+  function detailForRow(mainRow) {
+    const detail = mainRow?.nextElementSibling;
+    return detail?.hasAttribute("data-monitor-detail") ? detail : null;
+  }
+
+  function toggleMonitorRow(mainRow) {
+    const detail = detailForRow(mainRow);
+    if (!detail) return false;
+    const expanded = mainRow.getAttribute("aria-expanded") === "true";
+    mainRow.setAttribute("aria-expanded", String(!expanded));
+    detail.hidden = expanded;
+    return true;
+  }
+
+  function isToggleKey(e) {
+    return e.key === "Enter" || e.key === " ";
+  }
+
   function bindSorting(rows) {
     const headers = Array.from(document.querySelectorAll("[data-monitor-sort]"));
     const tbody = rows[0]?.parentElement;
@@ -139,11 +157,16 @@ const MonitorTable = (() => {
     if (e.target.closest("button, a, input, select, label")) return;
     const mainRow = e.target.closest("[data-monitor-row]");
     if (!mainRow) return;
-    const detail = mainRow.nextElementSibling;
-    if (!detail?.hasAttribute("data-monitor-detail")) return;
-    const expanded = mainRow.getAttribute("aria-expanded") === "true";
-    mainRow.setAttribute("aria-expanded", String(!expanded));
-    detail.hidden = expanded;
+    toggleMonitorRow(mainRow);
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.target.closest("button, a, input, select, label")) return;
+    if (!isToggleKey(e)) return;
+    const mainRow = e.target.closest("[data-monitor-row]");
+    if (!mainRow) return;
+    e.preventDefault();
+    toggleMonitorRow(mainRow);
   });
 
   // ── CSV Export ───────────────────────────────────────────────────────────
@@ -198,7 +221,7 @@ const MonitorTable = (() => {
   recalculate();
   }
 
-  return { bindMonitorTable, sortRows };
+  return { bindMonitorTable, sortRows, toggleMonitorRow };
 })();
 
 if (typeof module !== "undefined" && module.exports) {

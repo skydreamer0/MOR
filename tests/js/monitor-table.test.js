@@ -23,6 +23,25 @@ function makeRow(label, values) {
   return row;
 }
 
+function makeExpandableRow() {
+  const attrs = { "aria-expanded": "false" };
+  const detail = {
+    hidden: true,
+    hasAttribute(name) {
+      return name === "data-monitor-detail";
+    },
+  };
+  return {
+    nextElementSibling: detail,
+    getAttribute(name) {
+      return attrs[name];
+    },
+    setAttribute(name, value) {
+      attrs[name] = value;
+    },
+  };
+}
+
 test("sortRows keeps monitor detail rows paired with their main rows", () => {
   const alpha = makeRow("alpha", ["注意", "A Clinic", "針劑", "05/02", "8天", "7"]);
   const beta = makeRow("beta", ["高風險", "B Hospital", "藥品", "05/01", "12天", "3"]);
@@ -41,6 +60,20 @@ test("sortRows keeps monitor detail rows paired with their main rows", () => {
     "alpha",
     "alpha-detail",
   ]);
+});
+
+test("toggleMonitorRow toggles aria-expanded and the paired detail row", () => {
+  const row = makeExpandableRow();
+
+  MonitorTable.toggleMonitorRow(row);
+
+  assert.equal(row.getAttribute("aria-expanded"), "true");
+  assert.equal(row.nextElementSibling.hidden, false);
+
+  MonitorTable.toggleMonitorRow(row);
+
+  assert.equal(row.getAttribute("aria-expanded"), "false");
+  assert.equal(row.nextElementSibling.hidden, true);
 });
 
 test("sortRows puts hidden filtered rows after visible rows", () => {

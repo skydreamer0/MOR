@@ -2613,6 +2613,19 @@ details[open] .discontinued-toggle {
 /* ── Monitor: whole-row expand ── */
 [data-monitor-row] { cursor: pointer; }
 
+[data-monitor-row]:focus-visible {
+  outline: none;
+}
+
+[data-monitor-row]:focus-visible td {
+  background: var(--accent-subtle);
+  box-shadow: inset 0 0 0 2px var(--focus);
+}
+
+[data-monitor-row]:focus-visible td.monitor-sticky {
+  background: var(--accent-subtle);
+}
+
 [data-monitor-row][aria-expanded="true"] td { background: var(--accent-subtle); }
 [data-monitor-row][aria-expanded="true"] td.monitor-sticky { background: var(--accent-subtle); }
 
@@ -2628,6 +2641,22 @@ details[open] .discontinued-toggle {
 }
 .row-chevron::before { content: '▶'; }
 [data-monitor-row][aria-expanded="true"] .row-chevron { transform: rotate(90deg); }
+
+@media (prefers-reduced-motion: reduce) {
+  button.is-loading::after,
+  .value-flash,
+  #save-status,
+  .remaining-dot,
+  .modal-backdrop {
+    animation: none !important;
+  }
+
+  .row-detail,
+  .row-detail-backdrop,
+  .row-chevron {
+    transition: none !important;
+  }
+}
 
 /* ── Monitor: detail card (redesigned) ── */
 [data-monitor-detail] td {

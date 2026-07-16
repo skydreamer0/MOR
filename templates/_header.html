@@ -23,7 +23,7 @@
             onsubmit="return !!this.querySelector('input[type=file]').files.length || (alert('請先選擇 SHPB 檔案') && false)">
         <label class="nav-action-btn nav-action-btn--file">
           上傳當月業績
-          <input type="file" name="file" accept=".xlsx" style="display:none"
+          <input type="file" name="file" accept=".xlsx" class="sr-only"
                  onchange="this.closest('form').submit()">
         </label>
       </form>

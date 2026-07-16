@@ -17,7 +17,7 @@
       <section class="alert" role="alert">{{ error_message }}</section>
     {% endif %}
 
-    <div id="metrics-zone">
+    <div id="metrics-zone" aria-live="polite">
       {% include "_dashboard_metrics.html" %}
     </div>
   </main>

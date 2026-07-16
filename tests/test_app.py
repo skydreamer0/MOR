@@ -511,6 +511,63 @@ def test_dashboard_period_inputs_target_metrics_zone():
     assert 'hx-target="#metrics-zone"' in html
 
 
+def test_fe6_accessibility_contract_exposes_live_regions_reduced_motion_and_upload_input():
+    client = _client()
+
+    dashboard = client.get("/").get_data(as_text=True)
+    forecast = client.get("/forecast").get_data(as_text=True)
+    header_template = Path("templates/_header.html").read_text(encoding="utf-8")
+    css = Path("static/css/mor.css").read_text(encoding="utf-8")
+
+    assert 'id="metrics-zone" aria-live="polite"' in dashboard
+    assert 'id="save-status" role="status" aria-live="polite"' in forecast
+    assert 'name="file" accept=".xlsx" class="sr-only"' in header_template
+    assert 'style="display:none"' not in header_template
+    assert "@media (prefers-reduced-motion: reduce)" in css
+    for selector in (
+        "button.is-loading::after",
+        ".value-flash",
+        "#save-status",
+        ".remaining-dot",
+        ".modal-backdrop",
+        ".row-detail",
+        ".row-detail-backdrop",
+    ):
+        assert selector in css
+
+
+def test_product_monitor_rows_expose_keyboard_expand_contract():
+    template = Path("templates/product_monitor.html").read_text(encoding="utf-8")
+    script = Path("static/js/monitor-table.js").read_text(encoding="utf-8")
+    css = Path("static/css/mor.css").read_text(encoding="utf-8")
+
+    assert 'data-monitor-row tabindex="0" aria-expanded="false"' in template
+    assert 'aria-controls="monitor-detail-{{ loop.index }}"' in template
+    assert '<tr id="monitor-detail-{{ loop.index }}" data-monitor-detail hidden>' in template
+    assert "function toggleMonitorRow" in script
+    assert 'e.key === "Enter"' in script
+    assert 'e.key === " "' in script
+    assert "e.preventDefault()" in script
+    assert "[data-monitor-row]:focus-visible" in css
+
+
+def test_forecast_modal_and_drawer_expose_escape_and_focus_contract():
+    template = Path("templates/forecast.html").read_text(encoding="utf-8")
+    script = Path("static/js/forecast-table.js").read_text(encoding="utf-8")
+
+    assert 'role="dialog"' in template
+    assert 'aria-modal="false"' in template
+    assert 'tabindex="-1"' in template
+    assert "let _detailReturnFocus" in script
+    assert "function restoreFocus" in script
+    assert "closeDetailPanel({ restoreFocus: true })" in script
+    assert "document.activeElement" in script
+    assert 'data-snapshot-modal' in script
+    assert 'role="dialog" aria-modal="true"' in script
+    assert "function closeSnapshotModal" in script
+    assert "function focusSnapshotModal" in script
+
+
 def test_patch_forecast_row_updates_adjustment_and_returns_row_fragment():
     client = _client_with_sales()
     page = client.get("/forecast").get_data(as_text=True)

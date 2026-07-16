@@ -102,7 +102,7 @@
         <div class="filter-group toolbar-actions">
           <span>顯示 <strong data-visible-count>0</strong> / {{ row_count }}</span>
           <span id="edited-badge" hidden>已調整 <strong data-edited-count>0</strong></span>
-          <span id="save-status"></span>
+          <span id="save-status" role="status" aria-live="polite"></span>
           <span class="toolbar-divider" aria-hidden="true"></span>
           {% if not is_finalized %}
           <button type="button" id="btn-save-snapshot" class="btn-secondary btn-toolbar">草稿</button>
@@ -148,7 +148,7 @@
 
     <!-- Row detail drawer -->
     <div class="row-detail-backdrop" id="row-detail-backdrop" hidden aria-hidden="true"></div>
-    <aside class="row-detail" id="row-detail" data-forecast-year="{{ year }}" data-forecast-month="{{ month }}" hidden role="complementary" aria-label="列詳細資料">
+    <aside class="row-detail" id="row-detail" data-forecast-year="{{ year }}" data-forecast-month="{{ month }}" hidden role="dialog" aria-modal="false" aria-labelledby="rd-product" tabindex="-1">
       <div class="row-detail__header">
         <div>
           <p class="row-detail__customer" id="rd-customer"></p>
