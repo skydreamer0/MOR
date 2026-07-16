@@ -65,6 +65,12 @@ Architecture direction:
 21. Monthly Review data read seam.
 22. Forecast workbench row-facing input interface.
 23. Product Monitor month context extraction.
+24. Architecture Bug Fix Batch (BF-0 to BF-7).
+25. Workbench Context Internals.
+26. Amount Calculation Seam.
+27. Close-Month Workflow.
+28. Context Cache Seam.
+29. Architecture Hygiene Batch (AH-1 to AH-8).
 
 ## Release Packaging Roadmap
 
@@ -461,128 +467,6 @@ Stop and report before continuing if:
 
 ## Active Refactor Queue
 
-### 0. Architecture Bug Fix Batch (prerequisite for remaining seams)
-
-架構審查發現的具體問題，按優先順序逐一修正。每個修正獨立 commit，可單獨驗證。
-
-#### BF-0: Werkzeug 版本釘選（測試環境修復）
-
-- 症狀：Flask 2.3.2 + Werkzeug 3.1.8 不相容，`test_app.py` 全數失敗。
-- 修正：`requirements.txt` 加入 `werkzeug>=2.3.3,<3.0`，恢復 53 個路由測試。
-- 涉及檔案：`requirements.txt`。
-
-#### BF-1: PRG 修正（`/items/save` 表單重複送出）
-
-- 症狀：`save_items()` POST 後直接 render 頁面，F5 重新整理觸發重複 POST。
-- 修正：`return settings()` → `return redirect(url_for("settings"))`。
-- 涉及檔案：`src/backend/app.py`。
-
-#### BF-2: SQLite 連線未關閉（資源洩漏）
-
-- 症狀：`sqlite3.Connection` 的 `with` block 只做 commit/rollback，不關閉連線；長時間執行累積未釋放連線。
-- 修正：`MORDatabase.get_connection()` 改為 `@contextmanager`，在 `finally` 中明確 `conn.close()`。
-- 涉及檔案：`src/backend/database.py`（呼叫方 `with db.get_connection() as conn:` 語法不變）。
-
-#### BF-3: `_apply_reasons_and_budgets` 跨模組引用私有函式
-
-- 症狀：`forecast_workbench_context.py` 引入底線前綴的私有函式，表示模組邊界洩漏。
-- 修正：移除底線前綴，成為 `operational_views` 的公開 API。
-- 涉及檔案：`src/backend/operational_views.py`、`src/backend/forecast_workbench_context.py`。
-
-#### BF-4: SimpleCache 無界增長
-
-- 症狀：`CACHE_DEFAULT_TIMEOUT=0`（永不過期）+ cache key 包含日期，每天產生新 key 且舊 key 永不清除，記憶體持續增長。
-- 修正：`create_app` 的 cache config 加入 `CACHE_THRESHOLD: 500`（最多 500 條目，超過自動 LRU 淘汰）。
-- 涉及檔案：`src/backend/app.py`。
-
-#### BF-5: Close-Month 非原子操作（孤兒快照風險）✅ 完成（Seam 3）
-
-- 症狀：`_find_or_create_close_snapshot` 先建快照再呼叫 `close_month`；若後者失敗，留下孤兒快照。
-- 修正：建立 `close_month_workflow.execute_close_month()`，所有寫入共用單一 connection；`app.py` 移除兩步驟拆分邏輯。
-- 涉及檔案：`src/backend/close_month_workflow.py`（新增）、`src/backend/app.py`。
-
-#### BF-6: Monthly Review 廣義例外吞掉邏輯錯誤 ✅ 完成
-
-- 症狀：`except Exception as exc:` 捕捉所有例外（含程式邏輯錯誤），只顯示 `str(exc)`，難以 debug。
-- 修正：縮窄為具體例外型別（`ValueError`, `LookupError`），其餘讓 Flask error handler 處理。
-- 涉及檔案：`src/backend/app.py`（`monthly_review` route）。
-
-#### BF-7: `/sync` 回傳純文字（UX）✅ 完成
-
-- 症狀：sync 後回傳純文字頁面，使用者需手動回上頁。
-- 修正：改為 `redirect(url_for("dashboard", sync_message=...))` PRG 模式。
-- 涉及檔案：`src/backend/app.py`。
-
-Boundary for BF batch: ✅ 全數完成
-- 每個 BF item 獨立 commit，可單獨驗證。
-- 290 tests passing。
-
----
-
-### 1. Workbench Context Internals ✅ 完成
-
-Goal: keep `forecast_workbench_context.py` as the public context builder while moving remaining summary enrichment, health, projection, and monitor assembly details into smaller testable helpers.
-
-完成內容：
-- 移除 `app.py` dead import `build_monthly_review_report`（從未呼叫）
-- `_patch_latest_order_dates`：測試改為從 `forecast_workbench_context` 引入（canonical 位置），移除 `operational_views` 的 proxy shim
-- 新增 `_filter_visible_rows(summary, item_configs)` helper，從 `_build_summary` 提取 visibility filter 成具名函式，可獨立測試
-
-### 2. Amount Calculation Seam ✅ 完成
-
-Goal: expand the new amount calculation seam so monthly review and raw forecast engine behavior cannot diverge silently from dashboard/export calculations.
-
-完成內容：
-- 移除 `operational_views.py` 裡的四個 amount alias（`_dashboard_amount`、`_amount_from_latest_order_price`、`_latest_price_quantity`、`_is_amount_included`）
-- 全部呼叫點改為直接使用 `amount_calculation.amount_for_quantity`
-- `operational_views.py`：590 → 565 行（-25 行）
-- 消除因 alias 分歧導致 amount 計算邏輯悄悄不一致的風險
-
-### 3. Close-Month Workflow ✅ 完成（BF-5）
-
-Goal: move remaining close-month route-local orchestration into a backend workflow/service.
-
-完成內容：`close_month_workflow.py` 建立，包含原子寫入邏輯。`app.py` 路由已精簡為：建 context → 序列化 rows → 呼叫 `execute_close_month()`。
-
-Boundary:
-
-- Snapshot immutability is already owned by `snapshot_service.py`.
-- Route only orchestrates: context build, row serialization, cache invalidation, redirect.
-
-### 4. Context Cache Seam ✅ 完成
-
-Goal: extract cache key/invalidation state from `app.py` into a small `ContextCache` seam if cache behavior starts blocking route simplification.
-
-完成內容：
-- 新增 `src/backend/context_cache.py`，`ContextCache` 類別封裝版本計數器與 key 生成
-- `app.py` closure 中的 `_month_versions`、`_global_version` 及 5 個 helper 函式改以 `ctx_cache = ContextCache(flask_cache)` 取代
-- `_invalidate_context_cache()` → `ctx_cache.invalidate()`，`_invalidate_all_context_cache()` → `ctx_cache.invalidate_all()`
-
-### 5. Architecture Hygiene Batch
-
-架構審查（2026-06-02）發現的具體問題，按優先順序修正。每個修正獨立 commit 可單獨驗證。
-
-#### AH-1: ETL 年份寫死（高優先，靜默失效）✅ 完成
-
-- 症狀：`BUDGET_FILE_PATTERN = "2026預算報表*.xlsx"` 和 `default_year=2026` 寫死在 `etl.py`，2027 年起靜默失效，需手動改源碼。
-- 修正：預算檔搜尋改為跨年份 pattern，從預算 Excel 檔名推斷年份，並讓 `sync_excel_to_db()` 可用 `default_budget_year` 明確覆寫；`normalize_budget_targets()` 的 `default_year` 改為參數化且支援無「年」欄預算表。
-- 涉及檔案：`src/backend/etl.py`、`tests/test_etl.py`。
-
-#### AH-2: `/close-month` 與 `/snapshots/save` 繞過 ContextCache ✅ 完成
-
-- 症狀：`close_product_monitor_month` 和 `save_snapshot_route` 直接呼叫 `build_forecast_page_context()`，不走 `_build_cached_context()`，每次執行都重建整個上下文，與其他路由行為不一致。
-- 修正：改為呼叫 `_build_cached_context(year, month)`，並補路由 cache seam regression tests。
-- 涉及檔案：`src/backend/app.py`（兩個路由函式）。
-
-#### AH-3: `build_forecast_page_context` 的 `data_base_path` 是死參數 ✅ 完成
-
-- 症狀：舊 `operational_views.build_forecast_page_context()` 曾接受 `data_base_path: Path`，但該參數不參與 context build；容易讓 route 呼叫看起來仍依賴 Excel base path。
-- 修正：canonical `forecast_workbench_context.build()` 簽名只保留 `forecast_config`、`db`、`target_source` 與 keyword-only `today`；補 architecture guard 防止 `data_base_path` 參數回流。
-- 涉及檔案：`src/backend/forecast_workbench_context.py`、`src/backend/app.py`、`tests/test_architecture_imports.py`。
-
-#### AH-4: `src/backend/app.py` 模組層級副作用 ✅ 完成
-
-- 症狀：`app = create_app()` 在 backend 模組層級執行，import `src.backend.app` 即觸發 DB 初始化與 Flask 應用建立；根目錄 `app.py` import `create_app` 時已隱含觸發一次建立。
 - 修正：刪除 `src/backend/app.py` 的模組層級 `app = create_app()`；直接執行 backend 模組時改由 `if __name__ == "__main__"` 呼叫 `create_app().run(...)`，並補 architecture guard。
 - 涉及檔案：`src/backend/app.py`、`tests/test_architecture_imports.py`。
 

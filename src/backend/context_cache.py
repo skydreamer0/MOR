@@ -11,6 +11,12 @@ writes without requiring explicit cache.delete() calls:
 Cache entries age out only via LRU eviction (CACHE_THRESHOLD) since
 CACHE_DEFAULT_TIMEOUT=0 (no TTL). Old versioned keys become unreachable
 and are evicted naturally.
+
+WARNING (AH-8):
+This cache utilizes in-memory version counters. It is designed for single-worker
+deployments. If deployed with multiple worker processes (e.g. multi-process gunicorn),
+cache invalidations will not propagate across processes. Use Redis or a shared cache
+backend if multi-worker scaling is required in the future.
 """
 from __future__ import annotations
 
