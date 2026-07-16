@@ -29,7 +29,7 @@ from src.backend.product_monitor_workflow import build_product_monitor_template_
 from src.backend.analytics import aggregate_to_analytics
 from src.backend.item_settings_repository import update_item_configs
 from src.backend.web.form_parser import FormValidationError, parse_manual_quantities, parse_target_period, validate_target_period
-from src.backend.web.forecast_presenter import product_display_name
+from src.backend.web.forecast_presenter import product_display_name, serialize_row_state
 from src.backend.daily_sales_importer import (
     get_close_record,
     import_daily_sales_workbook,
@@ -158,6 +158,7 @@ def create_app(config: dict | None = None) -> Flask:
             error_message=error_message,
             is_finalized=is_finalized(db, summary.year, summary.month) if summary else False,
             snapshots=list_snapshots(db, summary.year, summary.month) if summary else [],
+            serialize_row_state=serialize_row_state,
             **template_context.__dict__,
         )
 
@@ -184,6 +185,7 @@ def create_app(config: dict | None = None) -> Flask:
             year=year,
             month=month,
             risk_levels={row.row_id: forecast_row_risk(row)},
+            serialize_row_state=serialize_row_state,
         )
 
     @app.get("/monitor/products")

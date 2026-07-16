@@ -52,6 +52,15 @@ test("buildRowCells: yoyQtyDelta reads quantity metrics", () => {
   assert.ok(html.includes("-20.0%")); // qty 40/50
 });
 
+test("buildRowCells: management analytics uses signed YoY delta", () => {
+  const html = AnalyticsTable.buildRowCells(
+    SLICE, METRICS, QTY_METRICS, "spark-management-0",
+    { ...DASH_OPTS, columns: ["yoyDelta", "trendLabel"] }
+  );
+  assert.ok(html.includes("+10.0%"));
+  assert.ok(!html.includes("110.0%"));
+});
+
 test("buildRowCells: unknown column throws", () => {
   assert.throws(
     () => AnalyticsTable.buildRowCells(SLICE, METRICS, null, "c0", { ...DASH_OPTS, columns: ["nope"] }),

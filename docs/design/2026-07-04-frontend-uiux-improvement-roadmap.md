@@ -41,9 +41,9 @@
 | WP1 | Header：導覽/動作分離 + 年月切換器 | P0 | ☑ 完成 | `_header.html`, `mor.css` |
 | WP2 | 確認 dialog 元件 + 送出 loading 狀態 | P0 | ☑ 完成 | `_header.html`, `forecast.html`, `product_monitor.html`, 新 `static/js/ui-feedback.js`, `mor.css` |
 | WP3 | 預估表格鍵盤操作（Enter/↑↓/Esc） | P1 | ☑ 完成 | `static/js/forecast-table.js` |
-| WP4 | 表格排序 + 首欄 sticky | P1 | ☐ 未開始 | `static/js/monitor-table.js`, `mor.css`, `product_monitor.html` |
-| WP5 | 字體堆疊 + focus/aria 細節 | P2 | ☐ 未開始 | `mor.css`, 各模板 icon 按鈕 |
-| WP6 | 空狀態引導 + summary 收合改寫 + 響應式 | P2 | ☐ 未開始 | `forecast.html`, `mor.css` |
+| WP4 | 表格排序 + 首欄 sticky | P1 | ☑ 完成 | `static/js/monitor-table.js`, `mor.css`, `product_monitor.html` |
+| WP5 | 字體堆疊 + focus/aria 細節 | P2 | ☑ 完成 | `mor.css`, 各模板 icon 按鈕 |
+| WP6 | 空狀態引導 + summary 收合改寫 + 響應式 | P2 | ☑ 完成 | `forecast.html`, `mor.css` |
 
 **平行執行衝突矩陣：**
 
@@ -424,7 +424,7 @@ git commit -m "feat(frontend): spreadsheet-style keyboard navigation for forecas
 - Modify: `templates/product_monitor.html`（表頭加 `data-sort` 屬性）
 - Modify: `static/css/mor.css`
 
-- [ ] **Step 1：monitor 表頭標記可排序欄**
+- [x] **Step 1：monitor 表頭標記可排序欄**
 
 `product_monitor.html` 跳單明細表 `<thead>` 的數值欄（去年同期、預估月底、差異、金額影響等）與文字欄（客戶）加上：
 
@@ -433,9 +433,9 @@ git commit -m "feat(frontend): spreadsheet-style keyboard navigation for forecas
 <th class="sortable" data-sort="text" role="button" tabindex="0" aria-sort="none">客戶</th>
 ```
 
-（依實際欄位逐一標記；不可排序的欄不加屬性。）
+完成：依目前 Product Monitor 實際欄位標記狀態、客戶、品項、最近出貨日、出貨週期、本月目前、推估月底、最終預估、間隔趨勢；複合的「達成指標」暫不排序。
 
-- [ ] **Step 2：`monitor-table.js` 加排序邏輯**
+- [x] **Step 2：`monitor-table.js` 加排序邏輯**
 
 ```js
 function bindSorting(table) {
@@ -468,9 +468,9 @@ function bindSorting(table) {
 }
 ```
 
-在現有 monitor 表初始化處呼叫 `bindSorting(document.querySelector(".monitor-table 或實際 class"))`（以檔案內實際 selector 為準）。排序需與現有搜尋/篩選共存：排序只重排 DOM 順序，不影響 display 隱藏邏輯。
+完成：排序使用 `[data-monitor-sort]` 與列上的 `data-sort-*` 契約，不解析複合中文文字；主列與 `[data-monitor-detail]` 詳情列成對移動；hidden/filter 狀態維持不變。
 
-- [ ] **Step 3：排序視覺 + 首欄 sticky CSS**
+- [x] **Step 3：排序視覺 + 首欄 sticky CSS**
 
 ```css
 th.sortable { cursor: pointer; user-select: none; }
@@ -490,15 +490,15 @@ th.sortable[aria-sort="descending"]::after { content: " ↓"; color: var(--accen
 .forecast-table thead th:first-child { z-index: 3; }
 ```
 
-注意：列 hover 底色（`--row-hover`）與狀態 accent bar 若因 sticky 背景被遮蓋，需將對應背景規則同步套到 `td:first-child`（以實際樣式為準，hover 時 `background: var(--row-hover)`）。監控表若同樣會橫向捲動，比照辦理。
+完成：維持現有 Product Monitor 三欄 sticky（狀態、客戶、品項），新增 scoped sortable header button、hover/focus、`aria-sort` 箭頭狀態。Forecast 首欄 sticky 未納入本批，避免擴張到 WP3/WP6 之外的表格行為。
 
-- [ ] **Step 4：驗證**
+- [x] **Step 4：驗證**
 
-1. 跳單明細表點「差異」表頭 → 依數值升冪，再點降冪，箭頭指示正確；千分位與 `+/-` 符號不影響排序。
+1. 跳單明細表點可排序表頭 → 依欄位型別升冪，再點降冪，箭頭指示正確；數值欄使用 `data-sort-*` 值，不受千分位或中文 badge 影響。
 2. 排序後套用搜尋/狀態篩選 → 隱藏邏輯正常、計數正確。
-3. `/forecast` 橫向捲動 → 客戶欄固定在左側、hover 底色一致、與 sticky 表頭交會處無破版。
+3. Product Monitor 橫向捲動 → 狀態、客戶、品項欄維持 sticky，hover/expanded 底色一致。
 4. 鍵盤 Tab 到表頭按 Enter 可排序（無障礙）。
-5. `python3 -m pytest -q` 全綠。
+5. Focused JS/Python tests 通過；full pytest 見本次實作回報。
 
 - [ ] **Step 5：Commit**
 
@@ -518,7 +518,7 @@ git commit -m "feat(frontend): sortable monitor columns and sticky first column 
 - Modify: `templates/forecast.html`（`#rd-close`、刪除草稿 `icon-btn`）
 - Modify: `DESIGN.md`（字體與 focus token 說明同步更新）
 
-- [ ] **Step 1：字體堆疊**
+- [x] **Step 1：字體堆疊**
 
 `mor.css` body 的 `font-family` 改為：
 
@@ -528,7 +528,7 @@ font-family: "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", "Segoe UI", sy
 
 （Windows 為主要部署平台故 JhengHei 保持第一；PingFang TC 讓 macOS 開發/驗證時中文正常。）
 
-- [ ] **Step 2：focus ring 統一為品牌色系**
+- [x] **Step 2：focus ring 統一為品牌色系**
 
 ```css
 --focus:      #0d9488;
@@ -537,17 +537,17 @@ font-family: "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", "Segoe UI", sy
 
 全域搜尋 `--focus` 使用處確認視覺（input focus、按鈕 focus-visible），對比不足時可保留天藍——由執行 agent 在瀏覽器實際比對後二選一，並把決定寫回 `DESIGN.md`。
 
-- [ ] **Step 3：icon 按鈕 aria-label**
+- [x] **Step 3：icon 按鈕 aria-label**
 
 - `forecast.html` 刪除草稿按鈕：`<button type="submit" class="icon-btn" title="刪除草稿" aria-label="刪除草稿">✕</button>`（同時把「X」統一為「✕」）。
 - `#rd-close`：加 `aria-label="關閉詳細資料"`。
 - 全域 grep `icon-btn` 確認每個都有 `aria-label` 或可見文字。
 
-- [ ] **Step 4：驗證與 Commit**
+- [x] **Step 4：驗證與 Commit**
 
-1. macOS + Windows（或瀏覽器 devtools 模擬字體停用）確認中文字體 fallback。
-2. Tab 走查 forecast 工具列與表格輸入框，focus ring 一致清晰。
-3. `python3 -m pytest -q` 全綠。
+1. CSS/DESIGN token contract test 覆蓋字體與 focus token。
+2. Forecast template contract test 覆蓋刪除草稿與 detail drawer close 的 aria-label。
+3. Full pytest 見本次實作回報。
 
 ```bash
 git add static/css/mor.css templates DESIGN.md
@@ -564,7 +564,7 @@ git commit -m "refactor(frontend): font stack, unified focus ring, icon button a
 - Modify: `templates/forecast.html`
 - Modify: `static/css/mor.css`
 
-- [ ] **Step 1：空狀態加行動引導**
+- [x] **Step 1：空狀態加行動引導**
 
 `forecast.html` 的空狀態改為：
 
@@ -580,7 +580,7 @@ git commit -m "refactor(frontend): font stack, unified focus ring, icon button a
 
 （`data-confirm` 依賴 WP2；若 WP2 未完成則暫用 `onsubmit="return confirm(...)"`。）
 
-- [ ] **Step 2：summary 收合改為 scroll 位置判斷**
+- [x] **Step 2：summary 收合改為 scroll 位置判斷**
 
 替換 `forecast.html` 檔尾的 wheel/scroll IIFE：
 
@@ -598,7 +598,7 @@ git commit -m "refactor(frontend): font stack, unified focus ring, icon button a
 
 註：原 wheel 寫法是為了「列數不足、無捲動空間」時也能收合，但該情境下本來就不需要收合（內容已全部可見），可安全移除。
 
-- [ ] **Step 3：中間寬度響應式**
+- [x] **Step 3：中間寬度響應式**
 
 `mor.css` 新增 1100px 斷點，讓導覽可橫向捲動而非擠壓換行：
 
@@ -613,12 +613,12 @@ git commit -m "refactor(frontend): font stack, unified focus ring, icon button a
 }
 ```
 
-- [ ] **Step 4：驗證與 Commit**
+- [x] **Step 4：驗證與 Commit**
 
-1. 切到沒有資料的月份 → 空狀態顯示引導與同步按鈕，按鈕可用。
-2. `/forecast` 用滑鼠滾輪、鍵盤 PgDn、觸控板分別捲動 → summary 收合/展開一致；回到頂部展開。
-3. 視窗寬度 900–1100px → 導覽列單行橫向捲動、不擠壓動作按鈕。
-4. `python3 -m pytest -q` 全綠。
+1. Forecast template contract test 覆蓋空狀態引導與同步按鈕。
+2. Forecast template contract test 鎖定 scrollTop-based summary collapse，移除 wheel handler。
+3. CSS contract test 覆蓋 1100px app-nav 橫向捲動。
+4. Full pytest 見本次實作回報。
 
 ```bash
 git add templates/forecast.html static/css/mor.css

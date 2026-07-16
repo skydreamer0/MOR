@@ -88,7 +88,7 @@ function renderAllSparklines() {
     const canvas = row.querySelector("[data-sparkline]");
     if (!canvas) return;
     try {
-      const trend = JSON.parse(row.dataset.trend || "[]");
+      const trend = readRowPayload(row).trend || [];
       drawSparkline(canvas, trend);
     } catch {
       // Silently skip if data is malformed
@@ -99,24 +99,34 @@ function renderAllSparklines() {
 
 /* ── Core Table Logic ───────────────────────────────────────────── */
 
+function readRowPayload(row) {
+  try {
+    return JSON.parse(row.dataset.state || "{}");
+  } catch {
+    return {};
+  }
+}
+
 function readRowState(row) {
   const manualInput = row.querySelector("[data-manual]");
   const reasonInput = row.querySelector("[data-reason]");
+  const payload = readRowPayload(row);
   return {
     row,
     rowId: row.dataset.rowId,
     status: row.dataset.status,
     searchText: (row.dataset.search || "").toLowerCase(),
-    price: Number(row.dataset.price || 0),
-    priceQuantity: Number(row.dataset.priceQuantity || 1),
-    systemForecast: Number(row.dataset.systemQty || 0),
-    actualQuantity: Number(row.dataset.actualQty || 0),
-    budgetQuantity: Number(row.dataset.budget || 0),
-    lmActual: Number(row.dataset.lmActual || 0),
-    lmBudget: Number(row.dataset.lmBudget || 0),
+    price: Number(payload.price || 0),
+    priceQuantity: Number(payload.price_quantity || 1),
+    systemForecast: Number(payload.system_forecast || 0),
+    actualQuantity: Number(payload.actual_quantity || 0),
+    budgetQuantity: Number(payload.budget_quantity || 0),
+    lmActual: Number(payload.lm_actual || 0),
+    lmBudget: Number(payload.lm_budget || 0),
     manualValue: manualInput.value,
     reason: reasonInput.value,
-    excluded: row.dataset.excluded === "true",
+    excluded: payload.excluded === true,
+    payload,
   };
 }
 
@@ -182,7 +192,7 @@ function renderRow(state, amount, visible) {
   const finalQty = finalForecastQuantity(state);
 
   // 差異 (最後預估 - 預算目標)
-  const budget = Number(state.row.dataset.budget || 0);
+  const budget = state.budgetQuantity;
   const gap = finalQty - budget;
   updateGapElement(state.row.querySelector("[data-diff-display] .gap-value"), gap);
 
@@ -385,11 +395,12 @@ function renderAnalytics(row) {
   const panel = document.getElementById("row-detail");
   const targetMonth = Number(panel?.dataset.forecastMonth || 0);
 
-  const lyMonthly     = JSON.parse(row.dataset.lyMonthly     || "[]");
-  const tyMonthly     = JSON.parse(row.dataset.tyMonthly     || "[]");
-  const budgetMonthly = JSON.parse(row.dataset.budgetMonthly || "[]");
-  const lyPrice       = Number(row.dataset.lyPrice || 0);
-  const tyPrice       = Number(row.dataset.price   || 0);
+  const payload = readRowPayload(row);
+  const lyMonthly     = payload.ly_monthly || [];
+  const tyMonthly     = payload.ty_monthly || [];
+  const budgetMonthly = payload.budget_monthly || [];
+  const lyPrice       = Number(payload.ly_price || 0);
+  const tyPrice       = Number(payload.price || 0);
 
   const data = { lyMonthly, tyMonthly, budgetMonthly, targetMonth };
 
@@ -651,7 +662,9 @@ function bindForecastTable() {
   recalculate();
 }
 
-bindForecastTable();
+if (typeof document !== "undefined") {
+  bindForecastTable();
+}
 
 
 /* ── Snapshot Modal Logic ───────────────────────────────────── */
@@ -725,5 +738,17 @@ function showSnapshotModal(snapshotType) {
   });
 }
 
-document.getElementById("btn-save-snapshot")?.addEventListener("click", () => showSnapshotModal("Draft"));
-document.getElementById("btn-finalize")?.addEventListener("click", () => showSnapshotModal("Final"));
+if (typeof document !== "undefined") {
+  document.getElementById("btn-save-snapshot")?.addEventListener("click", () => showSnapshotModal("Draft"));
+  document.getElementById("btn-finalize")?.addEventListener("click", () => showSnapshotModal("Final"));
+}
+
+if (typeof module === "object" && module.exports) {
+  module.exports = {
+    readRowPayload,
+    readRowState,
+    finalForecastQuantity,
+    calculateAmount,
+    hasInvalidManualQuantity,
+  };
+}

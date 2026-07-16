@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date
 import re
 
+from src.backend.amount_calculation import latest_price_quantity
 from src.backend.forecast_models import ForecastRow, ForecastSummary
 
 _ELI_DOSE_PATTERN = re.compile(r"^(ELI|ＥＬＩ)\s*(\d+(?:\.\d+)?)")
@@ -43,6 +44,25 @@ def serialize_summary(summary: ForecastSummary) -> dict:
         },
         "columns": column_schema(),
         "rows": [_serialize_row(row) for row in summary.rows],
+    }
+
+
+def serialize_row_state(row: ForecastRow) -> dict:
+    return {
+        "price": row.latest_price,
+        "price_quantity": latest_price_quantity(row),
+        "system_forecast": row.system_forecast,
+        "actual_quantity": row.this_year_same_month_qty,
+        "last_year_quantity": row.last_year_same_month_qty,
+        "budget_quantity": row.budget_quantity,
+        "excluded": row.excluded,
+        "trend": row.trend_6m or [0.0] * 6,
+        "lm_actual": row.last_month_actual,
+        "lm_budget": row.last_month_budget,
+        "ly_monthly": row.ly_monthly,
+        "ty_monthly": row.ty_monthly,
+        "budget_monthly": row.budget_monthly,
+        "ly_price": row.ly_price,
     }
 
 

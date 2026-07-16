@@ -43,8 +43,8 @@
   --warning-border:   #fde68a;
 
   /* Focus ring */
-  --focus:            #38bdf8;
-  --focus-ring:       rgba(56, 189, 248, 0.25);
+  --focus:            #0d9488;
+  --focus-ring:       rgba(13, 148, 136, 0.25);
 
   /* Interactive row states — #eef6ff/#e0f0ff kept blue-tinted intentionally for contrast with teal accent */
   --row-hover:        #eef6ff;
@@ -102,9 +102,13 @@
 
 body {
   margin: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  overflow: hidden;
   color: var(--ink);
   background: var(--bg);
-  font-family: "Microsoft JhengHei", "Segoe UI", Arial, sans-serif;
+  font-family: "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", "Segoe UI", system-ui, Arial, sans-serif;
   font-size: var(--text-base);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
@@ -375,6 +379,9 @@ button.is-loading::after {
 
 /* ── Main content ───────────────────────────────────────────── */
 main {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
   padding: var(--sp-5) var(--sp-6) var(--sp-6);
   max-width: 100%;
 }
@@ -387,7 +394,6 @@ main {
   display: flex;
   flex-direction: column;
   padding-bottom: var(--sp-3);
-  /* height set via JS to exactly fill below the sticky header */
 }
 
 .forecast-main > form#forecast-form {
@@ -1783,6 +1789,54 @@ details[open] .discontinued-toggle {
   padding-bottom: 8px;
 }
 
+.monitor-table th.sortable {
+  padding: 0;
+}
+
+.monitor-table th.sortable button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: inherit;
+  gap: var(--sp-1);
+  width: 100%;
+  min-height: 34px;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.monitor-table th.sortable button:hover {
+  color: var(--accent);
+}
+
+.monitor-table th.sortable button:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.monitor-table th.sortable [data-monitor-sort-indicator]::before {
+  content: "↕";
+  color: var(--muted-light);
+  font-size: 11px;
+}
+
+.monitor-table th.sortable[aria-sort="ascending"] [data-monitor-sort-indicator]::before {
+  content: "↑";
+  color: var(--accent);
+}
+
+.monitor-table th.sortable[aria-sort="descending"] [data-monitor-sort-indicator]::before {
+  content: "↓";
+  color: var(--accent);
+}
+
 .monitor-table th:nth-child(3),
 .monitor-table td:nth-child(3) {
   border-right: 1px solid var(--line-subtle);
@@ -2459,6 +2513,18 @@ details[open] .discontinued-toggle {
 
 
 /* ── Responsive ─────────────────────────────────────────────── */
+@media (max-width: 1100px) {
+  .app-nav {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    scrollbar-width: none;
+  }
+
+  .app-nav::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 @media (max-width: 768px) {
   header {
     flex-direction: column;

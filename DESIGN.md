@@ -59,8 +59,8 @@ All tokens are defined in `static/css/mor.css` `:root`. Edit values there; this 
 | `--warning-bg` | `#fffbeb` | Warning backgrounds |
 | `--warning-text` | `#92400e` | Warning text |
 | `--warning-border` | `#fde68a` | Warning borders |
-| `--focus` | `#38bdf8` | Keyboard focus ring color |
-| `--focus-ring` | `rgba(56,189,248,0.25)` | Focus ring glow |
+| `--focus` | `#0d9488` | Keyboard focus ring color |
+| `--focus-ring` | `rgba(13,148,136,0.25)` | Focus ring glow |
 
 **Interactive Row States**
 
@@ -71,7 +71,7 @@ All tokens are defined in `static/css/mor.css` `:root`. Edit values there; this 
 
 ## 3. Typography Rules
 
-Use `"Microsoft JhengHei", "Segoe UI", Arial, sans-serif`.
+Use `"Microsoft JhengHei", "PingFang TC", "Noto Sans TC", "Segoe UI", system-ui, Arial, sans-serif`.
 
 | Element | Size | Weight | Notes |
 | --- | --- | --- | --- |

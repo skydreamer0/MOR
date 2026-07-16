@@ -8,20 +8,7 @@
   data-status="{{ 'auto' if row.auto_in_month else 'not_due' }}"
   data-item-status="{{ row.item_status }}"
   data-search="{{ row.customer }} {{ row.product_name }}"
-  data-price="{{ row.latest_price }}"
-  data-price-quantity="{% if row.price_quantity > 0 %}{{ row.price_quantity }}{% elif row.budget_quantity > 0 and row.base_budget_quantity > 0 %}{{ row.budget_quantity / row.base_budget_quantity }}{% else %}1{% endif %}"
-  data-system-qty="{{ row.system_forecast }}"
-  data-actual-qty="{{ row.this_year_same_month_qty }}"
-  data-last-year-qty="{{ row.last_year_same_month_qty }}"
-  data-budget="{{ row.budget_quantity }}"
-  data-excluded="{{ 'true' if row.excluded else 'false' }}"
-  data-trend="{{ row.trend_6m | tojson if row.trend_6m else '[0,0,0,0,0,0]' }}"
-  data-lm-actual="{{ row.last_month_actual }}"
-  data-lm-budget="{{ row.last_month_budget }}"
-  data-ly-monthly="{{ row.ly_monthly | tojson }}"
-  data-ty-monthly="{{ row.ty_monthly | tojson }}"
-  data-budget-monthly="{{ row.budget_monthly | tojson }}"
-  data-ly-price="{{ row.ly_price }}"
+  data-state='{{ serialize_row_state(row) | tojson }}'
 >
   <!-- 1. 客戶 — accent bar driven by CSS via data-status / data-item-status on the <tr> -->
   <td>{{ row.customer }}</td>

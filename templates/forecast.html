@@ -17,7 +17,7 @@
       <section class="alert" role="alert">{{ error_message }}</section>
     {% endif %}
 
-    <section class="summary">
+    <section class="summary" data-collapse-on-scroll=".table-wrap" data-collapse-class="summary--collapsed" data-collapse-threshold="24">
       <div class="metric"><span>預估月份</span><strong>{% if year and month %}{{ year }}/{{ "%02d"|format(month|int) }}{% else %}--{% endif %}</strong></div>
       <div class="metric"><span>總列數</span><strong>{{ shown_count }} / {{ row_count }}</strong></div>
       <div class="metric"><span>自動預估列</span><strong>{{ rows|selectattr("auto_in_month")|list|length }}</strong></div>
@@ -49,7 +49,7 @@
               <input type="hidden" name="snapshot_id" value="{{ snap.id }}">
               <input type="hidden" name="year" value="{{ year }}">
               <input type="hidden" name="month" value="{{ month }}">
-              <button type="submit" class="icon-btn" title="刪除草稿">X</button>
+              <button type="submit" class="icon-btn" title="刪除草稿" aria-label="刪除草稿">✕</button>
             </form>
             {% endif %}
           </div>
@@ -60,7 +60,15 @@
     {% endif %}
 
     {% if not rows and not error_message %}
-      <section class="empty-state">沒有可調整的預估資料。</section>
+      <section class="empty-state">
+        <p>沒有可調整的預估資料。</p>
+        <p class="muted">請先同步 Excel 資料，或切換到有資料的月份。</p>
+        <form action="/sync" method="post"
+              data-confirm="確定要同步 Excel 資料到工作台？"
+              data-confirm-title="同步 Excel 資料">
+          <button type="submit" class="btn-secondary">同步資料</button>
+        </form>
+      </section>
     {% endif %}
 
     <form method="post" action="/export" id="forecast-form">
@@ -146,7 +154,7 @@
           <p class="row-detail__customer" id="rd-customer"></p>
           <h3 class="row-detail__product" id="rd-product"></h3>
         </div>
-        <button type="button" class="icon-btn rd-close-btn" id="rd-close" title="關閉">✕</button>
+        <button type="button" class="icon-btn rd-close-btn" id="rd-close" title="關閉" aria-label="關閉詳細資料">✕</button>
       </div>
       <div class="row-detail__body">
         <div class="detail-section" id="rd-lm-section">
@@ -232,40 +240,5 @@
   </main>
 
   <script src="{{ url_for('static', filename='js/forecast-table.js') }}"></script>
-  <script>
-    // 填滿視窗高度（扣掉 sticky header）
-    (function () {
-      const header = document.querySelector('header');
-      const main   = document.querySelector('.forecast-main');
-      if (!header || !main) return;
-      function resize() {
-        main.style.height = (window.innerHeight - header.offsetHeight) + 'px';
-      }
-      resize();
-      window.addEventListener('resize', resize);
-    })();
-
-    // 捲動 table-wrap 時收合 summary
-    // wheel 偵測向下方向（不依賴 scrollTop，列數不足時也能正確觸發）
-    // scroll 偵測回到頂部才展開
-    (function () {
-      const summary   = document.querySelector('.summary');
-      const tableWrap = document.querySelector('.table-wrap');
-      if (!summary || !tableWrap) return;
-      let isCollapsed = false;
-      tableWrap.addEventListener('wheel', (e) => {
-        if (e.deltaY > 0 && !isCollapsed) {
-          isCollapsed = true;
-          summary.classList.add('summary--collapsed');
-        }
-      }, { passive: true });
-      tableWrap.addEventListener('scroll', () => {
-        if (isCollapsed && tableWrap.scrollTop < 8) {
-          isCollapsed = false;
-          summary.classList.remove('summary--collapsed');
-        }
-      }, { passive: true });
-    })();
-  </script>
 </body>
 </html>

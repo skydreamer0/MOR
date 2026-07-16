@@ -7,7 +7,7 @@
  *   AnalyticsTable.mount(tbody, slices, {
  *     targetMonth: 7,
  *     idPrefix: "cust",
- *     columns: ["lyAmount","budgetAmount","tyAmount","budgetRate","yoyRatio","trendLabel","spark"],
+ *     columns: ["lyAmount","budgetAmount","tyAmount","budgetRate","yoyDelta","trendLabel","spark"],
  *     boldLabel: true,
  *     expandable: true,          // click/Enter toggles the detail row
  *     sparkSeries: "amount",     // "amount" | "qty"
@@ -18,7 +18,7 @@
  *   budgetRate                          — 預算達成 (positive/negative)
  *   yoyDelta                            — YoY as signed delta, amount-based
  *   yoyQtyDelta                         — YoY as signed delta, quantity-based
- *   yoyRatio                            — YoY as ratio (100% = 持平), amount-based
+ *   yoyRatio                            — legacy ratio display; do not use for management analytics
  *   trendIcon / trendLabel              — 趨勢 arrow, with/without 上升/下滑 text
  *   spark                               — 12-month sparkline canvas
  *

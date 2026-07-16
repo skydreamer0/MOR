@@ -696,9 +696,50 @@ def test_shared_confirm_dialog_assets_replace_inline_confirm_handlers():
 
     assert 'data-confirm-title="同步 Excel 資料"' in header
     assert 'data-confirm-title="刪除草稿"' in forecast
+    assert 'aria-label="刪除草稿"' in forecast
+    assert 'id="rd-close" title="關閉" aria-label="關閉詳細資料"' in forecast
     assert 'data-confirm-ok="結月"' in monitor
     assert ".app-confirm" in css
     assert "button.is-loading" in css
+
+
+def test_frontend_accessibility_tokens_follow_design_roadmap():
+    css = Path("static/css/mor.css").read_text(encoding="utf-8")
+    design = Path("DESIGN.md").read_text(encoding="utf-8")
+
+    assert 'font-family: "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", "Segoe UI", system-ui, Arial, sans-serif;' in css
+    assert "--focus:            #0d9488;" in css
+    assert "--focus-ring:       rgba(13, 148, 136, 0.25);" in css
+    assert "| `--focus` | `#0d9488` |" in design
+    assert "| `--focus-ring` | `rgba(13,148,136,0.25)` |" in design
+
+
+def test_layout_behaviors_are_shared_and_css_driven():
+    forecast = Path("templates/forecast.html").read_text(encoding="utf-8")
+    monitor = Path("templates/product_monitor.html").read_text(encoding="utf-8")
+    settings = Path("templates/settings.html").read_text(encoding="utf-8")
+    customers = Path("templates/customers.html").read_text(encoding="utf-8")
+    products = Path("templates/products.html").read_text(encoding="utf-8")
+    head_assets = Path("templates/_head_assets.html").read_text(encoding="utf-8")
+    css = Path("static/css/mor.css").read_text(encoding="utf-8")
+
+    assert "請先同步 Excel 資料，或切換到有資料的月份。" in forecast
+    assert 'action="/sync"' in forecast
+    assert 'data-confirm-title="同步 Excel 資料"' in forecast
+    assert "js/behaviors.js" in head_assets
+    for template in (forecast, monitor, settings, customers, products):
+        assert "window.innerHeight" not in template
+        assert "main.style.height" not in template
+        assert "addEventListener('resize'" not in template
+    assert 'data-collapse-on-scroll=".table-wrap"' in forecast
+    assert 'data-collapse-class="summary--collapsed"' in forecast
+    assert 'data-collapse-on-wheel=".monitor-table-wrap"' in monitor
+    assert 'data-collapse-class="import-toolbar--collapsed"' in monitor
+    assert "height: 100dvh;" in css
+    assert "height set via JS" not in css
+    assert "@media (max-width: 1100px)" in css
+    assert ".app-nav::-webkit-scrollbar" in css
+    assert "scrollbar-width: none;" in css
 
 
 def test_old_exclusions_page_redirects_to_item_management():
@@ -744,7 +785,7 @@ def test_item_management_exclusion_is_reflected_on_workbench():
     workbench = client.get("/forecast").get_data(as_text=True)
 
     assert response.status_code == 200
-    assert re.search(r'data-search="[^"]*Product Two"[^>]*data-excluded="true"', workbench)
+    assert re.search(r'data-search="[^"]*Product Two"[^>]*data-state=\'[^\']*"excluded": true', workbench)
 
 
 def test_forecast_page_layers_discontinued_items_below_active_rows():
@@ -850,9 +891,11 @@ def test_item_settings_save_price_quantity_and_forecast_uses_it():
         saved = conn.execute("SELECT price_quantity FROM item_configs WHERE product_code = 'P1'").fetchone()
     assert "price_quantity" in columns
     assert saved == (100,)
-    assert 'data-price-quantity="100' in forecast
-    # Estimated amount is now computed client-side from data attributes
-    assert 'data-price=' in forecast
+    assert '"price_quantity": 100' in forecast
+    # Estimated amount is now computed client-side from the row state JSON.
+    assert "data-state='" in forecast
+    assert "data-price-quantity=" not in forecast
+    assert "data-price=" not in forecast
 
 
 def test_item_settings_save_persists_payload_shape_to_item_configs():
@@ -988,7 +1031,7 @@ def test_unbudgeted_item_has_no_budget_target_on_forecast_page():
     forecast = client.get("/forecast?year=2026&month=4").get_data(as_text=True)
 
     assert response.status_code == 200
-    assert 'data-budget="0.0"' in forecast
+    assert '"budget_quantity": 0.0' in forecast
 
 
 def test_adjustment_save_migrates_old_database_without_updated_by():
@@ -1139,11 +1182,13 @@ def test_forecast_table_totals_only_include_budgeted_rows():
     js = Path("static/js/forecast-table.js").read_text(encoding="utf-8")
     row_template = Path("templates/_forecast_row.html").read_text(encoding="utf-8")
 
-    assert "budgetQuantity: Number(row.dataset.budget || 0)" in js
-    assert "priceQuantity: Number(row.dataset.priceQuantity || 1)" in js
+    assert "budgetQuantity: Number(payload.budget_quantity || 0)" in js
+    assert "priceQuantity: Number(payload.price_quantity || 1)" in js
     assert "(finalForecastQuantity(state) / priceQuantity) * state.price" in js
     assert "state.budgetQuantity <= 0" in js
-    assert "data-price-quantity=" in row_template
+    assert "data-state='{{ serialize_row_state(row) | tojson }}'" in row_template
+    for old_attr in ("data-price=", "data-price-quantity=", "data-system-qty=", "data-budget=", "data-budget-monthly="):
+        assert old_attr not in row_template
 
 
 def test_forecast_detail_uses_neutral_zero_budget_status():
@@ -1195,6 +1240,15 @@ def test_dashboard_sparkline_canvas_ids_do_not_depend_on_entity_labels():
     assert 'idPrefix: "customer"' in dashboard
     assert 'idPrefix: "product"' in dashboard
     assert "spark-${opts.idPrefix}-${idx}" in table_module
+
+
+def test_management_analytics_pages_use_yoy_delta_semantics():
+    for template_name in ("templates/customers.html", "templates/products.html"):
+        template = Path(template_name).read_text(encoding="utf-8")
+
+        assert "<th class=\"num\">YoY 成長率</th>" in template
+        assert '"yoyDelta"' in template
+        assert '"yoyRatio"' not in template
 
 
 def test_dashboard_progress_hero_uses_dense_metric_layout():
@@ -1268,6 +1322,9 @@ def test_product_monitor_page_renders_drop_table():
     assert "高風險" in html
     assert html.index("monitor-sticky--status") < html.index("monitor-sticky--customer")
     assert html.index("monitor-sticky--customer") < html.index("monitor-sticky--product")
+    assert 'data-monitor-sort="status"' in html
+    assert 'data-monitor-sort="forecast"' in html
+    assert 'aria-sort="none"' in html
     assert 'title="ELI 22.5癌立佳">ELI 22.5</td>' in html
     assert "ID: P1" not in html
     assert "data-monitor-search" in html
@@ -1465,6 +1522,29 @@ def test_forecast_table_rebinds_row_events_after_htmx_swap():
     assert "htmx:afterSwap" in script
     assert "bindForecastRow" in script
     assert "data-forecast-bound" in script
+
+
+def test_patch_forecast_row_returns_data_state_contract():
+    client = _client_with_sales()
+    page = client.get("/forecast").get_data(as_text=True)
+    row_id = re.search(r'data-row-id="([^"]+)"', page).group(1)
+
+    response = client.patch(
+        f"/forecast/row/{row_id}",
+        data={"qty": "7", "note": "reviewed", "year": "2026", "month": "5"},
+    )
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "data-state='" in html
+    assert 'data-row-id="' in html
+    assert 'data-customer="' in html
+    assert 'data-risk="' in html
+    assert 'data-status="' in html
+    assert 'data-item-status="' in html
+    assert 'hx-patch="' in html
+    for old_attr in ("data-price=", "data-price-quantity=", "data-system-qty=", "data-budget=", "data-budget-monthly="):
+        assert old_attr not in html
 
 
 def test_forecast_table_supports_keyboard_navigation_for_manual_inputs():
