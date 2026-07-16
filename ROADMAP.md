@@ -26,14 +26,6 @@ Recommended order:
    - Proposed target: `>=100` success, `90-99` warning, `80-89` caution, `<80` danger.
    - If approved, update `static/js/fmt.js`, `templates/_value_macros.html`, relevant progress bars, product monitor monthly-history cells, and tests.
 
-2. **FE-6: Accessibility/Guidelines Backlog**
-   - Add reduced-motion support for infinite/flash/pulse animations.
-   - Add `aria-live="polite"` to forecast save status and dashboard metrics swap target.
-   - Keyboard-enable product monitor expandable rows.
-   - Add Escape/focus handling for forecast snapshot modal and row-detail drawer.
-   - Replace hidden upload input `display:none` with keyboard-accessible `.sr-only`.
-   - Check whether `items.html` is still used before editing or deleting it.
-
 ## Completed Summary
 
 Done and no longer active roadmap material:
@@ -46,6 +38,7 @@ Done and no longer active roadmap material:
 - FE-3 Forecast row `data-state` contract: calculation fields moved into row JSON state; selector/HTMX hooks stay separate.
 - FE-5 YoY display decision: signed delta everywhere for management analytics.
 - FE-4 layout behavior deduplication: CSS-driven workbench height plus shared `behaviors.js` scroll-collapse wiring.
+- FE-6 accessibility/guidelines backlog: reduced-motion support, polite live regions, Product Monitor keyboard row expansion, Forecast drawer/snapshot modal Escape and focus handling, accessible header upload input, and `items.html` retained for separate route/template cleanup.
 - Release packaging: app-data runtime paths, release build scripts, GitHub Actions workflow, release boundary tests, and focused final check.
 
 ## Current Module Map

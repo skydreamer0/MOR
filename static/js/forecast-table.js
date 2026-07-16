@@ -315,12 +315,22 @@ const saveToServer = debounce((state) => {
 /* ── Row Detail Panel ────────────────────────────────────────────── */
 
 let _detailRowId = null;
+let _detailReturnFocus = null;
+
+function restoreFocus(target) {
+  if (!target || typeof target.focus !== "function") return;
+  if (target.isConnected === false) return;
+  target.focus({ preventScroll: true });
+}
 
 function openDetailPanel(row) {
   const panel   = document.getElementById("row-detail");
   const backdrop = document.getElementById("row-detail-backdrop");
   if (!panel || !backdrop) return;
 
+  if (!_detailRowId) {
+    _detailReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  }
   _detailRowId = row.dataset.rowId;
 
   const state = readRowState(row);
@@ -357,6 +367,7 @@ function openDetailPanel(row) {
   requestAnimationFrame(() => {
     panel.classList.add("open");
     backdrop.classList.add("open");
+    document.getElementById("rd-close")?.focus({ preventScroll: true });
   });
 }
 
@@ -455,20 +466,36 @@ function renderAnalytics(row) {
   }
 }
 
-function closeDetailPanel() {
+function closeDetailPanel(options = {}) {
   const panel    = document.getElementById("row-detail");
   const backdrop = document.getElementById("row-detail-backdrop");
   if (!panel || !backdrop) return;
+
+  const returnFocus = _detailReturnFocus;
+  const shouldRestoreFocus = options.restoreFocus !== false;
+  let closed = false;
+
+  function finishClose() {
+    if (closed) return;
+    closed = true;
+    panel.hidden    = true;
+    backdrop.hidden = true;
+    _detailReturnFocus = null;
+    if (shouldRestoreFocus) restoreFocus(returnFocus);
+  }
 
   panel.classList.remove("open");
   backdrop.classList.remove("open");
   document.querySelectorAll("tr.row-detail-active").forEach(r => r.classList.remove("row-detail-active"));
   _detailRowId = null;
 
-  panel.addEventListener("transitionend", () => {
-    panel.hidden    = true;
-    backdrop.hidden = true;
-  }, { once: true });
+  const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true;
+  if (reducedMotion) {
+    finishClose();
+  } else {
+    panel.addEventListener("transitionend", finishClose, { once: true });
+    setTimeout(finishClose, 320);
+  }
 }
 
 /* ── View Toggle (只看異常 / 全部明細) ──────────────────────────── */
@@ -616,14 +643,30 @@ function bindKeyboardNavigation() {
   if (!markForecastBound(document.body, "data-forecast-keyboard-bound")) return;
   document.addEventListener("keydown", (e) => {
     const input = e.target instanceof Element ? e.target.closest("[data-manual]") : null;
-    if (!input) return;
 
     if (e.key === "Escape") {
-      const restore = input.closest("[data-row]")?.querySelector("[data-restore]");
-      if (restore && !restore.hidden) restore.click();
+      if (input) {
+        const restore = input.closest("[data-row]")?.querySelector("[data-restore]");
+        if (restore && !restore.hidden) restore.click();
+        e.preventDefault();
+        return;
+      }
+
+      const modal = document.querySelector("[data-snapshot-modal]");
+      if (modal) {
+        closeSnapshotModal(modal, { restoreFocus: true });
+        e.preventDefault();
+        return;
+      }
+
+      if (_detailRowId) {
+        closeDetailPanel({ restoreFocus: true });
+        e.preventDefault();
+      }
       return;
     }
 
+    if (!input) return;
     if (e.key !== "Enter" && e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
 
     e.preventDefault();
@@ -670,6 +713,7 @@ if (typeof document !== "undefined") {
 /* ── Snapshot Modal Logic ───────────────────────────────────── */
 
 function showSnapshotModal(snapshotType) {
+  const returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const year = document.querySelector('input[name="year"]')?.value;
   const month = document.querySelector('input[name="month"]')?.value;
   const isFinalize = snapshotType === "Final";
@@ -679,9 +723,11 @@ function showSnapshotModal(snapshotType) {
 
   const backdrop = document.createElement("div");
   backdrop.className = "modal-backdrop";
+  backdrop.setAttribute("data-snapshot-modal", "");
+  backdrop._returnFocus = returnFocus;
   backdrop.innerHTML = `
-    <div class="modal-card">
-      <h2>${isFinalize ? "確認定稿" : "儲存草稿"}</h2>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="snapshot-modal-title">
+      <h2 id="snapshot-modal-title">${isFinalize ? "確認定稿" : "儲存草稿"}</h2>
       ${isFinalize ? '<p style="color: var(--danger); font-weight: 600; margin: 0 0 16px 0;">定稿後將無法再修改本月預估。</p>' : ""}
       <label>
         版本名稱
@@ -697,11 +743,12 @@ function showSnapshotModal(snapshotType) {
   `;
 
   document.body.appendChild(backdrop);
-  const nameInput = backdrop.querySelector("#snapshot-name-input");
-  nameInput.select();
+  focusSnapshotModal(backdrop);
 
-  backdrop.querySelector("#modal-cancel").addEventListener("click", () => backdrop.remove());
-  backdrop.addEventListener("click", (e) => { if (e.target === backdrop) backdrop.remove(); });
+  backdrop.querySelector("#modal-cancel").addEventListener("click", () => closeSnapshotModal(backdrop, { restoreFocus: true }));
+  backdrop.addEventListener("click", (e) => {
+    if (e.target === backdrop) closeSnapshotModal(backdrop, { restoreFocus: true });
+  });
 
   backdrop.querySelector("#modal-confirm").addEventListener("click", async () => {
     if (isFinalize && window.appConfirm) {
@@ -738,6 +785,19 @@ function showSnapshotModal(snapshotType) {
   });
 }
 
+function focusSnapshotModal(backdrop) {
+  const nameInput = backdrop.querySelector("#snapshot-name-input");
+  nameInput?.focus({ preventScroll: true });
+  nameInput?.select();
+}
+
+function closeSnapshotModal(backdrop, options = {}) {
+  if (!backdrop) return;
+  const returnFocus = backdrop._returnFocus;
+  backdrop.remove();
+  if (options.restoreFocus !== false) restoreFocus(returnFocus);
+}
+
 if (typeof document !== "undefined") {
   document.getElementById("btn-save-snapshot")?.addEventListener("click", () => showSnapshotModal("Draft"));
   document.getElementById("btn-finalize")?.addEventListener("click", () => showSnapshotModal("Final"));
@@ -750,5 +810,10 @@ if (typeof module === "object" && module.exports) {
     finalForecastQuantity,
     calculateAmount,
     hasInvalidManualQuantity,
+    restoreFocus,
+    closeDetailPanel,
+    showSnapshotModal,
+    focusSnapshotModal,
+    closeSnapshotModal,
   };
 }
