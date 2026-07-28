@@ -1,5 +1,6 @@
 {# _value_macros.html — semantic value formatting, defined once for all templates.
    台灣慣例（方向性）：漲=紅(.rising)、跌=綠(.falling)；達成語意：達成=綠、未達=紅。
+   達成率四階門檻：>=100 成功(.success-text)、90-99 警戒(.rate-warning)、80-89 注意(.caution-text)、<80 危險(.danger-text)。
    JS-side twin: static/js/fmt.js — keep thresholds in sync with it. #}
 {% macro yoy(growth) -%}
   {%- if growth is not none -%}
@@ -13,7 +14,7 @@
 {% macro achievement(value) -%}
   {%- if value is not none -%}
     {%- set pct = value * 100 -%}
-    <span class="{% if pct >= 100 %}success-text{% elif pct >= 90 %}rate-warning{% else %}danger-text{% endif %}">{{ "{:.1f}%".format(pct) }}</span>
+    <span class="{% if pct >= 100 %}success-text{% elif pct >= 90 %}rate-warning{% elif pct >= 80 %}caution-text{% else %}danger-text{% endif %}">{{ "{:.1f}%".format(pct) }}</span>
   {%- else -%}
     <span class="muted">-</span>
   {%- endif -%}

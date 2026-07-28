@@ -144,7 +144,7 @@
           <tbody>
             {% for row in rows %}
             {# ── 主列 ── #}
-            <tr data-monitor-row aria-expanded="false"
+            <tr data-monitor-row aria-expanded="false" tabindex="0"
                 data-status="{{ row.status_key }}"
                 data-cycle-status="{{ row.cycle_status }}"
                 data-gap-trend="{{ row.gap_trend }}"
@@ -359,7 +359,7 @@
                           <div class="budget-bar-row">
                             <span class="budget-bar-label">推估</span>
                             <div class="budget-bar-track">
-                              <div class="budget-bar-fill budget-bar-fill--estimated {% if est_pct >= 100 %}budget-bar-fill--ok{% elif est_pct >= 80 %}budget-bar-fill--warn{% else %}budget-bar-fill--danger{% endif %}" style="width:{{ est_pct }}%"></div>
+                              <div class="budget-bar-fill budget-bar-fill--estimated {% if est_pct >= 100 %}budget-bar-fill--ok{% elif est_pct >= 90 %}budget-bar-fill--warning{% elif est_pct >= 80 %}budget-bar-fill--caution{% else %}budget-bar-fill--danger{% endif %}" style="width:{{ est_pct }}%"></div>
                             </div>
                             <span class="budget-bar-value">{{ "{:,.0f}".format(row.estimated_eom_qty) }} <span class="muted">({{ "{:.0f}%".format(est_pct) }})</span></span>
                           </div>
@@ -448,7 +448,7 @@
                           <td class="num">
                             {% if m.budget > 0 and m.actual > 0 %}
                               {% set ach = m.actual / m.budget * 100 %}
-                              <span class="{% if ach >= 100 %}success-text{% elif ach >= 80 %}rate-warning{% else %}danger-text{% endif %}">
+                              <span class="{% if ach >= 100 %}success-text{% elif ach >= 90 %}rate-warning{% elif ach >= 80 %}caution-text{% else %}danger-text{% endif %}">
                                 {{ "{:.0f}%".format(ach) }}
                               </span>
                             {% else %}<span class="muted">-</span>{% endif %}

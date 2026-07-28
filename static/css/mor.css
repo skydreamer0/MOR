@@ -346,6 +346,10 @@ button.is-loading::after {
   to { transform: rotate(360deg); }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  button.is-loading::after { animation: none; }
+}
+
 .app-confirm {
   min-width: 320px;
   max-width: 420px;
@@ -1422,6 +1426,13 @@ td.col-group-end + td {
   animation: save-pulse 0.4s var(--ease-out);
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .value-flash,
+  #save-status {
+    animation: none;
+  }
+}
+
 
 /* ── Phase 4: Hide number input spinners ────────────────────── */
 input[type="number"]::-webkit-outer-spin-button,
@@ -2187,6 +2198,10 @@ details[open] .discontinued-toggle {
   50% { opacity: 0.4; }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .remaining-dot { animation: none; }
+}
+
 /* Progress bar layout */
 .progress-body {
   display: grid;
@@ -2645,6 +2660,7 @@ details[open] .discontinued-toggle {
 
 /* ── Monitor: whole-row expand ── */
 [data-monitor-row] { cursor: pointer; }
+[data-monitor-row]:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 
 [data-monitor-row][aria-expanded="true"] td { background: var(--accent-subtle); }
 [data-monitor-row][aria-expanded="true"] td.monitor-sticky { background: var(--accent-subtle); }

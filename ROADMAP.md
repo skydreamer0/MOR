@@ -1,6 +1,6 @@
 # MOR Roadmap
 
-Last reviewed: 2026-07-16
+Last reviewed: 2026-07-28
 
 This file is the active source of truth for remaining MOR work. Keep it short.
 Historical implementation plans, archived docs, and superseded files should not be used as implementation context unless the user explicitly asks.
@@ -18,21 +18,7 @@ Rules for remaining work:
 
 ## Remaining Work
 
-Recommended order:
-
-1. **FE-5: Achievement Threshold Decision**
-   - YoY decision is complete: customer/product analytics use signed delta (`+10.0%`) and column label `YoY 成長率`; do not return to ratio display (`110.0%`).
-   - Remaining decision: unify achievement/budget-rate thresholds.
-   - Proposed target: `>=100` success, `90-99` warning, `80-89` caution, `<80` danger.
-   - If approved, update `static/js/fmt.js`, `templates/_value_macros.html`, relevant progress bars, product monitor monthly-history cells, and tests.
-
-2. **FE-6: Accessibility/Guidelines Backlog**
-   - Add reduced-motion support for infinite/flash/pulse animations.
-   - Add `aria-live="polite"` to forecast save status and dashboard metrics swap target.
-   - Keyboard-enable product monitor expandable rows.
-   - Add Escape/focus handling for forecast snapshot modal and row-detail drawer.
-   - Replace hidden upload input `display:none` with keyboard-accessible `.sr-only`.
-   - Check whether `items.html` is still used before editing or deleting it.
+No active items. Add new work here when it's identified.
 
 ## Completed Summary
 
@@ -45,8 +31,10 @@ Done and no longer active roadmap material:
 - Frontend architecture FE-1/FE-2: shared analytics table controller and shared semantic formatting.
 - FE-3 Forecast row `data-state` contract: calculation fields moved into row JSON state; selector/HTMX hooks stay separate.
 - FE-5 YoY display decision: signed delta everywhere for management analytics.
+- FE-5 achievement/budget-rate threshold decision: unified 4-tier `>=100` success / `90-99` warning / `80-89` caution / `<80` danger across `static/js/fmt.js`, `static/js/analytics-renderer.js`, `templates/_value_macros.html`, and Product Monitor progress bars/monthly-history cells.
 - FE-4 layout behavior deduplication: CSS-driven workbench height plus shared `behaviors.js` scroll-collapse wiring.
 - Release packaging: app-data runtime paths, release build scripts, GitHub Actions workflow, release boundary tests, and focused final check.
+- FE-6 Accessibility/Guidelines backlog: reduced-motion support (`button.is-loading`/`value-flash`/`save-status`/`remaining-dot`), `aria-live="polite"` on forecast save status and dashboard metrics zone, keyboard-enabled Product Monitor expandable rows (`tabindex`, Enter/Space, focus-visible outline), Escape/focus handling for the forecast snapshot modal and row-detail drawer (focus moves in on open, returns to trigger on close), hidden upload input in `_header.html` switched from `display:none` to `.sr-only`. `items.html` confirmed still routed (`/items`, `/items/save`) — kept as-is.
 
 ## Current Module Map
 

@@ -102,7 +102,7 @@
         <div class="filter-group toolbar-actions">
           <span>顯示 <strong data-visible-count>0</strong> / {{ row_count }}</span>
           <span id="edited-badge" hidden>已調整 <strong data-edited-count>0</strong></span>
-          <span id="save-status"></span>
+          <span id="save-status" aria-live="polite"></span>
           <span class="toolbar-divider" aria-hidden="true"></span>
           {% if not is_finalized %}
           <button type="button" id="btn-save-snapshot" class="btn-secondary btn-toolbar">草稿</button>

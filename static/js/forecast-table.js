@@ -315,6 +315,7 @@ const saveToServer = debounce((state) => {
 /* ── Row Detail Panel ────────────────────────────────────────────── */
 
 let _detailRowId = null;
+let _detailReturnFocusEl = null;
 
 function openDetailPanel(row) {
   const panel   = document.getElementById("row-detail");
@@ -322,6 +323,7 @@ function openDetailPanel(row) {
   if (!panel || !backdrop) return;
 
   _detailRowId = row.dataset.rowId;
+  _detailReturnFocusEl = row.querySelector("[data-manual]") || null;
 
   const state = readRowState(row);
 
@@ -357,6 +359,7 @@ function openDetailPanel(row) {
   requestAnimationFrame(() => {
     panel.classList.add("open");
     backdrop.classList.add("open");
+    document.getElementById("rd-close")?.focus();
   });
 }
 
@@ -464,6 +467,8 @@ function closeDetailPanel() {
   backdrop.classList.remove("open");
   document.querySelectorAll("tr.row-detail-active").forEach(r => r.classList.remove("row-detail-active"));
   _detailRowId = null;
+  _detailReturnFocusEl?.focus();
+  _detailReturnFocusEl = null;
 
   panel.addEventListener("transitionend", () => {
     panel.hidden    = true;
@@ -563,6 +568,14 @@ function bindForecastControls() {
   const backdrop = document.getElementById("row-detail-backdrop");
   if (backdrop && markForecastBound(backdrop)) {
     backdrop.addEventListener("click", closeDetailPanel);
+  }
+
+  if (markForecastBound(document.body, "data-forecast-detail-escape-bound")) {
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      const panel = document.getElementById("row-detail");
+      if (panel && !panel.hidden) closeDetailPanel();
+    });
   }
 
   const anomalyButton = document.getElementById("btn-anomaly-only");
@@ -670,6 +683,7 @@ if (typeof document !== "undefined") {
 /* ── Snapshot Modal Logic ───────────────────────────────────── */
 
 function showSnapshotModal(snapshotType) {
+  const triggerEl = document.activeElement;
   const year = document.querySelector('input[name="year"]')?.value;
   const month = document.querySelector('input[name="month"]')?.value;
   const isFinalize = snapshotType === "Final";
@@ -700,8 +714,16 @@ function showSnapshotModal(snapshotType) {
   const nameInput = backdrop.querySelector("#snapshot-name-input");
   nameInput.select();
 
-  backdrop.querySelector("#modal-cancel").addEventListener("click", () => backdrop.remove());
-  backdrop.addEventListener("click", (e) => { if (e.target === backdrop) backdrop.remove(); });
+  const closeModal = () => {
+    backdrop.remove();
+    document.removeEventListener("keydown", onKeydown);
+    triggerEl?.focus();
+  };
+  const onKeydown = (e) => { if (e.key === "Escape") closeModal(); };
+  document.addEventListener("keydown", onKeydown);
+
+  backdrop.querySelector("#modal-cancel").addEventListener("click", closeModal);
+  backdrop.addEventListener("click", (e) => { if (e.target === backdrop) closeModal(); });
 
   backdrop.querySelector("#modal-confirm").addEventListener("click", async () => {
     if (isFinalize && window.appConfirm) {

@@ -317,8 +317,12 @@ const AnalyticsRenderer = (() => {
     // 方向性比較（vs 去年）：台灣慣例 漲=rising(紅)、跌=falling(綠)
     const gapCls      = ytdGapVsLy   >= 0   ? "rising"   : "falling";
     const rateVsLyCls = ytdRateVsLy  >= 100 ? "rising"   : "falling";
-    // 預算達成率：達成語意，≥100%=好=positive(綠)，<80%=差=negative(紅)
-    const budRateCls  = ytdBudgetRate >= 100 ? "positive" : ytdBudgetRate > 0 && ytdBudgetRate < 80 ? "negative" : "";
+    // 預算達成率四階：≥100=positive(綠)，90-99=warning(橙)，80-89=caution(棕)，<80=negative(紅)
+    const budRateCls  = ytdBudgetRate <= 0 ? ""
+      : ytdBudgetRate >= 100 ? "positive"
+      : ytdBudgetRate >= 90  ? "warning"
+      : ytdBudgetRate >= 80  ? "caution"
+      : "negative";
 
     // Use the confirmed cutoff month for labels so user knows it's actual data
     const lbl = lastActualMonth || ytdCutoff || targetMonth;
@@ -419,7 +423,7 @@ const AnalyticsRenderer = (() => {
 
   function _rateCls(r) {
     if (r === null || r === undefined) return "";
-    return r >= 100 ? "positive" : r < 80 ? "negative" : "";
+    return r >= 100 ? "positive" : r >= 90 ? "warning" : r >= 80 ? "caution" : "negative";
   }
 
   function _diffCls(r) {

@@ -19,11 +19,13 @@ test("yoyRatio: ratio percentage, 100% boundary counts as rising", () => {
   assert.deepEqual(fmt.yoyRatio(50, 0), { text: "—", cls: "" });
 });
 
-test("budgetRate: achievement semantics with 100/80 thresholds", () => {
+test("budgetRate: achievement semantics with 100/90/80 thresholds", () => {
   assert.deepEqual(fmt.budgetRate(100, 100), { text: "100.0%", cls: "positive" });
+  assert.deepEqual(fmt.budgetRate(90, 100), { text: "90.0%", cls: "warning" });
+  assert.deepEqual(fmt.budgetRate(99, 100), { text: "99.0%", cls: "warning" });
+  assert.deepEqual(fmt.budgetRate(80, 100), { text: "80.0%", cls: "caution" });
+  assert.deepEqual(fmt.budgetRate(89, 100), { text: "89.0%", cls: "caution" });
   assert.deepEqual(fmt.budgetRate(79, 100), { text: "79.0%", cls: "negative" });
-  assert.deepEqual(fmt.budgetRate(80, 100), { text: "80.0%", cls: "" });
-  assert.deepEqual(fmt.budgetRate(99, 100), { text: "99.0%", cls: "" });
   assert.deepEqual(fmt.budgetRate(50, 0), { text: "—", cls: "" });
 });
 

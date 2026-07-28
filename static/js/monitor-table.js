@@ -135,15 +135,28 @@ const MonitorTable = (() => {
   }
 
   // ── Row expand / collapse ────────────────────────────────────────────────
-  document.addEventListener("click", (e) => {
-    if (e.target.closest("button, a, input, select, label")) return;
-    const mainRow = e.target.closest("[data-monitor-row]");
-    if (!mainRow) return;
+  function toggleRow(mainRow) {
     const detail = mainRow.nextElementSibling;
     if (!detail?.hasAttribute("data-monitor-detail")) return;
     const expanded = mainRow.getAttribute("aria-expanded") === "true";
     mainRow.setAttribute("aria-expanded", String(!expanded));
     detail.hidden = expanded;
+  }
+
+  document.addEventListener("click", (e) => {
+    if (e.target.closest("button, a, input, select, label")) return;
+    const mainRow = e.target.closest("[data-monitor-row]");
+    if (!mainRow) return;
+    toggleRow(mainRow);
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    if (e.target.closest("button, a, input, select, label")) return;
+    const mainRow = e.target.closest("[data-monitor-row]");
+    if (!mainRow) return;
+    e.preventDefault();
+    toggleRow(mainRow);
   });
 
   // ── CSV Export ───────────────────────────────────────────────────────────

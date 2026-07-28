@@ -15,7 +15,7 @@
  *
  * Column vocabulary (order = render order; "label" is always first):
  *   lyAmount / budgetAmount / tyAmount  — YTD amounts
- *   budgetRate                          — 預算達成 (positive/negative)
+ *   budgetRate                          — 預算達成 (positive/warning/caution/negative)
  *   yoyDelta                            — YoY as signed delta, amount-based
  *   yoyQtyDelta                         — YoY as signed delta, quantity-based
  *   yoyRatio                            — legacy ratio display; do not use for management analytics

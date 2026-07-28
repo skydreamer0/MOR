@@ -15,9 +15,10 @@
 const AnalyticsFmt = (() => {
   "use strict";
 
-  // 預算達成率門檻：>= ACHIEVED 算達成(綠)，< SHORTFALL 算明顯未達(紅)，中間不上色。
+  // 預算達成率四階門檻：>=ACHIEVED 達成(綠)，>=WARNING 警戒(橙)，>=CAUTION 注意(棕)，< CAUTION 明顯未達(紅)。
   const BUDGET_RATE_ACHIEVED = 100;
-  const BUDGET_RATE_SHORTFALL = 80;
+  const BUDGET_RATE_WARNING = 90;
+  const BUDGET_RATE_CAUTION = 80;
 
   const fmt0 = typeof Intl !== "undefined"
     ? new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 0 })
@@ -71,8 +72,9 @@ const AnalyticsFmt = (() => {
     return {
       text: rate.toFixed(1) + "%",
       cls: rate >= BUDGET_RATE_ACHIEVED ? "positive"
-         : rate < BUDGET_RATE_SHORTFALL ? "negative"
-         : "",
+         : rate >= BUDGET_RATE_WARNING  ? "warning"
+         : rate >= BUDGET_RATE_CAUTION  ? "caution"
+         : "negative",
     };
   }
 
@@ -100,7 +102,8 @@ const AnalyticsFmt = (() => {
     budgetRate,
     trendArrow,
     BUDGET_RATE_ACHIEVED,
-    BUDGET_RATE_SHORTFALL,
+    BUDGET_RATE_WARNING,
+    BUDGET_RATE_CAUTION,
   };
 })();
 
