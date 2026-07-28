@@ -166,3 +166,21 @@ def test_workbench_inputs_exposes_row_month_interface_without_losing_company_bud
     assert inputs.company_budgets == [BudgetTarget(50, 500, 5)]
     assert inputs.available_budget_months == [(2026, 5)]
     assert inputs.daily_actuals[row_id].actual_quantity == 3
+
+
+def test_build_items_from_sales_data_deduplicates_after_product_code_normalization(tmp_path):
+    import pandas as pd
+
+    from src.backend.forecast_workbench_inputs import build_items_from_sales_data
+
+    db = MORDatabase(tmp_path / "mor_workbench.db")
+    data = pd.DataFrame(
+        [
+            {"商品號": "101.0", "商品簡稱": "Product One"},
+            {"商品號": "101", "商品簡稱": "Product One Duplicate"},
+        ]
+    )
+
+    items = build_items_from_sales_data(data, db)
+
+    assert [item["product_code"] for item in items] == ["101"]

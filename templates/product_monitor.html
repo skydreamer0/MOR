@@ -144,7 +144,8 @@
           <tbody>
             {% for row in rows %}
             {# ── 主列 ── #}
-            <tr data-monitor-row aria-expanded="false" tabindex="0"
+            <tr data-monitor-row tabindex="0" aria-expanded="false"
+                aria-controls="monitor-detail-{{ loop.index }}"
                 data-status="{{ row.status_key }}"
                 data-cycle-status="{{ row.cycle_status }}"
                 data-gap-trend="{{ row.gap_trend }}"
@@ -230,7 +231,7 @@
               </td>
             </tr>
             {# ── 展開詳情列 ── #}
-            <tr data-monitor-detail hidden>
+            <tr id="monitor-detail-{{ loop.index }}" data-monitor-detail hidden>
               <td colspan="10">
                 <div class="monitor-detail-card">
                   {# 風險摘要 #}

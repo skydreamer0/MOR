@@ -107,11 +107,13 @@ def load_forecast_workbench_inputs(db, target: ForecastTarget) -> ForecastWorkbe
 def build_items_from_sales_data(data: pd.DataFrame, db) -> list[dict]:
     product_code_column = "\u5546\u54c1\u865f"
     product_name_column = "\u5546\u54c1\u7c21\u7a31"
-    unique_products = data[[product_code_column, product_name_column]].drop_duplicates(product_code_column)
+    products = data[[product_code_column, product_name_column]].copy()
+    products[product_code_column] = products[product_code_column].map(normalize_product_code)
+    unique_products = products.drop_duplicates(product_code_column)
     item_configs = load_item_configs(db)
     items = []
     for _, row in unique_products.iterrows():
-        product_code = normalize_product_code(row[product_code_column])
+        product_code = row[product_code_column]
         config = item_configs.get(
             product_code,
             {
