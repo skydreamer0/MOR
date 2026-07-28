@@ -432,6 +432,28 @@ main {
   font-size: var(--text-base);
 }
 
+.alert-success {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+/* Flash banner rendered directly under the sticky header (upload result) —
+   sits outside main's padded container, so it needs its own inset + fade-out. */
+.alert--banner {
+  margin: 0;
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  padding: var(--sp-3) var(--sp-6);
+  box-shadow: none;
+  transition: opacity 0.4s ease, margin 0.4s ease, padding 0.4s ease;
+}
+
+.alert--banner.is-fading {
+  opacity: 0;
+}
+
 .empty-state {
   color: var(--muted);
   font-size: var(--text-md);
@@ -1112,6 +1134,8 @@ input.qty:focus {
 }
 
 .detail-monthly-table td.positive { color: var(--success-text); }
+.detail-monthly-table td.warning  { color: var(--accent-2); }
+.detail-monthly-table td.caution  { color: var(--warning-text); }
 .detail-monthly-table td.negative { color: var(--danger); }
 
 /* ── Trend chart canvas ─────────────────────────────────────── */
@@ -1182,6 +1206,8 @@ input.qty:focus {
 }
 
 .ytd-val.positive { color: var(--success-text); }
+.ytd-val.warning  { color: var(--accent-2); }
+.ytd-val.caution  { color: var(--warning-text); }
 .ytd-val.negative { color: var(--danger); }
 
 /* ── Assessment rows ─────────────────────────────────────────── */
@@ -1607,6 +1633,11 @@ details[open] .discontinued-toggle {
   color: var(--success-text) !important;
 }
 
+/* 達成率四階門檻的第三階（80-89），介於 .rate-warning 與 .danger-text 之間 */
+.caution-text {
+  color: var(--warning-text) !important;
+}
+
 .btn-link {
   display: inline-flex;
   align-items: center;
@@ -1708,6 +1739,8 @@ details[open] .discontinued-toggle {
 }
 
 .dash-analytics-table td.positive { color: var(--success-text); font-weight: 600; }
+.dash-analytics-table td.warning  { color: var(--accent-2);     font-weight: 600; }
+.dash-analytics-table td.caution  { color: var(--warning-text); font-weight: 600; }
 .dash-analytics-table td.negative { color: var(--danger);       font-weight: 600; }
 
 .compact-table {
@@ -2966,9 +2999,14 @@ details[open] .discontinued-toggle {
 .budget-bar-fill--ok       { background: var(--success-text); opacity: 1; }
 .budget-bar-fill--warn     { background: var(--warning-text); opacity: 1; }
 .budget-bar-fill--danger   { background: var(--danger); opacity: 1; }
-.budget-bar-fill--estimated.budget-bar-fill--ok     { opacity: 0.5; }
-.budget-bar-fill--estimated.budget-bar-fill--warn   { opacity: 0.5; }
-.budget-bar-fill--estimated.budget-bar-fill--danger { opacity: 0.5; }
+/* 90-99 達成率門檻（估算進度條專用，與 --warn 的 70% 進度檢查點語意不同） */
+.budget-bar-fill--warning  { background: var(--accent-2); opacity: 1; }
+.budget-bar-fill--caution  { background: var(--warning-text); opacity: 1; }
+.budget-bar-fill--estimated.budget-bar-fill--ok      { opacity: 0.5; }
+.budget-bar-fill--estimated.budget-bar-fill--warn    { opacity: 0.5; }
+.budget-bar-fill--estimated.budget-bar-fill--warning { opacity: 0.5; }
+.budget-bar-fill--estimated.budget-bar-fill--caution { opacity: 0.5; }
+.budget-bar-fill--estimated.budget-bar-fill--danger  { opacity: 0.5; }
 
 .budget-bar-value {
   font-size: var(--text-xs);

@@ -47,4 +47,17 @@
     btn.classList.add("is-loading");
     setTimeout(() => { btn.disabled = true; }, 0);
   });
+
+  /* ── Upload result flash banner: drop the query param so a refresh
+     doesn't re-show it, and fade the banner out after a few seconds. ── */
+  const banner = document.getElementById("upload-status-banner");
+  if (banner) {
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("upload_message") || url.searchParams.has("upload_error")) {
+      url.searchParams.delete("upload_message");
+      url.searchParams.delete("upload_error");
+      window.history.replaceState({}, "", url.pathname + url.search + url.hash);
+    }
+    setTimeout(() => banner.classList.add("is-fading"), 4000);
+  }
 })();

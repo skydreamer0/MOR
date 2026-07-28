@@ -48,6 +48,11 @@
     </form>
   {% endif %}
 </header>
+{% if request.args.get('upload_message') %}
+  <section id="upload-status-banner" class="alert alert-success alert--banner" role="status">{{ request.args.get('upload_message') }}</section>
+{% elif request.args.get('upload_error') %}
+  <section id="upload-status-banner" class="alert alert--banner" role="alert">{{ request.args.get('upload_error') }}</section>
+{% endif %}
 <dialog id="app-confirm" class="app-confirm">
   <form method="dialog">
     <h3 class="app-confirm__title" data-confirm-title>確認操作</h3>

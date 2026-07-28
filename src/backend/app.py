@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from datetime import date
 from pathlib import Path
+from urllib.parse import parse_qsl, urlencode, urlparse
 
 import pandas as pd
 from flask import Flask, Response, redirect, render_template, request, send_file, url_for
@@ -430,7 +431,7 @@ def create_app(config: dict | None = None) -> Flask:
         return redirect(url_for("dashboard", sync_message="資料同步完成。"))
 
     @app.post("/upload/current-month")
-    def upload_current_month() -> str:
+    def upload_current_month() -> Response:
         """接收 SHPB 出貨報表，寫入 current_month_records。
 
         上傳後清除 cache，讓下次頁面請求重新合併當月資料。
@@ -438,14 +439,24 @@ def create_app(config: dict | None = None) -> Flask:
         """
         file = request.files.get("file")
         if not file or not file.filename:
-            return "請選擇檔案", 400
+            return _redirect_back(upload_error="請選擇檔案")
         try:
             df = pd.read_excel(file)
             count = import_current_month(db, df)
             ctx_cache.invalidate_all()
-            return f"已匯入 {count} 筆當月業績資料。"
+            return _redirect_back(upload_message=f"已匯入 {count} 筆當月業績資料。")
         except Exception as exc:
-            return f"匯入失敗：{exc}", 400
+            return _redirect_back(upload_error=f"匯入失敗：{exc}")
+
+    def _redirect_back(**params: str) -> Response:
+        """導回上傳前的頁面，並附帶狀態訊息，避免停留在無法返回的純文字頁。"""
+        target = request.referrer
+        if target and urlparse(target).netloc != request.host:
+            target = None
+        parsed = urlparse(target or url_for("dashboard"))
+        query = dict(parse_qsl(parsed.query))
+        query.update(params)
+        return redirect(parsed._replace(query=urlencode(query)).geturl())
 
     @app.post("/adjustments/save")
     def save_adjustment() -> Response:
