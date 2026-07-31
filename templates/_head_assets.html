@@ -1,7 +1,6 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/mor.css') }}">
-<script src="https://unpkg.com/htmx.org@1.9.10/dist/htmx.min.js"
-        integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5xLSi8nO7UC"
-        crossorigin="anonymous"></script>
+{# htmx 1.9.10 vendored locally (FE-7): MOR runs offline, so no CDN. #}
+<script src="{{ url_for('static', filename='js/vendor/htmx.min.js') }}"></script>
 <script src="{{ url_for('static', filename='js/fmt.js') }}"></script>
 <script src="{{ url_for('static', filename='js/analytics-renderer.js') }}"></script>
 <script src="{{ url_for('static', filename='js/analytics-table.js') }}"></script>

@@ -420,8 +420,11 @@ def test_frontend_pages_load_htmx_assets():
     dashboard = client.get("/").get_data(as_text=True)
     forecast = client.get("/forecast").get_data(as_text=True)
 
-    assert "https://unpkg.com/htmx.org@1.9.10" in dashboard
-    assert "https://unpkg.com/htmx.org@1.9.10" in forecast
+    # htmx is vendored locally (FE-7) — MOR runs offline, so no CDN.
+    assert 'src="/static/js/vendor/htmx.min.js"' in dashboard
+    assert 'src="/static/js/vendor/htmx.min.js"' in forecast
+    assert "unpkg.com" not in dashboard
+    assert "unpkg.com" not in forecast
 
 
 def test_frontend_pages_do_not_load_google_inter_font():
@@ -719,8 +722,10 @@ def test_templates_use_shared_head_assets_and_no_static_inline_layout():
     items_template = Path("templates/items.html").read_text(encoding="utf-8")
     css = Path("static/css/mor.css").read_text(encoding="utf-8")
 
-    assert "https://unpkg.com/htmx.org@1.9.10/dist/htmx.min.js" in head_assets
-    assert "D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5xLSi8nO7UC" in head_assets
+    # htmx vendored locally (FE-7). Provenance is pinned by the SHA-384 check in
+    # tests/test_release_packaging.py, not by an integrity attribute here.
+    assert "js/vendor/htmx.min.js" in head_assets
+    assert "unpkg.com" not in head_assets
     assert 'style="color:var(--accent-2)"' not in dashboard_partial
     assert 'style="margin:var(--sp-4) 0 0;"' not in dashboard_partial
     assert 'style="display:flex;gap:8px;align-items:center;"' not in dashboard_partial
