@@ -2,10 +2,12 @@
  * fmt.js — semantic value formatting, defined once for all pages.
  *
  * 台灣慣例（方向性指標）：漲 = 紅 (.rising)、跌 = 綠 (.falling)
- * 達成語意（預算達成率）：達成 = 綠 (.positive)、未達 = 紅 (.negative)
+ * 達成語意（預算達成率四階，正典詞彙見 docs/adr/0004）：
+ *   >=100 .positive(綠) / 90-99 .warning(橙) / 80-89 .caution(棕) / <80 .negative(紅)
  *
- * The class vocabulary (rising / falling / positive / negative) is the
- * interface between this module and mor.css. Jinja-side twin lives in
+ * This module is the single formatting source for the whole frontend:
+ * forecast-table.js、analytics-table.js、analytics-renderer.js 全部委派這裡，
+ * 門檻常數只有 BUDGET_RATE_* 這一份。Jinja-side twin lives in
  * templates/_value_macros.html — keep thresholds in sync with it.
  *
  * Loaded as a plain <script> (no build step, per ADR-0001); the module.exports
@@ -29,6 +31,44 @@ const AnalyticsFmt = (() => {
     return v > 0 ? fmt0.format(v) : "—";
   }
 
+  /** Format any number with thousands separators, no decimals (0 stays "0"). */
+  function number(v) {
+    return fmt0.format(v);
+  }
+
+  /** Thousands-separated integer with an explicit "+" for positives. */
+  function signedNumber(v) {
+    return (v > 0 ? "+" : "") + fmt0.format(v);
+  }
+
+  /** Fixed-decimal number with an explicit "+" for positives (no grouping). */
+  function signed(v, decimals = 1) {
+    return (v > 0 ? "+" : "") + v.toFixed(decimals);
+  }
+
+  /** Percentage text from an already-computed rate (e.g. 93.4 → "93.4%"). */
+  function percent(v, decimals = 1) {
+    return v.toFixed(decimals) + "%";
+  }
+
+  /**
+   * 達成率四階 class（正典詞彙，見 docs/adr/0004）。
+   * 輸入已算好的百分比；null/undefined 回傳 ""。
+   */
+  function rateCls(rate) {
+    if (rate === null || rate === undefined || Number.isNaN(rate)) return "";
+    return rate >= BUDGET_RATE_ACHIEVED ? "positive"
+         : rate >= BUDGET_RATE_WARNING  ? "warning"
+         : rate >= BUDGET_RATE_CAUTION  ? "caution"
+         : "negative";
+  }
+
+  /** 方向性指標 class：台灣慣例 漲=rising(紅)、跌=falling(綠)。 */
+  function directionCls(v) {
+    if (v === null || v === undefined || Number.isNaN(v)) return "";
+    return v > 0 ? "rising" : v < 0 ? "falling" : "";
+  }
+
   /** Escape a value for interpolation into innerHTML. */
   function escapeHtml(value) {
     return String(value ?? "")
@@ -47,8 +87,8 @@ const AnalyticsFmt = (() => {
     if (prev <= 0) return { text: "—", cls: "" };
     const pct = (curr - prev) / prev * 100;
     return {
-      text: (pct > 0 ? "+" : "") + pct.toFixed(1) + "%",
-      cls: pct > 0 ? "rising" : pct < 0 ? "falling" : "",
+      text: signed(pct) + "%",
+      cls: directionCls(pct),
     };
   }
 
@@ -60,22 +100,17 @@ const AnalyticsFmt = (() => {
     if (prev <= 0) return { text: "—", cls: "" };
     const ratio = curr / prev * 100;
     return {
-      text: ratio.toFixed(1) + "%",
+      text: percent(ratio),
+      // 這裡的 100 是「持平」基準（curr == prev），與達成率門檻無關，故不引用 BUDGET_RATE_*。
       cls: ratio >= 100 ? "rising" : "falling",
     };
   }
 
-  /** 預算達成率：達成語意 → positive / negative。 */
+  /** 預算達成率：達成語意四階 → positive / warning / caution / negative。 */
   function budgetRate(ty, budget) {
     if (budget <= 0) return { text: "—", cls: "" };
     const rate = ty / budget * 100;
-    return {
-      text: rate.toFixed(1) + "%",
-      cls: rate >= BUDGET_RATE_ACHIEVED ? "positive"
-         : rate >= BUDGET_RATE_WARNING  ? "warning"
-         : rate >= BUDGET_RATE_CAUTION  ? "caution"
-         : "negative",
-    };
+    return { text: percent(rate), cls: rateCls(rate) };
   }
 
   /**
@@ -96,10 +131,16 @@ const AnalyticsFmt = (() => {
 
   return {
     amount,
+    number,
+    signed,
+    signedNumber,
+    percent,
     escapeHtml,
     yoyDelta,
     yoyRatio,
     budgetRate,
+    rateCls,
+    directionCls,
     trendArrow,
     BUDGET_RATE_ACHIEVED,
     BUDGET_RATE_WARNING,

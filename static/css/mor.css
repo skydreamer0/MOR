@@ -94,6 +94,13 @@
   /* Transitions */
   --ease-out:   cubic-bezier(0.16, 1, 0.3, 1);
   --duration:   0.15s;
+
+  /* Chart palette — canvas-painted, read once by static/js/gap-sparkline.js (FE-15).
+     Deliberately brighter than the text tokens (--success-text / --danger / --accent-2):
+     these are fills on a small canvas, not body copy, and need more chroma to read. */
+  --chart-gap-below:   #22c55e;  /* 間隔短於平均 → 綠（健康）   */
+  --chart-gap-above:   #ef4444;  /* 間隔長於平均 → 紅（警示）   */
+  --chart-gap-current: #f97316;  /* 目前已經過天數 → 橘（進行中） */
 }
 
 
@@ -1074,10 +1081,10 @@ input.qty:focus {
   color: var(--ink);
 }
 
+/* 達成率四階由正典 .positive/.warning/.caution/.negative 提供顏色（ADR-0004）；
+   舊的 .low / .high 二階已於 FE-8 移除。 */
 .detail-row .detail-val.positive { color: var(--success-text); }
 .detail-row .detail-val.negative { color: var(--danger); }
-.detail-row .detail-val.low      { color: var(--danger); }
-.detail-row .detail-val.high     { color: var(--success-text); }
 
 /* ── Monthly comparison table inside detail panel ──────────── */
 .detail-monthly-table {
@@ -1244,21 +1251,12 @@ input.qty:focus {
   white-space: nowrap;
 }
 
-.rate.low {
-  color: var(--danger);
-  background: rgba(220, 38, 38, 0.08);
-}
-
-.rate.high {
-  color: var(--success-text);
-  background: rgba(4, 120, 87, 0.08);
-}
-
-/* Mid-range rate (neither low nor high) — neutral */
-.rate:not(.low):not(.high) {
-  color: var(--warning-text);
-  background: rgba(217, 119, 6, 0.06);
-}
+/* 達成率四階（正典詞彙，見 ADR-0004）。色值由 .positive/.warning/.caution/.negative
+   統一提供，這裡只補 badge 背景。舊的 .rate.low / .rate.high 二階已於 FE-8 移除。 */
+.rate.positive { background: rgba(4, 120, 87, 0.08); }
+.rate.warning  { background: rgba(217, 119, 6, 0.08); }
+.rate.caution  { background: rgba(217, 119, 6, 0.06); }
+.rate.negative { background: rgba(220, 38, 38, 0.08); }
 
 
 /* ── 最後預估 — 最終決策數字，加重視覺量 ────────────────────── */
@@ -1625,6 +1623,27 @@ details[open] .discontinued-toggle {
   font-variant-numeric: tabular-nums;
 }
 
+/* ── 達成率四階語意：正典 class 詞彙 ─────────────────────────────
+   >=100 達成(綠) .positive ／ 90-99 警戒(橙) .warning
+   ／ 80-89 注意(棕) .caution ／ <80 未達(紅) .negative
+
+   產出端：static/js/fmt.js `budgetRate()`、
+           templates/_value_macros.html `achievement()`、
+           static/js/analytics-renderer.js `_rateCls()`（委派 fmt.js）。
+   決策紀錄：docs/adr/0004-unify-achievement-rate-class-vocabulary.md
+   `!important` 沿用舊 alias 的行為，讓語意色能蓋過表格/儲存格的繼承色。 */
+.positive { color: var(--success-text) !important; }
+.warning  { color: var(--accent-2)     !important; }
+.caution  { color: var(--warning-text) !important; }
+.negative { color: var(--danger)       !important; }
+
+/* Legacy aliases — 與上面四階「完全相同」的語意，只是舊名稱。
+   仍被多個樣板直接寫死（templates/_monthly_review_insights.html、
+   templates/product_monitor.html 等），因此保留為 alias 而不是全面改名
+   （避免大範圍重構，見 ADR-0004 的 Consequences）。新程式碼請用正典詞彙。
+   對照：success-text→positive、rate-warning→warning、
+         caution-text→caution、danger-text→negative
+   （`.rate-warning` 的定義與 `.progress-rate` 系列放在一起，見本檔 .rate-success 附近） */
 .danger-text {
   color: var(--danger) !important;
 }
@@ -1633,7 +1652,6 @@ details[open] .discontinued-toggle {
   color: var(--success-text) !important;
 }
 
-/* 達成率四階門檻的第三階（80-89），介於 .rate-warning 與 .danger-text 之間 */
 .caution-text {
   color: var(--warning-text) !important;
 }
@@ -2258,6 +2276,7 @@ details[open] .discontinued-toggle {
 }
 
 .rate-success { color: var(--success-text); }
+/* legacy alias of the canonical `.warning` tier — same token, old name (ADR-0004) */
 .rate-warning { color: var(--accent-2); }
 .rate-danger  { color: var(--danger); }
 

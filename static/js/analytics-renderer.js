@@ -19,6 +19,10 @@ const AnalyticsRenderer = (() => {
   "use strict";
 
   // ── Formatters ─────────────────────────────────────────────────────────────
+  // Semantic formatting (signs, 達成率四階 class, 漲跌 class) lives in fmt.js.
+  // Loaded as a plain <script> (no build step, ADR-0001); require() is the node:test path.
+  const fmt = typeof AnalyticsFmt !== "undefined" ? AnalyticsFmt : require("./fmt.js");
+
   const fmt0 = new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 0 });
   const fmt1 = new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 1 });
   const fmt2 = new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 2, minimumFractionDigits: 0 });
@@ -316,13 +320,10 @@ const AnalyticsRenderer = (() => {
     const { ytdLy, ytdTy, ytdBudget, ytdGapVsLy, ytdRateVsLy, ytdBudgetRate, ytdCutoff } = metrics;
     // 方向性比較（vs 去年）：台灣慣例 漲=rising(紅)、跌=falling(綠)
     const gapCls      = ytdGapVsLy   >= 0   ? "rising"   : "falling";
+    // 100 = 與去年持平的基準，非達成率門檻
     const rateVsLyCls = ytdRateVsLy  >= 100 ? "rising"   : "falling";
-    // 預算達成率四階：≥100=positive(綠)，90-99=warning(橙)，80-89=caution(棕)，<80=negative(紅)
-    const budRateCls  = ytdBudgetRate <= 0 ? ""
-      : ytdBudgetRate >= 100 ? "positive"
-      : ytdBudgetRate >= 90  ? "warning"
-      : ytdBudgetRate >= 80  ? "caution"
-      : "negative";
+    // 預算達成率四階 → fmt.js 唯一門檻（docs/adr/0004）
+    const budRateCls  = ytdBudgetRate <= 0 ? "" : _rateCls(ytdBudgetRate);
 
     // Use the confirmed cutoff month for labels so user knows it's actual data
     const lbl = lastActualMonth || ytdCutoff || targetMonth;
@@ -417,20 +418,11 @@ const AnalyticsRenderer = (() => {
     return valid.length ? _sum(valid) / valid.length : 0;
   }
 
-  function _signStr(n, decimals = 1) {
-    return (n > 0 ? "+" : "") + n.toFixed(decimals);
-  }
-
-  function _rateCls(r) {
-    if (r === null || r === undefined) return "";
-    return r >= 100 ? "positive" : r >= 90 ? "warning" : r >= 80 ? "caution" : "negative";
-  }
-
-  function _diffCls(r) {
-    // YoY% 是方向性指標：台灣慣例 漲=rising(紅)、跌=falling(綠)
-    if (r === null || r === undefined) return "";
-    return r > 0 ? "rising" : r < 0 ? "falling" : "";
-  }
+  // 格式化與語意 class 一律委派 fmt.js（唯一來源），這裡只留薄包裝。
+  const _signStr = (n, decimals = 1) => fmt.signed(n, decimals);
+  const _rateCls = (r) => fmt.rateCls(r);
+  // YoY% 是方向性指標：台灣慣例 漲=rising(紅)、跌=falling(綠)
+  const _diffCls = (r) => fmt.directionCls(r);
 
   function _setCell(id, text, cls = "") {
     if (!id) return;

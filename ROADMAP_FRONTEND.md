@@ -7,6 +7,20 @@ Last reviewed: 2026-08-01
 
 遵循主 ROADMAP 的規則：不做大範圍重構，一次收一個接縫，先寫測試再改行為。
 
+## 進度
+
+| 項目 | 狀態 |
+|---|---|
+| FE-7 htmx 本地化 | ✅ 完成（2026-08-01） |
+| FE-8 Forecast 四階門檻 | ✅ 完成（2026-08-01） |
+| FE-9 統一 class 詞彙 | ✅ 完成（2026-08-01，ADR-0004） |
+| FE-10 fmt.js 唯一格式化來源 | ✅ 完成（2026-08-01） |
+| FE-15 sparkline design token | ✅ 完成（2026-08-01） |
+| FE-11 / FE-12 / FE-13 / FE-14 / FE-16 | 未開始 |
+
+FE-7 的驗收還缺一項：**尚未實際斷網啟動 app 走查** Forecast 存檔與 Dashboard 切月。
+目前只有靜態驗證（SHA-384 相符、樣板零外部引用）與 smoke test 覆蓋。
+
 ---
 
 ## 現況體檢摘要
@@ -14,7 +28,7 @@ Last reviewed: 2026-08-01
 | 面向 | 數字 |
 |---|---|
 | 頁面樣板 | 8 個，各自複製 doctype/head/body 骨架 |
-| CSS | `static/css/mor.css` 單檔 3796 行、977 個變數、350 個 class（27 個無引用） |
+| CSS | `static/css/mor.css` 單檔 3796 行、`:root` 60 個 token、350 個 class（27 個無引用） |
 | JS | 10 支、約 2260 行，無 build step（ADR-0001） |
 | htmx | 外部 CDN，實際只用到 6 種 `hx-*` 屬性 |
 
@@ -51,7 +65,7 @@ CSS 端對應 `static/css/mor.css:1247-1258` 的 `.rate.low` / `.rate.high` /
 
 **做法**：`updateRateElement` 改呼叫 `AnalyticsFmt.budgetRate()`，套用統一 class 詞彙（見 FE-9）。
 
-**驗收**：新增 `tests/js/forecast-table.test.js` 覆蓋四個門檻邊界（100 / 99 / 89 / 79）。
+**驗收**：`tests/js/forecast-table.test.js` 已存在，於其中補上四個門檻邊界（100 / 99 / 89 / 79）的案例。
 
 ---
 

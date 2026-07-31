@@ -1,12 +1,43 @@
+/**
+ * gap-sparkline.js — 進貨間隔迷你長條圖（Product Monitor 展開列）
+ *
+ * 配色來自 mor.css 的 :root design token，於載入時一次性讀出並快取，
+ * 之後每次 canvas 繪製都只是純物件取值，沒有 CSS 變數查詢成本
+ * （與 analytics-renderer.js:11-15 相同的考量，但這裡改為真的讀 token）。
+ *
+ * Token 對應（fallback 即現行硬編色，token 缺席時外觀完全不變）：
+ *   near / avgLine / label  --muted-light         #94a3b8  ← mor.css:12 完全相符
+ *   below                   --chart-gap-below     #22c55e  ← 尚無此 token，暫用 fallback
+ *   above                   --chart-gap-above     #ef4444  ← 尚無此 token，暫用 fallback
+ *   current                 --chart-gap-current   #f97316  ← 尚無此 token，暫用 fallback
+ *
+ * 三個 --chart-gap-* 目前在 mor.css 中不存在，因此讀取結果為空字串、
+ * 一律落到 fallback。最接近的既有 token 值都與現行色不同
+ * （--success-text #047857 / --danger #dc2626 / --accent-2 #d97706），
+ * 直接套用會改變畫面，故不採用；待 mor.css 補上對應 token 後即自動生效。
+ */
 (function () {
   const BAR_RADIUS = 2;
+
+  // 一次性解析（script 掛在 </body> 前，樣式表已套用）
+  const rootStyle =
+    typeof getComputedStyle === "function" && document.documentElement
+      ? getComputedStyle(document.documentElement)
+      : null;
+
+  function token(name, fallback) {
+    const value = rootStyle ? (rootStyle.getPropertyValue(name) || "").trim() : "";
+    return value || fallback;
+  }
+
+  const SLATE = token("--muted-light", "#94a3b8");
   const C = {
-    below:   "#22c55e",  // shorter than avg → green (healthy)
-    above:   "#ef4444",  // longer than avg  → red (warning)
-    near:    "#94a3b8",  // within ±10%      → slate
-    current: "#f97316",  // current elapsed  → orange (in-progress)
-    avgLine: "#94a3b8",
-    label:   "#94a3b8",
+    below:   token("--chart-gap-below",   "#22c55e"),  // shorter than avg → green (healthy)
+    above:   token("--chart-gap-above",   "#ef4444"),  // longer than avg  → red (warning)
+    near:    SLATE,                                    // within ±10%      → slate
+    current: token("--chart-gap-current", "#f97316"),  // current elapsed  → orange (in-progress)
+    avgLine: SLATE,
+    label:   SLATE,
   };
 
   function draw(canvas) {

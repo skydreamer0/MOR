@@ -1,9 +1,15 @@
-const formatter = new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 0 });
-const precisionFormatter = formatter;
+/**
+ * forecast-table.js — Forecast 頁的表格控制器。
+ *
+ * 所有數字格式化與語意 class 一律委派 fmt.js（唯一格式化來源），
+ * 達成率四階門檻與 class 詞彙見 docs/adr/0004。
+ * 以純 <script> 載入（無 build step，ADR-0001）；require() 只給 node:test 用。
+ */
+const _fmt = typeof AnalyticsFmt !== "undefined" ? AnalyticsFmt : require("./fmt.js");
 
-const _fp   = (n) => precisionFormatter.format(n);
-const _pct  = (n) => n.toFixed(1) + "%";
-const _sign = (n) => (n > 0 ? "+" : "") + _fp(n);
+const _fp   = (n) => _fmt.number(n);
+const _pct  = (n) => _fmt.percent(n);
+const _sign = (n) => _fmt.signedNumber(n);
 
 /* ── Sparkline Renderer ─────────────────────────────────────────── */
 
@@ -130,11 +136,20 @@ function readRowState(row) {
   };
 }
 
+// 達成率四階 class（正典詞彙，見 docs/adr/0004）。
+const RATE_CLASSES = ["positive", "warning", "caution", "negative"];
+
+/**
+ * 套用達成率四階樣式。
+ * @param {Element|null} el
+ * @param {number} rateValue 已算好的達成率百分比（例如 93.4）
+ */
 function updateRateElement(el, rateValue) {
   if (!el) return;
-  el.textContent = rateValue.toFixed(1) + "%";
-  el.classList.toggle("low", rateValue < 80);
-  el.classList.toggle("high", rateValue >= 100);
+  // budgetRate(rate, 100) 讓已算好的百分比直接走 fmt.js 的四階門檻，不再自帶常數。
+  const { text, cls } = _fmt.budgetRate(rateValue, 100);
+  el.textContent = text;
+  RATE_CLASSES.forEach((c) => el.classList.toggle(c, c === cls));
 }
 
 function updateGapElement(el, gapValue) {
@@ -142,7 +157,7 @@ function updateGapElement(el, gapValue) {
   const isPositive = gapValue > 0;
   const isNegative = gapValue < 0;
   const sign = isPositive ? "+" : "";
-  el.textContent = sign + formatter.format(gapValue);
+  el.textContent = sign + _fp(gapValue);
   // 方向性指標使用台灣慣例：漲=紅(.rising)、跌=綠(.falling)
   el.classList.toggle("rising",  isPositive);
   el.classList.toggle("falling", isNegative);
@@ -202,7 +217,7 @@ function renderRow(state, amount, visible) {
   updateRateElement(state.row.querySelector("[data-lm-perf-display] .rate"), lmRate);
   updateGapElement(state.row.querySelector("[data-lm-perf-display] .gap-value"), lmGap);
 
-  state.row.querySelector("[data-final-forecast]").textContent = precisionFormatter.format(finalQty);
+  state.row.querySelector("[data-final-forecast]").textContent = _fp(finalQty);
 }
 
 function recalculate() {
@@ -236,11 +251,11 @@ function recalculate() {
     topTotalEl.classList.add("value-flash");
   }
   topTotalEl.dataset.prevTotal = total;
-  topTotalEl.textContent = formatter.format(total);
-  document.querySelector("[data-visible-count]").textContent = formatter.format(visibleCount);
+  topTotalEl.textContent = _fp(total);
+  document.querySelector("[data-visible-count]").textContent = _fp(visibleCount);
   const editedBadge = document.getElementById("edited-badge");
   if (editedBadge) editedBadge.hidden = editedCount === 0;
-  document.querySelector("[data-edited-count]").textContent = formatter.format(editedCount);
+  document.querySelector("[data-edited-count]").textContent = _fp(editedCount);
 }
 
 function validateBeforeSubmit(event) {
@@ -349,7 +364,7 @@ function openDetailPanel(row) {
   const lmGap  = lmActual - lmBudget;
   document.getElementById("rd-lm-actual").textContent = _fp(lmActual);
   document.getElementById("rd-lm-budget").textContent = _fp(lmBudget);
-  setDetailVal("rd-lm-rate", _pct(lmRate), lmRate >= 100 ? "high" : lmRate < 80 ? "low" : "");
+  setDetailVal("rd-lm-rate", _pct(lmRate), _fmt.rateCls(lmRate));
   setDetailVal("rd-lm-gap",  _sign(lmGap), lmGap >= 0 ? "rising" : "falling");
 
   // 年度業績比較：趨勢圖 + 月份表格 + YTD + 評估
@@ -380,9 +395,9 @@ function refreshDetailBudget(state) {
 
   document.getElementById("rd-budget").textContent = _fp(budget);
   document.getElementById("rd-final").textContent  = _fp(finalQty);
-  setDetailVal("rd-achieve-rate", _pct(rate), rate >= 100 ? "high" : rate < 80 ? "low" : "");
+  setDetailVal("rd-achieve-rate", _pct(rate), _fmt.rateCls(rate));
   setDetailVal("rd-diff",         _sign(diff), diff >= 0 ? "rising" : "falling");
-  document.getElementById("rd-amount").textContent = formatter.format(amount);
+  document.getElementById("rd-amount").textContent = _fp(amount);
 
   // 計算狀態 badge（放在 section header 旁）
   const badge = document.getElementById("rd-included-badge");
@@ -451,7 +466,7 @@ function renderAnalytics(row) {
   );
 
   // Price section
-  const moneyFmt = (n) => n > 0 ? formatter.format(n) : "—";
+  const moneyFmt = (n) => n > 0 ? _fp(n) : "—";
   document.getElementById("rd-ly-price").textContent = moneyFmt(lyPrice);
   document.getElementById("rd-ty-price").textContent = moneyFmt(tyPrice);
 
@@ -808,6 +823,7 @@ if (typeof module === "object" && module.exports) {
   module.exports = {
     readRowPayload,
     readRowState,
+    updateRateElement,
     finalForecastQuantity,
     calculateAmount,
     hasInvalidManualQuantity,

@@ -1,7 +1,10 @@
 {# _value_macros.html — semantic value formatting, defined once for all templates.
    台灣慣例（方向性）：漲=紅(.rising)、跌=綠(.falling)；達成語意：達成=綠、未達=紅。
-   達成率四階門檻：>=100 成功(.success-text)、90-99 警戒(.rate-warning)、80-89 注意(.caution-text)、<80 危險(.danger-text)。
-   JS-side twin: static/js/fmt.js — keep thresholds in sync with it. #}
+   達成率四階門檻（正典 class 詞彙，見 docs/adr/0004）：
+     >=100 達成(.positive)、90-99 警戒(.warning)、80-89 注意(.caution)、<80 未達(.negative)。
+   舊名 success-text / rate-warning / caution-text / danger-text 仍以 CSS alias 存活，
+   供尚未改寫的樣板使用；新程式碼請用正典詞彙。
+   JS-side twin: static/js/fmt.js `budgetRate()` — keep thresholds in sync with it. #}
 {% macro yoy(growth) -%}
   {%- if growth is not none -%}
     {%- set y = (growth - 1) * 100 -%}
@@ -14,12 +17,13 @@
 {% macro achievement(value) -%}
   {%- if value is not none -%}
     {%- set pct = value * 100 -%}
-    <span class="{% if pct >= 100 %}success-text{% elif pct >= 90 %}rate-warning{% elif pct >= 80 %}caution-text{% else %}danger-text{% endif %}">{{ "{:.1f}%".format(pct) }}</span>
+    <span class="{% if pct >= 100 %}positive{% elif pct >= 90 %}warning{% elif pct >= 80 %}caution{% else %}negative{% endif %}">{{ "{:.1f}%".format(pct) }}</span>
   {%- else -%}
     <span class="muted">-</span>
   {%- endif -%}
 {%- endmacro %}
 
+{# accuracy() 是「預測準確度」，門檻(95/85)與達成率四階不同，維持既有 alias class。 #}
 {% macro accuracy(value) -%}
   {%- if value is not none -%}
     {%- set pct = value * 100 -%}
