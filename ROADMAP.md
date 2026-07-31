@@ -18,7 +18,7 @@ Rules for remaining work:
 
 ## Remaining Work
 
-No active items. Add new work here when it's identified.
+- Frontend FE-7 ~ FE-16: see `ROADMAP_FRONTEND.md` (source of truth for frontend detail). Top item is FE-7 — htmx is loaded from a CDN, so forecast auto-save and dashboard period switching break offline and in release builds.
 
 ## Completed Summary
 
