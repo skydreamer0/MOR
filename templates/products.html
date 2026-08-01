@@ -1,64 +1,8 @@
-<!doctype html>
-<html lang="zh-Hant">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>商品分析 - MOR</title>
-  {% include "_head_assets.html" %}
-</head>
-<body>
-  {% set page_title = "商品分析" %}
-  {% set active_page = "products" %}
-  {% set show_period_toolbar = true %}
-  {% include "_header.html" %}
-
-  <main class="workbench-main customer-analytics-main">
-    {% if error_message %}
-      <section class="alert" role="alert">{{ error_message }}</section>
-    {% endif %}
-
-    <section class="workbench-panel" aria-label="商品業績分析">
-      <div class="section-header workbench-toolbar">
-        <div class="toolbar-title">
-          <h2>商品分析</h2>
-          <span id="prod-period-label" class="section-sub">YTD 1–{{ month }}月 金額</span>
-        </div>
-      </div>
-
-      {% if slices %}
-      <div class="table-wrap compact-table customer-analytics-table workbench-table-shell">
-        <table id="prod-table" class="dash-analytics-table management-table">
-          <thead>
-            <tr>
-              <th>商品</th>
-              <th class="num">去年YTD金額</th>
-              <th class="num">預算YTD金額</th>
-              <th class="num">今年YTD金額</th>
-              <th class="num">預算達成</th>
-              <th class="num">YoY 成長率</th>
-              <th class="num">趨勢</th>
-              <th class="num">走勢</th>
-            </tr>
-          </thead>
-          <tbody id="prod-tbody"></tbody>
-        </table>
-      </div>
-      {% else %}
-      <div class="empty-state">尚無商品資料，請先同步業績明細。</div>
-      {% endif %}
-    </section>
-  </main>
-
-  <script>
-  AnalyticsTable.mount(document.getElementById("prod-tbody"), {{ slices | tojson }}, {
-    targetMonth: {{ month | int }},
-    idPrefix: "prod",
-    columns: ["lyAmount", "budgetAmount", "tyAmount", "budgetRate", "yoyDelta", "trendLabel", "spark"],
-    boldLabel: true,
-    showEntityId: true,
-    expandable: true,
-    sparkSeries: "amount",
-  });
-  </script>
-</body>
-</html>
+{# 商品分析 — FE-12: layout lives in _analytics_page.html; this file is only the parameters. #}
+{% set page_title = "商品分析" %}
+{% set active_page = "products" %}
+{% set show_period_toolbar = true %}
+{% set entity_label = "商品" %}
+{% set entity_id_prefix = "prod" %}
+{% set show_entity_id = true %}
+{% extends "_analytics_page.html" %}

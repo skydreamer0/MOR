@@ -211,6 +211,19 @@
 {% if analytics_total %}
 <script>
 (function () {
+  // FE-13: this partial is rendered two ways.
+  //  - as part of index.html, where the analytics bundle is deferred and has
+  //    NOT run yet at parse time -> wait for DOMContentLoaded (which fires
+  //    after all deferred scripts).
+  //  - swapped in by htmx from /dashboard/metrics, long after DOMContentLoaded
+  //    -> the bundle is already there, so run immediately.
+  function ready(fn) {
+    // NB: the bundle declares `const AnalyticsTable` at top level, which does
+    // not land on `window` — `typeof` is the only safe probe.
+    if (typeof AnalyticsTable !== "undefined" && typeof AnalyticsRenderer !== "undefined") fn();
+    else document.addEventListener("DOMContentLoaded", fn);
+  }
+  ready(function () {
   const TOTAL     = {{ analytics_total     | tojson }};
   const CUSTOMERS = {{ analytics_customers | tojson }};
   const PRODUCTS  = {{ analytics_products  | tojson }};
@@ -265,6 +278,7 @@
     labelClass: "dash-entity-label",
     sparkSeries: "qty",
     sparkClass: "dash-spark-canvas",
+  });
   });
 })();
 </script>

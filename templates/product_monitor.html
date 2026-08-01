@@ -1,16 +1,11 @@
-<!doctype html>
-<html lang="zh-Hant">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>產品跳單監控 - MOR</title>
-  {% include "_head_assets.html" %}
-</head>
-<body>
-  {% set page_title = "產品跳單監控" %}
-  {% set active_page = "product_monitor" %}
-  {% set show_period_toolbar = true %}
-  {% include "_header.html" %}
+{% set page_title = "產品跳單監控" %}
+{% set active_page = "product_monitor" %}
+{% set show_period_toolbar = true %}
+{% extends "_base.html" %}
+
+{% block title %}產品跳單監控 - MOR{% endblock %}
+
+{% block content %}
   {% import "_value_macros.html" as fmt_ui %}
 
   <main class="monitor-main">
@@ -484,7 +479,9 @@
       </div>
     </section>
   </main>
+{% endblock %}
 
+{% block body_scripts %}
   <script src="{{ url_for('static', filename='js/monitor-table.js') }}"></script>
   <script src="{{ url_for('static', filename='js/gap-sparkline.js') }}"></script>
   <script>
@@ -495,5 +492,4 @@
     });
 
   </script>
-</body>
-</html>
+{% endblock %}

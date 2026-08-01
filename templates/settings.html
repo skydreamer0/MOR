@@ -1,17 +1,11 @@
-<!doctype html>
-<html lang="zh-Hant">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>系統設定 - MOR</title>
-  {% include "_head_assets.html" %}
-</head>
-<body>
-  {% set page_title = "系統設定 / 資料檢核" %}
-  {% set active_page = "settings" %}
-  {% set show_period_toolbar = true %}
-  {% include "_header.html" %}
+{% set page_title = "系統設定 / 資料檢核" %}
+{% set active_page = "settings" %}
+{% set show_period_toolbar = true %}
+{% extends "_base.html" %}
 
+{% block title %}系統設定 - MOR{% endblock %}
+
+{% block content %}
   <main class="settings-main">
     {% if error_message %}
       <section class="alert" role="alert">{{ error_message }}</section>
@@ -121,7 +115,8 @@
 
     </form>
   </main>
+{% endblock %}
 
+{% block body_scripts %}
   <script src="{{ url_for('static', filename='js/item-settings.js') }}"></script>
-</body>
-</html>
+{% endblock %}

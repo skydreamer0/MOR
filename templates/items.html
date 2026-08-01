@@ -1,17 +1,11 @@
-<!doctype html>
-<html lang="zh-Hant">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>品項管理 - MOR</title>
-  {% include "_head_assets.html" %}
-</head>
-<body>
-  {% set page_title = "品項管理" %}
-  {% set active_page = "items" %}
-  {% set show_period_toolbar = false %}
-  {% include "_header.html" %}
+{% set page_title = "品項管理" %}
+{% set active_page = "items" %}
+{% set show_period_toolbar = false %}
+{% extends "_base.html" %}
 
+{% block title %}品項管理 - MOR{% endblock %}
+
+{% block content %}
   <main>
     {% if error_message %}
       <section class="alert" role="alert">{{ error_message }}</section>
@@ -70,5 +64,4 @@
       </div>
     </form>
   </main>
-</body>
-</html>
+{% endblock %}

@@ -1,0 +1,38 @@
+{#
+  FE-12 shared page skeleton.
+
+  Pages extend this and set their header state with top-level `{% set %}`
+  *before* `{% extends %}`:
+
+      {% set page_title = "客戶分析" %}
+      {% set active_page = "customers" %}
+      {% set show_period_toolbar = true %}
+      {% extends "_base.html" %}
+
+  Jinja runs a child's top-level assignments before it hands control to the
+  parent's root render function, so `_header.html` (included below, with
+  context) sees them. Only plain top-level `{% set %}` behaves this way —
+  assignments nested inside a block are scoped to that block and will NOT
+  reach the header.
+
+  FE-13: `_head_assets.html` carries only site-wide assets. Pages that need
+  the analytics bundle (fmt.js / analytics-renderer.js / analytics-table.js)
+  declare it themselves in `{% block head_scripts %}`, deferred. Deferred
+  scripts run *after* inline scripts, so any inline caller of AnalyticsTable /
+  AnalyticsRenderer must wait for DOMContentLoaded.
+#}
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}MOR{% endblock %}</title>
+  {% include "_head_assets.html" %}
+  {% block head_scripts %}{% endblock %}
+</head>
+<body>
+  {% include "_header.html" %}
+{% block content %}{% endblock %}
+{% block body_scripts %}{% endblock %}
+</body>
+</html>

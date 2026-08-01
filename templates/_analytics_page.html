@@ -1,0 +1,72 @@
+{#
+  FE-12: shared 客戶分析 / 商品分析 page. The two pages were near-identical
+  twins; everything that differed is now a parameter set by the child template
+  (customers.html / products.html) before its `{% extends %}`:
+
+    page_title / active_page  — header state (see _base.html)
+    entity_label              — 客戶 or 商品, used in headings and empty state
+    entity_id_prefix          — cust / prod, drives element ids and AnalyticsTable idPrefix
+    show_entity_id            — 商品分析 shows the product code, 客戶分析 does not
+#}
+{% extends "_base.html" %}
+
+{% block title %}{{ page_title }} - MOR{% endblock %}
+
+{% block head_scripts %}{% include "_analytics_assets.html" %}{% endblock %}
+
+{% block content %}
+  <main class="workbench-main customer-analytics-main">
+    {% if error_message %}
+      <section class="alert" role="alert">{{ error_message }}</section>
+    {% endif %}
+
+    <section class="workbench-panel" aria-label="{{ entity_label }}業績分析">
+      <div class="section-header workbench-toolbar">
+        <div class="toolbar-title">
+          <h2>{{ page_title }}</h2>
+          <span id="{{ entity_id_prefix }}-period-label" class="section-sub">YTD 1–{{ month }}月 金額</span>
+        </div>
+      </div>
+
+      {% if slices %}
+      <div class="table-wrap compact-table customer-analytics-table workbench-table-shell">
+        <table id="{{ entity_id_prefix }}-table" class="dash-analytics-table management-table">
+          <thead>
+            <tr>
+              <th>{{ entity_label }}</th>
+              <th class="num">去年YTD金額</th>
+              <th class="num">預算YTD金額</th>
+              <th class="num">今年YTD金額</th>
+              <th class="num">預算達成</th>
+              <th class="num">YoY 成長率</th>
+              <th class="num">趨勢</th>
+              <th class="num">走勢</th>
+            </tr>
+          </thead>
+          <tbody id="{{ entity_id_prefix }}-tbody"></tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state">尚無{{ entity_label }}資料，請先同步業績明細。</div>
+      {% endif %}
+    </section>
+  </main>
+{% endblock %}
+
+{% block body_scripts %}
+  <script>
+  // FE-13: the analytics bundle is deferred, so it has not run yet at parse
+  // time. DOMContentLoaded fires after all deferred scripts have executed.
+  document.addEventListener("DOMContentLoaded", function () {
+    AnalyticsTable.mount(document.getElementById("{{ entity_id_prefix }}-tbody"), {{ slices | tojson }}, {
+      targetMonth: {{ month | int }},
+      idPrefix: "{{ entity_id_prefix }}",
+      columns: ["lyAmount", "budgetAmount", "tyAmount", "budgetRate", "yoyDelta", "trendLabel", "spark"],
+      boldLabel: true,
+      {% if show_entity_id %}showEntityId: true,
+      {% endif %}expandable: true,
+      sparkSeries: "amount",
+    });
+  });
+  </script>
+{% endblock %}

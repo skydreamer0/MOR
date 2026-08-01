@@ -1,8 +1,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/mor.css') }}">
 {# htmx 1.9.10 vendored locally (FE-7): MOR runs offline, so no CDN. #}
 <script src="{{ url_for('static', filename='js/vendor/htmx.min.js') }}"></script>
-<script src="{{ url_for('static', filename='js/fmt.js') }}"></script>
-<script src="{{ url_for('static', filename='js/analytics-renderer.js') }}"></script>
-<script src="{{ url_for('static', filename='js/analytics-table.js') }}"></script>
 <script src="{{ url_for('static', filename='js/behaviors.js') }}" defer></script>
 <script src="{{ url_for('static', filename='js/ui-feedback.js') }}" defer></script>
+{# FE-13: fmt.js / analytics-renderer.js / analytics-table.js are NOT site-wide.
+   Pages that need them include "_analytics_assets.html" from head_scripts. #}

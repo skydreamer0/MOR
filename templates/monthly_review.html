@@ -1,16 +1,11 @@
-<!doctype html>
-<html lang="zh-Hant">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>月底檢討 - MOR</title>
-  {% include "_head_assets.html" %}
-</head>
-<body>
-  {% set page_title = "月底檢討" %}
-  {% set active_page = "monthly_review" %}
-  {% include "_header.html" %}
+{% set page_title = "月底檢討" %}
+{% set active_page = "monthly_review" %}
+{% set show_period_toolbar = false %}
+{% extends "_base.html" %}
 
+{% block title %}月底檢討 - MOR{% endblock %}
+
+{% block content %}
   <main class="monthly-review-main review-main">
 
     {# ── 月份選擇 ── #}
@@ -63,6 +58,8 @@
     {% include "_monthly_review_detail.html" %}
     {% endif %}{# end if summary #}
   </main>
+{% endblock %}
+
+{% block body_scripts %}
   <script src="{{ url_for('static', filename='js/monthly-review.js') }}"></script>
-</body>
-</html>
+{% endblock %}

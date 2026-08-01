@@ -703,6 +703,13 @@ def test_workbench_panels_and_tables_use_shared_container_classes():
 
 
 def test_templates_use_shared_head_assets_and_no_static_inline_layout():
+    # FE-12: the doctype/head/body skeleton lives in _base.html; page templates
+    # extend it, so _head_assets.html is included exactly once, from the base.
+    base = Path("templates/_base.html").read_text(encoding="utf-8")
+    assert '{% include "_head_assets.html" %}' in base
+    assert '{% include "_header.html" %}' in base
+    assert "<!doctype html>" in base
+
     page_templates = [
         Path("templates/index.html"),
         Path("templates/forecast.html"),
@@ -710,10 +717,14 @@ def test_templates_use_shared_head_assets_and_no_static_inline_layout():
         Path("templates/monthly_review.html"),
         Path("templates/settings.html"),
         Path("templates/items.html"),
+        Path("templates/customers.html"),
+        Path("templates/products.html"),
     ]
     for template_path in page_templates:
         html = template_path.read_text(encoding="utf-8")
-        assert '{% include "_head_assets.html" %}' in html
+        assert '{% extends "' in html, template_path
+        assert "<!doctype html>" not in html, template_path
+        assert '{% include "_head_assets.html" %}' not in html, template_path
         assert "https://unpkg.com/htmx.org" not in html
         assert "css/mor.css" not in html
 
@@ -780,8 +791,7 @@ def test_layout_behaviors_are_shared_and_css_driven():
     forecast = Path("templates/forecast.html").read_text(encoding="utf-8")
     monitor = Path("templates/product_monitor.html").read_text(encoding="utf-8")
     settings = Path("templates/settings.html").read_text(encoding="utf-8")
-    customers = Path("templates/customers.html").read_text(encoding="utf-8")
-    products = Path("templates/products.html").read_text(encoding="utf-8")
+    analytics_page = Path("templates/_analytics_page.html").read_text(encoding="utf-8")
     head_assets = Path("templates/_head_assets.html").read_text(encoding="utf-8")
     css = Path("static/css/mor.css").read_text(encoding="utf-8")
 
@@ -789,7 +799,7 @@ def test_layout_behaviors_are_shared_and_css_driven():
     assert 'action="/sync"' in forecast
     assert 'data-confirm-title="同步 Excel 資料"' in forecast
     assert "js/behaviors.js" in head_assets
-    for template in (forecast, monitor, settings, customers, products):
+    for template in (forecast, monitor, settings, analytics_page):
         assert "window.innerHeight" not in template
         assert "main.style.height" not in template
         assert "addEventListener('resize'" not in template
@@ -1305,12 +1315,90 @@ def test_dashboard_sparkline_canvas_ids_do_not_depend_on_entity_labels():
 
 
 def test_management_analytics_pages_use_yoy_delta_semantics():
-    for template_name in ("templates/customers.html", "templates/products.html"):
-        template = Path(template_name).read_text(encoding="utf-8")
+    # FE-12: 客戶分析 / 商品分析 share one layout; the markup assertions now
+    # live on the shared template, the pages only carry the parameters.
+    template = Path("templates/_analytics_page.html").read_text(encoding="utf-8")
 
-        assert "<th class=\"num\">YoY 成長率</th>" in template
-        assert '"yoyDelta"' in template
-        assert '"yoyRatio"' not in template
+    assert "<th class=\"num\">YoY 成長率</th>" in template
+    assert '"yoyDelta"' in template
+    assert '"yoyRatio"' not in template
+
+    for template_name in ("templates/customers.html", "templates/products.html"):
+        page = Path(template_name).read_text(encoding="utf-8")
+        assert '{% extends "_analytics_page.html" %}' in page
+
+
+def test_customers_and_products_share_one_analytics_template():
+    """FE-12: the twin pages differ only by parameters, not by duplicated markup."""
+    customers = Path("templates/customers.html").read_text(encoding="utf-8")
+    products = Path("templates/products.html").read_text(encoding="utf-8")
+
+    for page in (customers, products):
+        assert "AnalyticsTable.mount" not in page
+        assert "<table" not in page
+        assert len(page.splitlines()) <= 12
+
+    assert '{% set entity_label = "客戶" %}' in customers
+    assert '{% set entity_id_prefix = "cust" %}' in customers
+    assert "{% set show_entity_id = false %}" in customers
+
+    assert '{% set entity_label = "商品" %}' in products
+    assert '{% set entity_id_prefix = "prod" %}' in products
+    assert "{% set show_entity_id = true %}" in products
+
+
+def test_analytics_bundle_is_loaded_per_page_and_deferred():
+    """FE-13: fmt/renderer/table are no longer site-wide, and load deferred."""
+    head_assets = Path("templates/_head_assets.html").read_text(encoding="utf-8")
+    bundle = Path("templates/_analytics_assets.html").read_text(encoding="utf-8")
+
+    # htmx stays site-wide and local; the analytics trio leaves the shared head.
+    assert "js/vendor/htmx.min.js" in head_assets
+    for script in ("js/fmt.js", "js/analytics-renderer.js", "js/analytics-table.js"):
+        assert script not in head_assets, script
+        assert script in bundle, script
+    # fmt.js must precede its two consumers (both read AnalyticsFmt at parse time)
+    assert bundle.index("js/fmt.js") < bundle.index("js/analytics-renderer.js")
+    assert bundle.index("js/analytics-renderer.js") < bundle.index("js/analytics-table.js")
+    assert bundle.count(' defer></script>') == 3
+
+    # Only the pages that use the bundle pull it in.
+    for template_name in ("templates/index.html", "templates/_analytics_page.html"):
+        page = Path(template_name).read_text(encoding="utf-8")
+        assert '{% include "_analytics_assets.html" %}' in page, template_name
+
+    for template_name in (
+        "templates/settings.html",
+        "templates/items.html",
+        "templates/monthly_review.html",
+        "templates/product_monitor.html",
+    ):
+        page = Path(template_name).read_text(encoding="utf-8")
+        assert "_analytics_assets.html" not in page, template_name
+        assert "analytics-table.js" not in page, template_name
+        assert "analytics-renderer.js" not in page, template_name
+
+    # forecast-table.js needs AnalyticsFmt + AnalyticsRenderer but not AnalyticsTable.
+    forecast = Path("templates/forecast.html").read_text(encoding="utf-8")
+    assert "js/fmt.js" in forecast
+    assert "js/analytics-renderer.js" in forecast
+    assert "js/analytics-table.js" not in forecast
+    assert forecast.index("js/analytics-renderer.js") < forecast.index("js/forecast-table.js")
+    assert "js/forecast-table.js') }}\" defer>" in forecast
+
+
+def test_inline_analytics_callers_wait_for_deferred_bundle():
+    """FE-13: deferred scripts run after inline ones — inline callers must wait."""
+    analytics_page = Path("templates/_analytics_page.html").read_text(encoding="utf-8")
+    dashboard = Path("templates/_dashboard_metrics.html").read_text(encoding="utf-8")
+
+    assert 'document.addEventListener("DOMContentLoaded"' in analytics_page
+    assert analytics_page.index("DOMContentLoaded") < analytics_page.index("AnalyticsTable.mount")
+
+    # The dashboard partial is also htmx-swapped long after DOMContentLoaded,
+    # so it runs immediately when the bundle is already present.
+    assert 'typeof AnalyticsTable !== "undefined"' in dashboard
+    assert 'document.addEventListener("DOMContentLoaded", fn)' in dashboard
 
 
 def test_dashboard_progress_hero_uses_dense_metric_layout():

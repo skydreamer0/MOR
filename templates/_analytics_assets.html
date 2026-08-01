@@ -1,0 +1,13 @@
+{#
+  FE-13: the analytics bundle, loaded only by pages that use it
+  (dashboard / 客戶分析 / 商品分析). Order matters — analytics-renderer.js and
+  analytics-table.js both read `AnalyticsFmt` at parse time and fall back to
+  `require("./fmt.js")` (a ReferenceError in the browser) if fmt.js has not run.
+  `defer` preserves document order, so this ordering holds.
+
+  Because these are deferred, they run AFTER any inline <script> in the page.
+  Inline callers must therefore wait for DOMContentLoaded.
+#}
+<script src="{{ url_for('static', filename='js/fmt.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/analytics-renderer.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/analytics-table.js') }}" defer></script>

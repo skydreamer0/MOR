@@ -1,17 +1,13 @@
-<!doctype html>
-<html lang="zh-Hant">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MOR - 業績總覽</title>
-  {% include "_head_assets.html" %}
-</head>
-<body>
-  {% set page_title = "業績總覽" %}
-  {% set active_page = "dashboard" %}
-  {% set show_period_toolbar = true %}
-  {% include "_header.html" %}
+{% set page_title = "業績總覽" %}
+{% set active_page = "dashboard" %}
+{% set show_period_toolbar = true %}
+{% extends "_base.html" %}
 
+{% block title %}MOR - 業績總覽{% endblock %}
+
+{% block head_scripts %}{% include "_analytics_assets.html" %}{% endblock %}
+
+{% block content %}
   <main>
     {% if error_message %}
       <section class="alert" role="alert">{{ error_message }}</section>
@@ -21,5 +17,4 @@
       {% include "_dashboard_metrics.html" %}
     </div>
   </main>
-</body>
-</html>
+{% endblock %}

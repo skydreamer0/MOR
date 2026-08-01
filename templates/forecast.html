@@ -1,17 +1,19 @@
-<!doctype html>
-<html lang="zh-Hant">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>預估調整 - MOR</title>
-  {% include "_head_assets.html" %}
-</head>
-<body>
-  {% set page_title = "預估調整" %}
-  {% set active_page = "forecast" %}
-  {% set show_period_toolbar = true %}
-  {% include "_header.html" %}
+{% set page_title = "預估調整" %}
+{% set active_page = "forecast" %}
+{% set show_period_toolbar = true %}
+{% extends "_base.html" %}
 
+{% block title %}預估調整 - MOR{% endblock %}
+
+{% block head_scripts %}
+  {# FE-13: forecast-table.js reads AnalyticsFmt at parse time and calls
+     AnalyticsRenderer.*; it does not use AnalyticsTable. Deferred scripts keep
+     document order, so these two run before the deferred forecast-table.js. #}
+  <script src="{{ url_for('static', filename='js/fmt.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/analytics-renderer.js') }}" defer></script>
+{% endblock %}
+
+{% block content %}
   <main class="forecast-main">
     {% if error_message %}
       <section class="alert" role="alert">{{ error_message }}</section>
@@ -238,7 +240,8 @@
       </div>
     </aside>
   </main>
+{% endblock %}
 
-  <script src="{{ url_for('static', filename='js/forecast-table.js') }}"></script>
-</body>
-</html>
+{% block body_scripts %}
+  <script src="{{ url_for('static', filename='js/forecast-table.js') }}" defer></script>
+{% endblock %}
