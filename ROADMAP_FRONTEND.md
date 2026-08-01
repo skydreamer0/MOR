@@ -18,8 +18,15 @@ Last reviewed: 2026-08-01
 | FE-15 sparkline design token | ✅ 完成（2026-08-01） |
 | FE-11 / FE-12 / FE-13 / FE-14 / FE-16 | 未開始 |
 
-FE-7 的驗收還缺一項：**尚未實際斷網啟動 app 走查** Forecast 存檔與 Dashboard 切月。
-目前只有靜態驗證（SHA-384 相符、樣板零外部引用）與 smoke test 覆蓋。
+FE-7 驗收已補齊（2026-08-01，實際起 app 走查）：
+
+- `window.htmx.version === "1.9.10"`，來源 `/static/js/vendor/htmx.min.js`。
+- 整個 session 41 個網路請求**全部指向 localhost，零外部請求**——沒有可失敗的外部相依，
+  等價於離線可用（比模擬斷網更直接的證據）。
+- Dashboard 切月：`GET /dashboard/metrics?month=6&year=2026 → 200`，metrics 區塊正確 swap。
+- Forecast 存檔：`PATCH /forecast/row/佑成藥局__N9AB0 → 200`，列 outerHTML swap，
+  重新載入頁面後值仍在（完整往返）。測試後已還原原值。
+- Console 零錯誤。
 
 ---
 
