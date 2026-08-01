@@ -616,21 +616,6 @@ main {
   font-weight: 700;
 }
 
-.tool-counts {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-4);
-  flex-wrap: wrap;
-  color: var(--muted);
-  font-size: var(--text-sm);
-}
-
-.tool-counts strong {
-  color: var(--ink);
-  font-weight: 600;
-}
-
-
 /* ── Phase 4: Workbench panels and table containers ─────────── */
 .workbench-panel {
   border: 1px solid var(--line);
@@ -924,9 +909,6 @@ input.qty:focus {
   color: var(--muted);
 }
 
-.lm-perf .gap-value.positive { color: var(--success-text); }
-.lm-perf .gap-value.negative { color: var(--danger); }
-
 /* ── View toggle (只看異常 / 全部明細) ──────────────────────────── */
 .view-toggle {
   display: inline-flex;
@@ -1082,9 +1064,8 @@ input.qty:focus {
 }
 
 /* 達成率四階由正典 .positive/.warning/.caution/.negative 提供顏色（ADR-0004）；
-   舊的 .low / .high 二階已於 FE-8 移除。 */
-.detail-row .detail-val.positive { color: var(--success-text); }
-.detail-row .detail-val.negative { color: var(--danger); }
+   舊的 .low / .high 二階已於 FE-8 移除；
+   FE-16 移除本處與正典完全重複的 scoped 覆寫。 */
 
 /* ── Monthly comparison table inside detail panel ──────────── */
 .detail-monthly-table {
@@ -1140,11 +1121,6 @@ input.qty:focus {
   color: var(--ink);
 }
 
-.detail-monthly-table td.positive { color: var(--success-text); }
-.detail-monthly-table td.warning  { color: var(--accent-2); }
-.detail-monthly-table td.caution  { color: var(--warning-text); }
-.detail-monthly-table td.negative { color: var(--danger); }
-
 /* ── Trend chart canvas ─────────────────────────────────────── */
 .detail-trend-canvas {
   display: block;
@@ -1182,7 +1158,7 @@ input.qty:focus {
 .legend-ly::before     { background: rgba(100,116,139,0.65); }
 .legend-budget::before { background: #d97706; }
 .legend-ty::before     { background: #0d9488; height: 2.5px; }
-.legend-ma3::before    { background: #f97316; }
+.legend-ma3::before    { background: var(--chart-gap-current); }
 .legend-ma6::before    { background: #a78bfa; }
 
 /* ── YTD cumulative grid ─────────────────────────────────────── */
@@ -1212,11 +1188,6 @@ input.qty:focus {
   color: var(--ink);
 }
 
-.ytd-val.positive { color: var(--success-text); }
-.ytd-val.warning  { color: var(--accent-2); }
-.ytd-val.caution  { color: var(--warning-text); }
-.ytd-val.negative { color: var(--danger); }
-
 /* ── Assessment rows ─────────────────────────────────────────── */
 .assess-row {
   display: flex;
@@ -1232,9 +1203,6 @@ input.qty:focus {
   color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
-
-.assess-row .detail-val.positive { color: var(--success-text); }
-.assess-row .detail-val.negative { color: var(--danger); }
 
 .badge.off::before {
   background: var(--muted-light);
@@ -1310,14 +1278,6 @@ td[data-final-forecast] {
 /* forecast 差異欄：字級拉到 sm，與 最後預估 視覺對等 */
 td[data-diff-display] .gap-value {
   font-size: var(--text-sm);
-}
-
-.gap-value.negative {
-  color: var(--danger);
-}
-
-.gap-value.positive {
-  color: var(--success-text);
 }
 
 
@@ -1582,15 +1542,6 @@ details[open] .discontinued-toggle {
 
 
 /* ── Operational pages: dashboard / monitor / settings ─────── */
-.dashboard-heading {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--sp-4);
-  margin-bottom: var(--sp-5);
-}
-
-.dashboard-heading h2,
 .section-header h3,
 .panel h3 {
   margin: 0;
@@ -1598,7 +1549,6 @@ details[open] .discontinued-toggle {
   line-height: 1.2;
 }
 
-.dashboard-heading p,
 .section-header p,
 .panel p {
   margin: var(--sp-1) 0 0;
@@ -1606,15 +1556,12 @@ details[open] .discontinued-toggle {
   font-size: var(--text-sm);
 }
 
+/* FE-16: 目前無引用，但刻意保留待 FE-12（Jinja base layout）確認是否重新使用。 */
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: var(--sp-3);
   margin-bottom: var(--sp-5);
-}
-
-.metric-wide {
-  min-width: 190px;
 }
 
 .metric small {
@@ -1675,6 +1622,7 @@ details[open] .discontinued-toggle {
   border-color: var(--accent-hover);
 }
 
+/* FE-16: 目前無引用，但刻意保留待 FE-12（Jinja base layout）確認是否重新使用。 */
 .split-layout {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
@@ -1756,10 +1704,11 @@ details[open] .discontinued-toggle {
   height: 32px;
 }
 
-.dash-analytics-table td.positive { color: var(--success-text); font-weight: 600; }
-.dash-analytics-table td.warning  { color: var(--accent-2);     font-weight: 600; }
-.dash-analytics-table td.caution  { color: var(--warning-text); font-weight: 600; }
-.dash-analytics-table td.negative { color: var(--danger);       font-weight: 600; }
+/* 顏色由正典 .positive/.warning/.caution/.negative 提供（ADR-0004）；此處只補字重。 */
+.dash-analytics-table td.positive { font-weight: 600; }
+.dash-analytics-table td.warning  { font-weight: 600; }
+.dash-analytics-table td.caution  { font-weight: 600; }
+.dash-analytics-table td.negative { font-weight: 600; }
 
 .compact-table {
   max-height: 360px;
@@ -1942,41 +1891,6 @@ details[open] .discontinued-toggle {
   text-overflow: ellipsis;
 }
 
-.monitor-note {
-  max-width: 280px;
-  color: var(--ink-secondary);
-  white-space: normal;
-}
-
-.health-list {
-  display: grid;
-  gap: var(--sp-2);
-  margin: 0;
-}
-
-.health-list div {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--sp-3);
-  padding: var(--sp-2) 0;
-  border-bottom: 1px solid var(--line-subtle);
-}
-
-.health-list div:last-child {
-  border-bottom: none;
-}
-
-.health-list dt {
-  color: var(--muted);
-  font-size: var(--text-sm);
-}
-
-.health-list dd {
-  margin: 0;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
 .muted {
   color: var(--muted);
 }
@@ -1999,14 +1913,12 @@ details[open] .discontinued-toggle {
   background: var(--danger);
 }
 
-.status-slight,
 .status-caution {
   background: var(--warning-bg);
   color: var(--warning-text);
   border-color: var(--warning-border);
 }
 
-.status-slight::before,
 .status-caution::before {
   background: var(--warning-text);
 }
@@ -2123,14 +2035,6 @@ details[open] .discontinued-toggle {
   width: 16px;
   height: 16px;
   padding: 0;
-}
-
-
-/* ── Bottom bar actions ─────────────────────────────────────── */
-.bottom-bar-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
 }
 
 
@@ -2376,7 +2280,6 @@ details[open] .discontinued-toggle {
 }
 
 .dist-dot-high            { background: var(--danger); }
-.dist-dot-slight,
 .dist-dot-caution         { background: var(--accent-2); }
 .dist-dot-ok              { background: var(--success-text); }
 .dist-dot-none            { background: var(--muted-light); }
@@ -2395,7 +2298,6 @@ details[open] .discontinued-toggle {
   text-align: right;
 }
 
-.dist-count--slight,
 .dist-count--caution {
   color: var(--accent-2);
 }
@@ -2588,10 +2490,6 @@ details[open] .discontinued-toggle {
     flex-wrap: wrap;
   }
   .summary { grid-template-columns: 1fr 1fr; }
-  .dashboard-heading {
-    align-items: stretch;
-    flex-direction: column;
-  }
   .split-layout {
     grid-template-columns: 1fr;
   }
@@ -2808,41 +2706,6 @@ details[open] .discontinued-toggle {
   border-left: 2px solid var(--accent);
 }
 
-/* Legacy block classes — kept for backward compat */
-.detail-block { flex: 1; min-width: 200px; padding: var(--sp-2) var(--sp-4); }
-.detail-block + .detail-block { border-left: 1px solid var(--line-subtle); }
-.detail-block-title {
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0;
-  margin-bottom: var(--sp-2);
-  padding-bottom: var(--sp-1);
-  border-bottom: 1px solid var(--line-subtle);
-}
-
-.detail-kv-grid {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: var(--sp-1) var(--sp-3);
-  align-items: baseline;
-}
-
-.detail-kv-grid--3col { grid-template-columns: auto 1fr 1fr; }
-
-.detail-kv-label {
-  font-size: var(--text-xs);
-  color: var(--muted);
-  white-space: nowrap;
-}
-
-.detail-kv-head {
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--ink);
-}
-
 /* ── Detail table — proper tabular layout for sub-card sections ── */
 .detail-table {
   width: 100%;
@@ -2994,15 +2857,6 @@ details[open] .discontinued-toggle {
 }
 
 /* ── Phase 7: Budget progress bars ── */
-.detail-budget {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-  padding: var(--sp-3) var(--sp-5);
-  border-top: 1px solid var(--line-subtle);
-  background: var(--panel);
-}
-
 .budget-bars {
   display: flex;
   flex-direction: column;
@@ -3038,7 +2892,7 @@ details[open] .discontinued-toggle {
 
 .budget-bar-fill--base {
   background: none;
-  border: 2px dashed #94a3b8;
+  border: 2px dashed var(--muted-light);
   border-radius: 4px;
   box-sizing: border-box;
 }
@@ -3105,16 +2959,6 @@ details[open] .discontinued-toggle {
 }
 
 /* ── Phase 6: Close-month status panel ── */
-.close-status-panel {
-  border-left: 3px solid var(--accent-2);
-}
-.close-status-panel--closed {
-  border-left-color: var(--success-text);
-}
-.close-status-time {
-  font-size: var(--text-xs);
-  white-space: nowrap;
-}
 .btn-close-month {
   background: var(--accent-2);
   color: #fff;
@@ -3481,12 +3325,6 @@ details[open] .discontinued-toggle {
 .review-table td.num,
 .review-table th.num { text-align: right; }
 
-.review-secondary-metrics {
-  margin-top: 16px;
-  border-top: 1px dashed var(--line);
-  padding-top: 12px;
-}
-
 .review-disclosure {
   overflow: hidden;
   background: var(--panel);
@@ -3544,15 +3382,6 @@ details[open] .discontinued-toggle {
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
-.review-secondary-metrics > summary {
-  cursor: pointer;
-  font-size: 13px;
-  color: var(--muted);
-  margin-bottom: 8px;
-  user-select: none;
-}
-.review-metric-card-sm .review-metric-value { font-size: 1.05rem; }
-
 .review-detail-toolbar {
   display: flex;
   align-items: center;
@@ -3789,10 +3618,11 @@ details[open] .discontinued-toggle {
 }
 .review-chart-legend .swatch-actual   { background: #2563eb; }
 .review-chart-legend .swatch-last-year { background: #64748b; }
-.review-chart-legend .swatch-forecast { background: #f97316; }
+.review-chart-legend .swatch-forecast { background: var(--chart-gap-current); }
 .review-chart-legend .swatch-budget   { background: #16a34a; }
 
 @media print {
+  /* FE-16: .site-header / .site-nav 目前無引用，刻意保留待 FE-12（Jinja base layout）確認。 */
   .site-header, .site-nav, .toolbar-controls, .review-export-actions,
   .review-anomaly-toggle { display: none !important; }
   .workbench-panel { box-shadow: none; border: 1px solid #ddd; break-inside: avoid; }
