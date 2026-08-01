@@ -16,7 +16,12 @@ Last reviewed: 2026-08-01
 | FE-9 統一 class 詞彙 | ✅ 完成（2026-08-01，ADR-0004） |
 | FE-10 fmt.js 唯一格式化來源 | ✅ 完成（2026-08-01） |
 | FE-15 sparkline design token | ✅ 完成（2026-08-01） |
-| FE-11 / FE-12 / FE-13 / FE-14 / FE-16 | 未開始 |
+| FE-11 forecast-table.js 模組封裝 | ✅ 完成（2026-08-01） |
+| FE-12 Jinja base layout | ✅ 完成（2026-08-01） |
+| FE-13 依頁面載入 JS | ✅ 完成（2026-08-01） |
+| FE-14 Canvas HiDPI 抽共用 | ⚠️ 部分完成（2026-08-01，4 處中的 3 處） |
+| FE-16 CSS 死碼與重複配色 | ⚠️ 部分完成（2026-08-01，4 個 layout class 待清） |
+| FE-17 `items.html` 孤兒樣板 | 未開始（新發現） |
 
 FE-7 驗收已補齊（2026-08-01，實際起 app 走查）：
 
@@ -196,6 +201,40 @@ diff 只有 12 處，全是「客戶↔商品」字串與 `idPrefix`。
 **重複配色**：同一組四階 → token 的映射在 `mor.css` 的
 920、1077、1136、1208、1229、1741 行各展開一次，差別只在 scope 前綴。
 FE-9 定案後一併收斂。
+
+---
+
+## 剩餘工作
+
+### FE-14 尾款：`gap-sparkline.js` 併入 `setupCanvas`
+
+四個重複點收了三個。`gap-sparkline.js` 沒收，原因**經實測確認**：Product Monitor 頁在
+FE-13 之後不再載入 analytics bundle，該頁 `typeof AnalyticsRenderer === "undefined"`，
+讓它呼叫 `AnalyticsRenderer.setupCanvas` 會在每次載入時拋錯。
+
+解法二選一，都要改樣板（所以當時的 agent 停手是對的）：
+1. `product_monitor.html` 額外載入 `analytics-renderer.js`——但整支 490 行只為了一個
+   工具函式，與 FE-13 的減重目標相衝。
+2. 把 `setupCanvas` 抽到獨立的小檔（例如 `static/js/canvas.js`），由需要的頁面各自載入。
+   **建議走這條。**
+
+### FE-16 尾款：4 個 layout class
+
+`site-header`、`site-nav`、`split-layout`、`dashboard-grid` 當時因 FE-12 併行進行而暫留。
+FE-12 已落地且沒有重新引入它們，現在可以確認刪除。
+
+### FE-17 `templates/items.html` 是孤兒樣板（新發現）
+
+`GET /items` 在 `src/backend/app.py:405` 直接 `redirect(url_for("settings"))`，
+`src/` 中沒有任何 `render_template("items.html")`，也沒有被 include——
+**這個樣板從來不會被渲染**。唯一的引用是 `tests/test_app.py` 把它當檔案讀來做結構斷言。
+
+主 `ROADMAP.md` 的 FE-6 紀錄寫「items.html confirmed still routed (`/items`, `/items/save`) —
+kept as-is」是不準確的：GET route 存在但會轉走，只有 `POST /items/save` 是活的
+（那是 `settings.html` 表單的 action，不需要 `items.html`）。
+
+**做法**：確認 `POST /items/save` 的來源確實是 settings 頁後，刪除 `templates/items.html`
+與相關的樣板結構斷言，並修正主 ROADMAP 的那行紀錄。
 
 ---
 
