@@ -36,6 +36,38 @@ const AnalyticsRenderer = (() => {
   const COLOR_MA6  = "#a78bfa";   // lavender — medium-term MA
 
 
+  // ── setupCanvas ────────────────────────────────────────────────────────────
+  /**
+   * HiDPI canvas boilerplate, extracted from the three call sites that used to
+   * repeat it (renderTrendChart / renderSparklineInCanvas / forecast-table.js
+   * drawSparkline). Sizes the backing store by devicePixelRatio and returns a
+   * context pre-scaled so all drawing code can keep working in CSS pixels.
+   *
+   * Width/height come from `clientWidth`/`clientHeight`; the fallbacks are per
+   * call site because each canvas has its own intrinsic size, and they are only
+   * reached when the element is not laid out yet (hidden ancestor → 0).
+   *
+   * Note: assigning `canvas.width` already clears the surface; call sites that
+   * still call `clearRect` afterwards keep doing so — it is a no-op safeguard.
+   *
+   * @param {HTMLCanvasElement|null} canvas
+   * @param {number} fallbackW  CSS-pixel width used when clientWidth is 0
+   * @param {number} fallbackH  CSS-pixel height used when clientHeight is 0
+   * @returns {{ctx: CanvasRenderingContext2D, w: number, h: number}|null}
+   */
+  function setupCanvas(canvas, fallbackW, fallbackH) {
+    if (!canvas) return null;
+    const dpr = (typeof window !== "undefined" && window.devicePixelRatio) || 1;
+    const w = canvas.clientWidth  || fallbackW;
+    const h = canvas.clientHeight || fallbackH;
+    canvas.width  = w * dpr;
+    canvas.height = h * dpr;
+    const ctx = canvas.getContext("2d");
+    ctx.scale(dpr, dpr);
+    return { ctx, w, h };
+  }
+
+
   // ── computeMetrics ─────────────────────────────────────────────────────────
   /**
    * @param {number[]} lyMonthly      [12] last year monthly quantities
@@ -97,15 +129,9 @@ const AnalyticsRenderer = (() => {
    */
   function renderTrendChart(canvas, { lyMonthly, tyMonthly, budgetMonthly, targetMonth,
                                       forecastMonthly, lastActualMonth }) {
-    if (!canvas) return;
-
-    const dpr  = window.devicePixelRatio || 1;
-    const w    = canvas.clientWidth  || 340;
-    const h    = canvas.clientHeight || 110;
-    canvas.width  = w * dpr;
-    canvas.height = h * dpr;
-    const ctx = canvas.getContext("2d");
-    ctx.scale(dpr, dpr);
+    const surface = setupCanvas(canvas, 340, 110);
+    if (!surface) return;
+    const { ctx, w, h } = surface;
     ctx.clearRect(0, 0, w, h);
 
     const padL = 6, padR = 6, padT = 12, padB = 18;
@@ -442,14 +468,9 @@ const AnalyticsRenderer = (() => {
    * @param {number}   [lastActualMonth]  1-based last confirmed month; defaults to targetMonth
    */
   function renderSparklineInCanvas(canvas, lyMonthly, tyMonthly, targetMonth, lastActualMonth) {
-    if (!canvas) return;
-    const dpr = window.devicePixelRatio || 1;
-    const w   = canvas.clientWidth  || 80;
-    const h   = canvas.clientHeight || 32;
-    canvas.width  = w * dpr;
-    canvas.height = h * dpr;
-    const ctx = canvas.getContext("2d");
-    ctx.scale(dpr, dpr);
+    const surface = setupCanvas(canvas, 80, 32);
+    if (!surface) return;
+    const { ctx, w, h } = surface;
     ctx.clearRect(0, 0, w, h);
 
     const pad = 2;
@@ -472,6 +493,7 @@ const AnalyticsRenderer = (() => {
 
   // ── Public API ─────────────────────────────────────────────────────────────
   return {
+    setupCanvas,
     computeMetrics,
     renderTrendChart,
     renderMonthlyTable,
@@ -480,3 +502,8 @@ const AnalyticsRenderer = (() => {
     renderSparklineInCanvas,
   };
 })();
+
+// Loaded as a plain <script> (no build step, ADR-0001); this guard is the node:test path.
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = AnalyticsRenderer;
+}
