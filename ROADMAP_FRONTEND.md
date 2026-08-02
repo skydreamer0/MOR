@@ -1,6 +1,6 @@
-# 前端改善 Roadmap（FE-7 ~ FE-16）
+# 前端改善 Roadmap（FE-7 ~ FE-17）
 
-Last reviewed: 2026-08-01
+Last reviewed: 2026-08-02
 
 延續 `ROADMAP.md` 已完成的 FE-1 ~ FE-6。本檔為前端剩餘工作的 source of truth；
 主 `ROADMAP.md` 只保留一行指標，細節寫在這裡。
@@ -19,9 +19,9 @@ Last reviewed: 2026-08-01
 | FE-11 forecast-table.js 模組封裝 | ✅ 完成（2026-08-01） |
 | FE-12 Jinja base layout | ✅ 完成（2026-08-01） |
 | FE-13 依頁面載入 JS | ✅ 完成（2026-08-01） |
-| FE-14 Canvas HiDPI 抽共用 | ⚠️ 部分完成（2026-08-01，4 處中的 3 處） |
-| FE-16 CSS 死碼與重複配色 | ⚠️ 部分完成（2026-08-01，4 個 layout class 待清） |
-| FE-17 `items.html` 孤兒樣板 | 未開始（新發現） |
+| FE-14 Canvas HiDPI 抽共用 | ✅ 完成（2026-08-02，4 處全收，helper 移入 `static/js/canvas.js`） |
+| FE-16 CSS 死碼與重複配色 | ✅ 完成（2026-08-02） |
+| FE-17 `items.html` 孤兒樣板 | ✅ 完成（2026-08-02） |
 
 FE-7 驗收已補齊（2026-08-01，實際起 app 走查）：
 
@@ -37,12 +37,14 @@ FE-7 驗收已補齊（2026-08-01，實際起 app 走查）：
 
 ## 現況體檢摘要
 
-| 面向 | 數字 |
+下表是 2026-08-01 動工前的體檢數字，保留作為對照；括號內是 FE-7~FE-17 完成後的現況。
+
+| 面向 | 動工前 → 現況 |
 |---|---|
-| 頁面樣板 | 8 個，各自複製 doctype/head/body 骨架 |
-| CSS | `static/css/mor.css` 單檔 3796 行、`:root` 60 個 token、350 個 class（27 個無引用） |
-| JS | 10 支、約 2260 行，無 build step（ADR-0001） |
-| htmx | 外部 CDN，實際只用到 6 種 `hx-*` 屬性 |
+| 頁面樣板 | 8 個各自複製 doctype/head/body 骨架 → 骨架收斂到 `_base.html`；`items.html` 已刪（FE-17），customers/products 併為 `_analytics_page.html` |
+| CSS | 3796 行、`:root` 60 個 token、350 個 class（27 個無引用） → 約 3630 行，死 class 已清 |
+| JS | 10 支、約 2260 行，無 build step（ADR-0001） → 11 支（新增 `canvas.js`），全部 IIFE 封裝 |
+| htmx | 外部 CDN → vendor 進 `static/js/vendor/`，全站零外部請求 |
 
 ---
 
@@ -204,47 +206,18 @@ FE-9 定案後一併收斂。
 
 ---
 
-## 剩餘工作
+## 全部完成
 
-### FE-14 尾款：`gap-sparkline.js` 併入 `setupCanvas`
+FE-7 ~ FE-17 均已完成。新工作請往下加，並同步更新上面的進度表。
 
-四個重複點收了三個。`gap-sparkline.js` 沒收，原因**經實測確認**：Product Monitor 頁在
-FE-13 之後不再載入 analytics bundle，該頁 `typeof AnalyticsRenderer === "undefined"`，
-讓它呼叫 `AnalyticsRenderer.setupCanvas` 會在每次載入時拋錯。
+**FE-14 收尾記錄**：`setupCanvas` 最終落在獨立的 `static/js/canvas.js`（不是
+`analytics-renderer.js`），因為 Product Monitor 在 FE-13 之後不載入 analytics bundle。
+四個重複點全部收斂。`gap-sparkline.js` 原本讀 `offsetWidth`／`offsetHeight`，
+已統一為 `clientWidth`／`clientHeight`——瀏覽器實測佈局後的 canvas 兩者相等（347×80），
+不是只從 CSS 推論。載入順序由 `tests/test_app.py::test_canvas_helper_loads_before_every_consumer` 保護。
 
-解法二選一，都要改樣板（所以當時的 agent 停手是對的）：
-1. `product_monitor.html` 額外載入 `analytics-renderer.js`——但整支 490 行只為了一個
-   工具函式，與 FE-13 的減重目標相衝。
-2. 把 `setupCanvas` 抽到獨立的小檔（例如 `static/js/canvas.js`），由需要的頁面各自載入。
-   **建議走這條。**
-
-### FE-16 尾款：4 個 layout class
-
-`site-header`、`site-nav`、`split-layout`、`dashboard-grid` 當時因 FE-12 併行進行而暫留。
-FE-12 已落地且沒有重新引入它們，現在可以確認刪除。
-
-### FE-17 `templates/items.html` 是孤兒樣板（新發現）
-
-`GET /items` 在 `src/backend/app.py:405` 直接 `redirect(url_for("settings"))`，
-`src/` 中沒有任何 `render_template("items.html")`，也沒有被 include——
-**這個樣板從來不會被渲染**。唯一的引用是 `tests/test_app.py` 把它當檔案讀來做結構斷言。
-
-主 `ROADMAP.md` 的 FE-6 紀錄寫「items.html confirmed still routed (`/items`, `/items/save`) —
-kept as-is」是不準確的：GET route 存在但會轉走，只有 `POST /items/save` 是活的
-（那是 `settings.html` 表單的 action，不需要 `items.html`）。
-
-**做法**：確認 `POST /items/save` 的來源確實是 settings 頁後，刪除 `templates/items.html`
-與相關的樣板結構斷言，並修正主 ROADMAP 的那行紀錄。
-
----
-
-## 建議執行順序
-
-1. **FE-7**（獨立、修實際 bug）
-2. **FE-9 → FE-8 → FE-10**（同一根因：格式化層沒真正收斂，先定 class 詞彙再改實作）
-3. **FE-11**（前置：FE-8 的測試）
-4. **FE-12 / FE-13**（結構，風險低但改動面廣）
-5. **FE-14 / FE-15 / FE-16**（清理）
+**FE-17 連帶清理**：刪掉 `items.html` 後 `.management-panel`、`.management-panel p`、
+`.item-code` 三條 CSS 一併變成死碼，已移除；`.management-table` 仍由 `settings.html` 使用，保留。
 
 ## 驗證指令
 

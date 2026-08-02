@@ -18,7 +18,9 @@ Rules for remaining work:
 
 ## Remaining Work
 
-- Frontend FE-7 ~ FE-16: see `ROADMAP_FRONTEND.md` (source of truth for frontend detail). Top item is FE-7 — htmx is loaded from a CDN, so forecast auto-save and dashboard period switching break offline and in release builds.
+No active items. Add new work here when it's identified.
+
+Frontend detail lives in `ROADMAP_FRONTEND.md` (source of truth for that area). FE-7 ~ FE-17 are all complete as of 2026-08-02.
 
 ## Completed Summary
 
@@ -33,7 +35,7 @@ Done and no longer active roadmap material:
 - FE-5 YoY display decision: signed delta everywhere for management analytics.
 - FE-5 achievement/budget-rate threshold decision: unified 4-tier `>=100` success / `90-99` warning / `80-89` caution / `<80` danger across `static/js/fmt.js`, `static/js/analytics-renderer.js`, `templates/_value_macros.html`, and Product Monitor progress bars/monthly-history cells.
 - FE-4 layout behavior deduplication: CSS-driven workbench height plus shared `behaviors.js` scroll-collapse wiring.
-- FE-6 accessibility/guidelines backlog: reduced-motion support for loading/flash/pulse/modal animations and drawer transitions, `aria-live="polite"`/`role="status"` on forecast save status and the dashboard metrics zone, keyboard-enabled Product Monitor expandable rows (`tabindex`, Enter/Space, `aria-controls`, focus-visible cell highlight, `toggleMonitorRow`/`detailForRow` helpers with test coverage in `tests/js/monitor-table.test.js`), Escape/focus handling for the forecast snapshot modal (`role="dialog"`) and row-detail drawer (focus moves in on open, returns to the triggering element on close via shared `restoreFocus`), and an accessible `.sr-only` header upload input in place of `display:none`. `items.html` confirmed still routed (`/items`, `/items/save`) — kept as-is.
+- FE-6 accessibility/guidelines backlog: reduced-motion support for loading/flash/pulse/modal animations and drawer transitions, `aria-live="polite"`/`role="status"` on forecast save status and the dashboard metrics zone, keyboard-enabled Product Monitor expandable rows (`tabindex`, Enter/Space, `aria-controls`, focus-visible cell highlight, `toggleMonitorRow`/`detailForRow` helpers with test coverage in `tests/js/monitor-table.test.js`), Escape/focus handling for the forecast snapshot modal (`role="dialog"`) and row-detail drawer (focus moves in on open, returns to the triggering element on close via shared `restoreFocus`), and an accessible `.sr-only` header upload input in place of `display:none`. (The FE-6 note that `items.html` was "confirmed still routed" was wrong: `GET /items` only redirects to `/settings` and nothing rendered the template. Deleted in FE-17 — see `ROADMAP_FRONTEND.md`.)
 - Release packaging: app-data runtime paths, release build scripts, GitHub Actions workflow, release boundary tests, and focused final check.
 
 ## Current Module Map
