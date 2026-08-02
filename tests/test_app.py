@@ -716,7 +716,6 @@ def test_templates_use_shared_head_assets_and_no_static_inline_layout():
         Path("templates/product_monitor.html"),
         Path("templates/monthly_review.html"),
         Path("templates/settings.html"),
-        Path("templates/items.html"),
         Path("templates/customers.html"),
         Path("templates/products.html"),
     ]
@@ -730,7 +729,6 @@ def test_templates_use_shared_head_assets_and_no_static_inline_layout():
 
     dashboard_partial = Path("templates/_dashboard_metrics.html").read_text(encoding="utf-8")
     head_assets = Path("templates/_head_assets.html").read_text(encoding="utf-8")
-    items_template = Path("templates/items.html").read_text(encoding="utf-8")
     css = Path("static/css/mor.css").read_text(encoding="utf-8")
 
     # htmx vendored locally (FE-7). Provenance is pinned by the SHA-384 check in
@@ -740,16 +738,13 @@ def test_templates_use_shared_head_assets_and_no_static_inline_layout():
     assert 'style="color:var(--accent-2)"' not in dashboard_partial
     assert 'style="margin:var(--sp-4) 0 0;"' not in dashboard_partial
     assert 'style="display:flex;gap:8px;align-items:center;"' not in dashboard_partial
-    assert 'style="color: var(--muted);"' not in items_template
 
     assert "dist-count--caution" in dashboard_partial
     assert "empty-note" in dashboard_partial
     assert "section-actions" in dashboard_partial
-    assert "item-code" in items_template
     assert ".dist-count--caution" in css
     assert ".empty-note" in css
     assert ".section-actions" in css
-    assert ".item-code" in css
 
 
 def test_shared_confirm_dialog_assets_replace_inline_confirm_handlers():
@@ -1347,6 +1342,39 @@ def test_customers_and_products_share_one_analytics_template():
     assert "{% set show_entity_id = true %}" in products
 
 
+def test_canvas_helper_loads_before_every_consumer():
+    """FE-14: MorCanvas is read at parse time, so canvas.js must come first.
+
+    It is its own module rather than part of analytics-renderer.js because
+    Product Monitor uses gap-sparkline.js without the analytics bundle.
+    """
+    assert Path("static/js/canvas.js").exists()
+
+    # Every page that paints a canvas must load canvas.js before the painter.
+    consumers = {
+        "templates/_analytics_assets.html": "js/analytics-renderer.js",
+        "templates/forecast.html": "js/analytics-renderer.js",
+        "templates/product_monitor.html": "js/gap-sparkline.js",
+    }
+    for template_name, painter in consumers.items():
+        page = Path(template_name).read_text(encoding="utf-8")
+        assert "js/canvas.js" in page, template_name
+        assert page.index("js/canvas.js") < page.index(painter), template_name
+
+    # forecast-table.js also reads MorCanvas; it loads in body_scripts, after head.
+    forecast = Path("templates/forecast.html").read_text(encoding="utf-8")
+    assert forecast.index("js/canvas.js") < forecast.index("js/forecast-table.js")
+
+    # The helper stayed dependency-free, so it can load anywhere.
+    canvas_js = Path("static/js/canvas.js").read_text(encoding="utf-8")
+    for foreign in ("AnalyticsFmt", "AnalyticsRenderer", "AnalyticsTable"):
+        assert foreign not in canvas_js, foreign
+
+    # Product Monitor still must not pull in the analytics bundle (FE-13).
+    monitor = Path("templates/product_monitor.html").read_text(encoding="utf-8")
+    assert "analytics-renderer.js" not in monitor
+
+
 def test_analytics_bundle_is_loaded_per_page_and_deferred():
     """FE-13: fmt/renderer/table are no longer site-wide, and load deferred."""
     head_assets = Path("templates/_head_assets.html").read_text(encoding="utf-8")
@@ -1360,7 +1388,9 @@ def test_analytics_bundle_is_loaded_per_page_and_deferred():
     # fmt.js must precede its two consumers (both read AnalyticsFmt at parse time)
     assert bundle.index("js/fmt.js") < bundle.index("js/analytics-renderer.js")
     assert bundle.index("js/analytics-renderer.js") < bundle.index("js/analytics-table.js")
-    assert bundle.count(' defer></script>') == 3
+    # FE-14: canvas.js first — analytics-renderer.js reads MorCanvas at parse time.
+    assert bundle.index("js/canvas.js") < bundle.index("js/analytics-renderer.js")
+    assert bundle.count(' defer></script>') == 4
 
     # Only the pages that use the bundle pull it in.
     for template_name in ("templates/index.html", "templates/_analytics_page.html"):
@@ -1369,7 +1399,6 @@ def test_analytics_bundle_is_loaded_per_page_and_deferred():
 
     for template_name in (
         "templates/settings.html",
-        "templates/items.html",
         "templates/monthly_review.html",
         "templates/product_monitor.html",
     ):
@@ -1530,6 +1559,21 @@ def test_items_route_redirects_to_settings():
 
     assert response.status_code == 302
     assert response.headers["Location"].endswith("/settings")
+
+
+def test_items_template_is_gone_and_settings_owns_the_save_form():
+    """FE-17: GET /items only redirects, so items.html was never rendered.
+
+    The template was deleted; settings.html carries the live POST /items/save
+    form. This pins that so the orphan cannot quietly come back.
+    """
+    assert not Path("templates/items.html").exists()
+
+    settings_html = Path("templates/settings.html").read_text(encoding="utf-8")
+    assert 'action="/items/save"' in settings_html
+
+    app_source = Path("src/backend/app.py").read_text(encoding="utf-8")
+    assert 'render_template("items.html"' not in app_source
 
 
 def test_settings_page_exposes_item_search_tools():

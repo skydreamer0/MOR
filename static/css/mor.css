@@ -1393,20 +1393,6 @@ input[type="number"] {
 }
 
 
-.management-panel {
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--panel);
-  padding: var(--sp-4);
-  box-shadow: var(--shadow-xs);
-  margin-bottom: var(--sp-5);
-}
-
-.management-panel p {
-  margin: 0 0 var(--sp-4) 0;
-  color: var(--muted);
-}
-
 .management-table {
   min-width: 720px;
 }
@@ -1556,14 +1542,6 @@ details[open] .discontinued-toggle {
   font-size: var(--text-sm);
 }
 
-/* FE-16: 目前無引用，但刻意保留待 FE-12（Jinja base layout）確認是否重新使用。 */
-.dashboard-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: var(--sp-3);
-  margin-bottom: var(--sp-5);
-}
-
 .metric small {
   color: var(--muted);
   font-size: var(--text-xs);
@@ -1620,13 +1598,6 @@ details[open] .discontinued-toggle {
 .btn-link:hover {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
-}
-
-/* FE-16: 目前無引用，但刻意保留待 FE-12（Jinja base layout）確認是否重新使用。 */
-.split-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
-  gap: var(--sp-4);
 }
 
 .panel {
@@ -1897,10 +1868,6 @@ details[open] .discontinued-toggle {
 
 .empty-note {
   margin: var(--sp-4) 0 0;
-}
-
-.item-code {
-  color: var(--muted);
 }
 
 .status-high {
@@ -2490,9 +2457,6 @@ details[open] .discontinued-toggle {
     flex-wrap: wrap;
   }
   .summary { grid-template-columns: 1fr 1fr; }
-  .split-layout {
-    grid-template-columns: 1fr;
-  }
   .forecast-tools {
     flex-wrap: wrap;
     gap: var(--sp-2);
@@ -3622,8 +3586,7 @@ details[open] .discontinued-toggle {
 .review-chart-legend .swatch-budget   { background: #16a34a; }
 
 @media print {
-  /* FE-16: .site-header / .site-nav 目前無引用，刻意保留待 FE-12（Jinja base layout）確認。 */
-  .site-header, .site-nav, .toolbar-controls, .review-export-actions,
+  .toolbar-controls, .review-export-actions,
   .review-anomaly-toggle { display: none !important; }
   .workbench-panel { box-shadow: none; border: 1px solid #ddd; break-inside: avoid; }
   .review-section { break-inside: avoid; }
