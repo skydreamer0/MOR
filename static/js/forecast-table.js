@@ -9,8 +9,11 @@ const ForecastTable = (() => {
   "use strict";
 
   const _fmt = typeof AnalyticsFmt !== "undefined" ? AnalyticsFmt : require("./fmt.js");
-  // AnalyticsRenderer supplies the row-detail charts and the shared HiDPI
-  // canvas setup (FE-14). Plain <script> in the browser; require() for node:test.
+  // Shared HiDPI canvas setup (FE-14) — its own module so pages without the
+  // analytics bundle can use it too.
+  const _canvas = typeof MorCanvas !== "undefined" ? MorCanvas : require("./canvas.js");
+  // AnalyticsRenderer supplies the row-detail charts.
+  // Plain <script> in the browser; require() for node:test.
   const _renderer = typeof AnalyticsRenderer !== "undefined"
     ? AnalyticsRenderer
     : require("./analytics-renderer.js");
@@ -30,7 +33,7 @@ const ForecastTable = (() => {
   function drawSparkline(canvas, data) {
     if (!canvas || !data || data.length === 0) return;
 
-    const { ctx, w, h } = _renderer.setupCanvas(canvas, 80, 24);
+    const { ctx, w, h } = _canvas.setupCanvas(canvas, 80, 24);
 
     const pad = 3;
     const plotW = w - pad * 2;

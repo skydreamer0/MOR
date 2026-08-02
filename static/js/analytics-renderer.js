@@ -23,6 +23,10 @@ const AnalyticsRenderer = (() => {
   // Loaded as a plain <script> (no build step, ADR-0001); require() is the node:test path.
   const fmt = typeof AnalyticsFmt !== "undefined" ? AnalyticsFmt : require("./fmt.js");
 
+  // HiDPI canvas setup lives in canvas.js (FE-14) so gap-sparkline.js can share
+  // it without pulling this whole module into Product Monitor.
+  const { setupCanvas } = typeof MorCanvas !== "undefined" ? MorCanvas : require("./canvas.js");
+
   const fmt0 = new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 0 });
   const fmt1 = new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 1 });
   const fmt2 = new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 2, minimumFractionDigits: 0 });
@@ -34,38 +38,6 @@ const AnalyticsRenderer = (() => {
   const COLOR_BUD  = "#d97706";
   const COLOR_MA3  = "#f97316";   // orange  — short-term MA
   const COLOR_MA6  = "#a78bfa";   // lavender — medium-term MA
-
-
-  // ── setupCanvas ────────────────────────────────────────────────────────────
-  /**
-   * HiDPI canvas boilerplate, extracted from the three call sites that used to
-   * repeat it (renderTrendChart / renderSparklineInCanvas / forecast-table.js
-   * drawSparkline). Sizes the backing store by devicePixelRatio and returns a
-   * context pre-scaled so all drawing code can keep working in CSS pixels.
-   *
-   * Width/height come from `clientWidth`/`clientHeight`; the fallbacks are per
-   * call site because each canvas has its own intrinsic size, and they are only
-   * reached when the element is not laid out yet (hidden ancestor → 0).
-   *
-   * Note: assigning `canvas.width` already clears the surface; call sites that
-   * still call `clearRect` afterwards keep doing so — it is a no-op safeguard.
-   *
-   * @param {HTMLCanvasElement|null} canvas
-   * @param {number} fallbackW  CSS-pixel width used when clientWidth is 0
-   * @param {number} fallbackH  CSS-pixel height used when clientHeight is 0
-   * @returns {{ctx: CanvasRenderingContext2D, w: number, h: number}|null}
-   */
-  function setupCanvas(canvas, fallbackW, fallbackH) {
-    if (!canvas) return null;
-    const dpr = (typeof window !== "undefined" && window.devicePixelRatio) || 1;
-    const w = canvas.clientWidth  || fallbackW;
-    const h = canvas.clientHeight || fallbackH;
-    canvas.width  = w * dpr;
-    canvas.height = h * dpr;
-    const ctx = canvas.getContext("2d");
-    ctx.scale(dpr, dpr);
-    return { ctx, w, h };
-  }
 
 
   // ── computeMetrics ─────────────────────────────────────────────────────────
@@ -493,7 +465,6 @@ const AnalyticsRenderer = (() => {
 
   // ── Public API ─────────────────────────────────────────────────────────────
   return {
-    setupCanvas,
     computeMetrics,
     renderTrendChart,
     renderMonthlyTable,

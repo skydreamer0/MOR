@@ -483,6 +483,8 @@
 
 {% block body_scripts %}
   <script src="{{ url_for('static', filename='js/monitor-table.js') }}"></script>
+  {# FE-14: gap-sparkline.js needs MorCanvas.setupCanvas — must load first. #}
+  <script src="{{ url_for('static', filename='js/canvas.js') }}"></script>
   <script src="{{ url_for('static', filename='js/gap-sparkline.js') }}"></script>
   <script>
     // 選檔後更新顯示的檔名

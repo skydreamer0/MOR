@@ -11,10 +11,14 @@
  *   above                   --chart-gap-above     #ef4444  ← 尚無此 token，暫用 fallback
  *   current                 --chart-gap-current   #f97316  ← 尚無此 token，暫用 fallback
  *
- * 三個 --chart-gap-* 目前在 mor.css 中不存在，因此讀取結果為空字串、
- * 一律落到 fallback。最接近的既有 token 值都與現行色不同
+ * 三個 --chart-gap-* 已於 FE-16 補進 mor.css 的 :root，fallback 保留作為
+ * token 缺席時的保險。最接近的其他既有 token 值都與現行色不同
  * （--success-text #047857 / --danger #dc2626 / --accent-2 #d97706），
- * 直接套用會改變畫面，故不採用；待 mor.css 補上對應 token 後即自動生效。
+ * 直接套用會改變畫面，故不採用。
+ *
+ * HiDPI canvas 設定委派 canvas.js 的 MorCanvas.setupCanvas（FE-14）——
+ * 本頁不載入 analytics bundle，所以那個 helper 獨立成一支小檔而非放在
+ * analytics-renderer.js 裡。載入順序見 templates/product_monitor.html。
  */
 (function () {
   const BAR_RADIUS = 2;
@@ -46,13 +50,7 @@
     const current = parseInt(canvas.dataset.current, 10) || 0;
     if (gaps.length === 0) return;
 
-    const dpr  = window.devicePixelRatio || 1;
-    const W    = canvas.offsetWidth  || 260;
-    const H    = canvas.offsetHeight || 72;
-    canvas.width  = W * dpr;
-    canvas.height = H * dpr;
-    const ctx = canvas.getContext("2d");
-    ctx.scale(dpr, dpr);
+    const { ctx, w: W, h: H } = MorCanvas.setupCanvas(canvas, 260, 72);
 
     const PL = 26, PR = 6, PT = 8, PB = 16;
     const chartW = W - PL - PR;

@@ -8,7 +8,10 @@
 {% block head_scripts %}
   {# FE-13: forecast-table.js reads AnalyticsFmt at parse time and calls
      AnalyticsRenderer.*; it does not use AnalyticsTable. Deferred scripts keep
-     document order, so these two run before the deferred forecast-table.js. #}
+     document order, so these run before the deferred forecast-table.js.
+     FE-14: canvas.js must precede analytics-renderer.js — both it and
+     forecast-table.js read MorCanvas at parse time. #}
+  <script src="{{ url_for('static', filename='js/canvas.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/fmt.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/analytics-renderer.js') }}" defer></script>
 {% endblock %}
