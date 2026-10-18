@@ -1,34 +1,16 @@
-"""ETL — Excel to Database synchronisation.
+"""Compatibility entrypoints for the shared, atomic workbook import pipeline.
 
-Two import paths exist; both write to the same SQLite DB but to different tables:
-
-1. sync_excel_to_db()
-   來源：業績明細*.xlsx（月底確定版）
-   目標：sales_records（整批覆蓋）
-   時機：月底三份報表更新後手動執行「同步資料」
-
-2. import_current_month()
-   來源：SHPB 出貨報表（使用者隨時上傳）
-   目標：current_month_records（只取代當月，其餘月份不受影響）
-   時機：使用者上傳當月累積業績時自動呼叫
-
-月底執行 sync_excel_to_db 後，若業績明細已涵蓋該月，
-current_month_records 中相同月份的記錄會被自動清除。
-
-欄位對應說明：
-    SHPB `銷售數量` + `贈品數量` = 業績明細 `銷+贈S量`
-    兩者語意相同，合算後寫入 `quantity`。
+Sync discovers dated historical detail, monthly history and budgets by content.
+SHPB adapters retain their explicit current/monitor operation intent. Default
+writes preserve unrelated facts; daily month replacement requires declared
+complete coverage. All retirement, fact and provenance writes share one
+transaction in import_service. Source workbooks are never modified.
 """
-import logging
-import re
 from pathlib import Path
 
 import pandas as pd
 
-from src.backend.data_loader import normalize_product_code
 from src.backend.database import MORDatabase
-
-logger = logging.getLogger(__name__)
 
 
 SALES_FILE_PATTERN = "業績明細*.xlsx"
@@ -73,297 +55,52 @@ SHPB_COLUMNS = {
 
 
 def normalize_shpb_records(df_shpb: pd.DataFrame) -> pd.DataFrame:
-    """將 SHPB 出貨報表正規化為與 sales_records 相同的欄位結構。
+    from src.backend.import_normalization import normalize_detail
+    return normalize_detail(df_shpb, shpb=True)
 
-    SHPB 的日期格式為單欄 YYYYMMDD 字串（例如 '20260505'），
-    與業績明細的年/月/日三欄不同，需要先轉換。
-    quantity = 銷售數量 + 贈品數量，語意等同業績明細的「銷+贈S量」。
 
-    Args:
-        df_shpb: 原始 SHPB DataFrame，需包含 SHPB_COLUMNS 中定義的欄位。
+def import_current_month(db: MORDatabase, df_shpb: pd.DataFrame, *, complete_months=None) -> int:
+    """Compatibility DataFrame adapter; changed overlapping snapshots need explicit coverage."""
+    from src.backend.import_parser import ParsedTable
+    from src.backend.import_service import plan_tables, commit_plan
+    plan = plan_tables([ParsedTable('shpb', df_shpb, '<dataframe>', '', '<dataframe>', 1, 1)],
+                       intent='current', complete_months=complete_months)
+    commit_plan(db, plan)
+    return len(plan.frames['current'])
 
-    Returns:
-        正規化後的 DataFrame，欄位：
-        order_date, customer_name, product_code, product_name,
-        quantity, unit_price, amount
+
+def import_current_workbooks(db, files, *, complete_months=None, daily_partitions=False):
+    from src.backend.import_service import preflight, commit_plan
+    plan = preflight(files, intent='current', complete_months=complete_months, daily_partitions=daily_partitions)
+    return commit_plan(db, plan)
+
+
+def sync_excel_to_db(db: MORDatabase, project_root: Path, *, default_budget_year=None,
+                     complete_months=None, observed_months=None, daily_partitions=False,
+                     deduplicate_monthly=False, preview=False, files=None):
+    """Discover all selected workbooks; preflight the package before an atomic commit.
+
+    Filenames never select a year or override workbook content. Missing input is
+    an error. Daily replacements require explicit complete month coverage.
     """
-    required = list(SHPB_COLUMNS.values())
-    _require_columns(df_shpb, required)
-
-    order_date = pd.to_datetime(
-        df_shpb[SHPB_COLUMNS["order_date"]].astype(str),
-        format="%Y%m%d",
-        errors="coerce",
-    )
-    sales_qty = pd.to_numeric(df_shpb[SHPB_COLUMNS["sales_qty"]], errors="coerce").fillna(0)
-    gift_qty  = pd.to_numeric(df_shpb[SHPB_COLUMNS["gift_qty"]],  errors="coerce").fillna(0)
-
-    normalized = pd.DataFrame({
-        "order_date":    order_date,
-        "customer_name": df_shpb[SHPB_COLUMNS["customer_name"]],
-        "product_code":  df_shpb[SHPB_COLUMNS["product_code"]].map(normalize_product_code),
-        "product_name":  df_shpb[SHPB_COLUMNS["product_name"]],
-        "quantity":      sales_qty + gift_qty,
-        "unit_price":    pd.to_numeric(df_shpb[SHPB_COLUMNS["unit_price"]], errors="coerce").fillna(0),
-        "amount":        pd.to_numeric(df_shpb[SHPB_COLUMNS["amount"]],     errors="coerce").fillna(0),
-    })
-    return normalized.dropna(subset=["order_date", "customer_name", "product_code"])
-
-
-def import_current_month(db: MORDatabase, df_shpb: pd.DataFrame) -> int:
-    """SHPB 報表寫入 current_month_records。
-
-    只取代 SHPB 資料所涵蓋的年月，其餘月份的紀錄不受影響。
-    重複上傳同一份 SHPB 是安全的。
-
-    Args:
-        db:       MORDatabase 實例。
-        df_shpb:  已讀入的 SHPB DataFrame（原始格式，尚未正規化）。
-
-    Returns:
-        寫入的資料列數。
-    """
-    records = normalize_shpb_records(df_shpb)
-    if records.empty:
-        return 0
-
-    # 取得本次 SHPB 涵蓋的所有 (year, month)，逐一清除舊資料
-    records["_year"]  = records["order_date"].dt.year
-    records["_month"] = records["order_date"].dt.month
-    covered_months = records[["_year", "_month"]].drop_duplicates().values.tolist()
-
-    insert_rows = records.drop(columns=["_year", "_month"])
-
-    with db.get_connection() as conn:
-        for year, month in covered_months:
-            conn.execute(
-                """
-                DELETE FROM current_month_records
-                WHERE strftime('%Y', order_date) = ?
-                  AND strftime('%m', order_date) = ?
-                """,
-                (str(year), f"{month:02d}"),
-            )
-        insert_rows.to_sql("current_month_records", conn, if_exists="append", index=False)
-
-    return len(insert_rows)
-
-
-def sync_excel_to_db(
-    db: MORDatabase,
-    project_root: Path,
-    *,
-    default_budget_year: int | None = None,
-):
-    """月底同步：從業績明細 Excel 整批覆蓋 sales_records。
-
-    同步完成後會自動清除 current_month_records 中已被業績明細涵蓋的月份，
-    確保不留下過時的 SHPB 資料。
-    所有 DB 寫入包在單一 transaction 中，任一步驟失敗則全部 rollback。
-    """
-    # ── Step 1: Read all data from Excel before any DB writes ─────────────────
-    sales_rows = None
-    sales_file = _find_first_file(project_root, SALES_FILE_PATTERN)
-    if sales_file:
-        sales_rows = normalize_sales_records(pd.read_excel(sales_file, sheet_name=SALES_SHEET_NAME))
-
-    budget_rows = None
-    budget_file = _find_budget_file(project_root, default_budget_year)
-    if budget_file:
-        xl = pd.ExcelFile(budget_file)
-        df_budget = pd.read_excel(budget_file, sheet_name=xl.sheet_names[0])
-        budget_rows = normalize_budget_targets(
-            df_budget,
-            default_year=default_budget_year or _infer_budget_year_from_filename(budget_file),
-        )
-
-    # ── Step 2: All DB writes in one transaction; rollback on any failure ──────
-    with db.get_connection() as conn:
-        if sales_rows is not None:
-            conn.execute("DELETE FROM sales_records")
-            sales_rows.to_sql("sales_records", conn, if_exists="append", index=False)
-            logger.info("Synced %d sales records.", len(sales_rows))
-
-        if budget_rows is not None:
-            budget_years = budget_rows["year"].unique().tolist()
-            placeholders = ",".join("?" * len(budget_years))
-            conn.execute(
-                f"DELETE FROM budget_targets WHERE year IN ({placeholders})",
-                budget_years,
-            )
-            budget_rows[
-                [
-                    "year",
-                    "month",
-                    "customer_name",
-                    "product_code",
-                    "target_quantity",
-                    "target_amount",
-                    "base_target_quantity",
-                ]
-            ].to_sql("budget_targets", conn, if_exists="append", index=False)
-            logger.info("Synced budget for years: %s.", budget_years)
-
-    # ── Step 3: Post-commit cleanup (best-effort, outside transaction) ─────────
-    if sales_rows is not None:
-        try:
-            _clear_covered_current_month_records(db, sales_rows)
-        except Exception:
-            logger.warning("current_month_records cleanup failed; stale rows may remain.", exc_info=True)
+    from src.backend.import_service import preflight, commit_plan, preview_plan
+    if files is None:
+        files = [(path.name, path.read_bytes()) for path in sorted(project_root.glob('*.xlsx'))
+                 if not path.name.startswith('~$')]
+    plan = preflight(files, intent='sync', default_budget_year=default_budget_year,
+                     complete_months=complete_months, observed_months=observed_months,
+                     daily_partitions=daily_partitions, deduplicate_monthly=deduplicate_monthly, allow_unresolved=preview)
+    return preview_plan(db, plan) if preview else commit_plan(db, plan)
 
 
 def normalize_sales_records(df_sales: pd.DataFrame) -> pd.DataFrame:
-    _require_columns(df_sales, SALES_COLUMNS.values())
-    order_date = pd.to_datetime(
-        {
-            "year": pd.to_numeric(df_sales[SALES_COLUMNS["year"]], errors="coerce"),
-            "month": pd.to_numeric(df_sales[SALES_COLUMNS["month"]], errors="coerce"),
-            "day": pd.to_numeric(df_sales[SALES_COLUMNS["day"]], errors="coerce"),
-        },
-        errors="coerce",
-    )
-    normalized = pd.DataFrame(
-        {
-            "order_date": order_date,
-            "customer_name": df_sales[SALES_COLUMNS["customer_name"]],
-            "product_code": df_sales[SALES_COLUMNS["product_code"]].map(normalize_product_code),
-            "product_name": df_sales[SALES_COLUMNS["product_name"]],
-            "quantity": pd.to_numeric(df_sales[SALES_COLUMNS["quantity"]], errors="coerce").fillna(0),
-            "unit_price": pd.to_numeric(df_sales[SALES_COLUMNS["unit_price"]], errors="coerce").fillna(0),
-            "amount": pd.to_numeric(df_sales[SALES_COLUMNS["amount"]], errors="coerce").fillna(0),
-        }
-    )
-    return normalized.dropna(subset=["order_date", "customer_name", "product_code"])
+    from src.backend.import_normalization import normalize_detail
+    return normalize_detail(df_sales)
 
 
-def normalize_budget_targets(df_budget: pd.DataFrame, default_year: int | None) -> pd.DataFrame:
-    required_columns = [
-        BUDGET_COLUMNS["customer_name"],
-        BUDGET_COLUMNS["product_code"],
-        BUDGET_COLUMNS["title"],
-    ]
-    _require_columns(df_budget, required_columns)
-    month_cols = _month_columns(df_budget.columns)
-    if not month_cols:
-        raise ValueError("No month columns found in budget sheet.")
-    if default_year is None and BUDGET_COLUMNS["year"] not in df_budget.columns:
-        raise ValueError("Budget year is required when the budget sheet has no year column.")
-
-    id_vars = [
-        BUDGET_COLUMNS["customer_name"],
-        BUDGET_COLUMNS["product_code"],
-        BUDGET_COLUMNS["title"],
-    ]
-    if BUDGET_COLUMNS["year"] in df_budget.columns:
-        id_vars.append(BUDGET_COLUMNS["year"])
-
-    filtered = df_budget[df_budget[BUDGET_COLUMNS["title"]].isin(BUDGET_TITLE_TO_METRIC)].copy()
-    melted = filtered.melt(
-        id_vars=id_vars,
-        value_vars=month_cols,
-        var_name="month",
-        value_name="value",
-    )
-    melted["metric"] = melted[BUDGET_COLUMNS["title"]].map(BUDGET_TITLE_TO_METRIC)
-    melted["value"] = pd.to_numeric(melted["value"], errors="coerce").fillna(0)
-    melted["year"] = (
-        pd.to_numeric(melted[BUDGET_COLUMNS["year"]], errors="coerce").fillna(default_year).astype(int)
-        if BUDGET_COLUMNS["year"] in melted.columns
-        else default_year
-    )
-    melted["month"] = melted["month"].map(_coerce_month).astype(int)
-    melted["customer_name"] = melted[BUDGET_COLUMNS["customer_name"]]
-    melted["product_code"] = melted[BUDGET_COLUMNS["product_code"]].map(normalize_product_code)
-
-    pivoted = (
-        melted.pivot_table(
-            index=["year", "month", "customer_name", "product_code"],
-            columns="metric",
-            values="value",
-            aggfunc="sum",
-            fill_value=0,
-        )
-        .reset_index()
-        .rename_axis(None, axis=1)
-    )
-    for metric in BUDGET_METRICS:
-        if metric not in pivoted.columns:
-            pivoted[metric] = 0.0
-
-    return pivoted[
-        [
-            "year",
-            "month",
-            "customer_name",
-            "product_code",
-            "target_quantity",
-            "target_amount",
-            "base_target_quantity",
-        ]
-    ].dropna(subset=["customer_name", "product_code"])
-
-
-def _clear_covered_current_month_records(db: MORDatabase, sales_rows: pd.DataFrame) -> None:
-    """業績明細 sync 後，清除 current_month_records 中已被涵蓋的月份。
-
-    以 sales_rows 的最大 (year, month) 為基準，刪除所有 <= 該月的當月紀錄。
-    """
-    if sales_rows.empty:
-        return
-    latest = sales_rows["order_date"].max()
-    if pd.isna(latest):
-        return
-    with db.get_connection() as conn:
-        deleted = conn.execute(
-            """
-            DELETE FROM current_month_records
-            WHERE strftime('%Y-%m', order_date) <= ?
-            """,
-            (latest.strftime("%Y-%m"),),
-        ).rowcount
-    if deleted:
-        logger.info("Cleared %d current_month_records rows covered by sales sync.", deleted)
-
-
-def _find_budget_file(project_root: Path, target_year: int | None = None) -> "Path | None":
-    matches = sorted(project_root.glob(BUDGET_FILE_PATTERN))
-    if not matches:
-        return None
-
-    if target_year is not None:
-        exact_matches = [path for path in matches if _infer_budget_year_from_filename(path) == target_year]
-        if exact_matches:
-            return exact_matches[0]
-
-    return max(matches, key=lambda path: (_infer_budget_year_from_filename(path) or 0, path.name))
-
-
-def _infer_budget_year_from_filename(path: Path) -> int | None:
-    match = re.search(r"(20\d{2})", path.name)
-    return int(match.group(1)) if match else None
-
-
-def _find_first_file(project_root: Path, pattern: str) -> "Path | None":
-    matches = sorted(project_root.glob(pattern))
-    return matches[0] if matches else None
-
-
-def _require_columns(df: pd.DataFrame, columns) -> None:
-    missing = [column for column in columns if column not in df.columns]
-    if missing:
-        raise ValueError(f"Missing columns: {', '.join(missing)}")
-
-
-def _month_columns(columns) -> list:
-    return [column for column in columns if _coerce_month(column) is not None]
-
-
-def _coerce_month(value) -> "int | None":
-    try:
-        month = int(value)
-    except (TypeError, ValueError):
-        return None
-    return month if 1 <= month <= 12 else None
+def normalize_budget_targets(df_budget: pd.DataFrame, default_year: int | None = None) -> pd.DataFrame:
+    from src.backend.import_normalization import budget_rows
+    return budget_rows(df_budget, default_year)
 
 
 if __name__ == "__main__":

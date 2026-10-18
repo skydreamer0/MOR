@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from src.backend.database import MORDatabase
 from src.backend.row_identity import make_row_id
+from src.backend.monthly_actuals import fetch_monthly_actuals
 
 
 @dataclass(frozen=True)
@@ -89,7 +90,12 @@ class MonthlyReviewDataReader:
                     """,
                     (str(year), f"{month:02d}"),
                 ).fetchall()
-        return {row["customer_name"]: float(row["amt"] or 0) for row in rows if row["customer_name"]}
+        result = {row["customer_name"]: float(row["amt"] or 0) for row in rows if row["customer_name"]}
+        for fact in fetch_monthly_actuals(self.db,year,month).values():
+            if 'taxed_amount' in fact:
+                name=fact['customer_name']
+                result[name]=result.get(name,0.0)+fact['taxed_amount']
+        return result
 
     def product_totals(
         self,
@@ -135,6 +141,12 @@ class MonthlyReviewDataReader:
             quantities[code] = float(row["qty"] or 0)
             if row["name"]:
                 names[code] = row["name"]
+        for fact in fetch_monthly_actuals(self.db,year,month).values():
+            code=fact['product_code']
+            if 'taxed_amount' in fact:
+                amounts[code]=amounts.get(code,0.0)+fact['taxed_amount']
+            if 'quantity' in fact:
+                quantities[code]=quantities.get(code,0.0)+fact['quantity']
         return amounts, quantities, names
 
     def budget_rows(self, year: int, month: int) -> dict[str, dict]:
@@ -331,6 +343,11 @@ class MonthlyReviewDataReader:
                 "qty": qty,
                 "amount": float(row["amount"] or 0),
             }
+        for key,fact in fetch_monthly_actuals(self.db,ly_year,month).items():
+            if key in result:
+                raise ValueError('Monthly and daily history overlap; reconcile imported sources')
+            # S quantity already has the declared report unit; never apply daily conversion.
+            result[key]={'qty':fact.get('quantity'), 'amount':fact.get('taxed_amount')}
         return result
 
     def fallback_unit_prices(
