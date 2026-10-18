@@ -1,5 +1,7 @@
 # 報表匯入契約
 
+[返回 README](../../README.md) · [操作步驟與排錯](user-guide.md) · [合成資料練習](demo-and-screenshots.md)
+
 ## 操作
 
 在「系統設定 → 匯入報表」選擇一份或多份 `.xlsx`：
