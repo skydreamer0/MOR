@@ -8,7 +8,6 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-from src.backend.daily_sales_importer import is_month_closed
 from src.backend.database import MORDatabase
 
 logger = logging.getLogger(__name__)
@@ -39,10 +38,11 @@ def execute_close_month(
     Raises:
         ValueError: if the month is already closed or has no actuals data.
     """
-    if is_month_closed(db, year, month):
-        raise ValueError(f"{year}/{month:02d} 已結月，無法重複結月。")
 
     with db.get_connection() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        if conn.execute('SELECT 1 FROM month_close_records WHERE year=? AND month=?',(year,month)).fetchone():
+            raise ValueError(f"{year}/{month:02d} 已結月，無法重複結月。")
         summary = conn.execute(
             """
             SELECT COUNT(*)                          AS row_count,

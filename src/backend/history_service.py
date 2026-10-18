@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from src.backend.database import MORDatabase
 from src.backend.row_identity import make_row_id
+from src.backend.monthly_actuals import add_monthly_quantity_history, fetch_monthly_actuals
 
 
 @dataclass(frozen=True)
@@ -61,10 +62,12 @@ def fetch_last_month_actuals(
             GROUP BY customer_name, product_code
         """, (str(prev_y), f"{prev_m:02d}")).fetchall()
 
-    return {
+    daily = {
         make_row_id(r["customer_name"], r["product_code"]): float(r["total_qty"] or 0)
         for r in rows
     }
+    return add_monthly_quantity_history(db, prev_y, prev_m, daily)
+
 
 
 def fetch_last_month_budgets(
@@ -137,6 +140,13 @@ def fetch_trend_6m(
         row_id = make_row_id(r["customer_name"], r["product_code"])
         raw.setdefault(row_id, {})[(int(r['yr']), int(r['mo']))] = float(r['total_qty'] or 0)
 
+    for y,m in months:
+        for row_id, fact in fetch_monthly_actuals(db,y,m).items():
+            if (y,m) in raw.get(row_id,{}):
+                raise ValueError('Monthly and daily history overlap; reconcile imported sources')
+            if 'quantity' in fact:
+                raw.setdefault(row_id,{})[(y,m)] = fact['quantity']
+
     # Flatten to ordered list[float] of length 6
     result: dict[str, list[float]] = {}
     for row_id, month_map in raw.items():
@@ -159,6 +169,9 @@ def enrich_rows_with_history(
     perf = fetch_last_month_performance(db, target_year, target_month)
     trends = fetch_trend_6m(db, target_year, target_month)
 
+    # Monthly facts fill comparisons only; never derive a date, price or order cycle.
+    monthly = {(year,month):fetch_monthly_actuals(db,year,month)
+               for year in (target_year-1,target_year) for month in range(1,13)}
     enriched = []
     for row in rows:
         p = perf.get(row.row_id)
@@ -169,8 +182,19 @@ def enrich_rows_with_history(
             last_3 = [v for v in t[-3:] if v > 0]
             avg_3m = sum(last_3) / len(last_3) if last_3 else 0.0
 
+        arrays={name:list(getattr(row,name)) for name in
+                ('ly_monthly','ty_monthly','ly_monthly_amount','ty_monthly_amount')}
+        for year,prefix in ((target_year-1,'ly'),(target_year,'ty')):
+            for month in range(1,13):
+                fact=monthly[(year,month)].get(row.row_id)
+                if fact is not None:
+                    arrays[prefix+'_monthly'][month-1]=fact['quantity']
+                    arrays[prefix+'_monthly_amount'][month-1]=fact['taxed_amount']
         enriched.append(replace(
             row,
+            **arrays,
+            last_year_same_month_qty=arrays['ly_monthly'][target_month-1],
+            this_year_same_month_qty=arrays['ty_monthly'][target_month-1],
             last_month_actual=p.actual if p else 0.0,
             last_month_budget=p.budget if p else 0.0,
             trend_6m=t if t else [0.0] * 6,
