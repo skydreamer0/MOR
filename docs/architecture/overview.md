@@ -248,7 +248,7 @@ python -m pytest -q
 - `tests/test_app.py` — Flask 路由行為
 - `tests/test_etl.py` / `tests/test_current_month_integration.py` — Excel / SHPB 同步與當月資料合併
 - `tests/test_daily_sales_importer.py` — 每日業績匯入與結月
-- `tests/test_operational_views.py` / `tests/test_dashboard_analytics_workflow.py` — Dashboard、監控、analytics 與資料健康上下文
+- `tests/test_dashboard_analytics_workflow.py` / `tests/test_product_monitor_workflow.py` — Dashboard analytics 上下文與產品監控頁面上下文
 - `tests/test_projection_engine.py` / `tests/test_workday_calendar.py` — 月底推估與工作日計算
 - `tests/test_snapshot_service.py` / `tests/test_monthly_review.py` — 預估快照與結月後檢討
 - `tests/test_form_parser.py` — 表單解析

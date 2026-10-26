@@ -86,6 +86,8 @@ app.run(host="127.0.0.1", port=5001, debug=False, use_reloader=False)
 - 在同一批選 `demo-monthly-only.xlsx` 與 `demo-monthly-conflict.xlsx`，填 `2025-01`：同一月 S 量分別為 20 與 21，應拒絕整批；勾略過相同月指標也不能消除數值衝突。
 - 上一項失敗後重新開啟月彙總頁，已提交的 S 量仍為 20；失敗不應留下部分變更。
 
+目前版本的衝突提交會以 `sync_error` 導回總覽，但總覽尚未呈現這個錯誤欄位，因此不能預期看到可讀的衝突錯誤提示。圖 05 的錯誤提示截圖目前受此 UI 缺口阻擋，不可標為通過或用假圖補齊；錯誤提示修復需另行處理。圖 06 可核對原 S 量仍為 20，但不能只靠畫面證明整筆交易已回滾。
+
 ### 每日用途
 
 選 `demo-daily.xlsx`，按「匯入監控 SHPB」，到產品監控切換 `2026-01`。預期最新匯入批次摘要顯示 1 筆、數量 3（銷售 2 + 贈品 1）、金額 30。全新資料目錄只匯入監控 SHPB 時，不會產生個別客戶／商品的監控列；那些列來自真正的歷史／當月每日交易所建立的預估列。這一筆只驗證匯入批次摘要，不代表已建立叫貨週期或個別監控列。
@@ -104,7 +106,7 @@ app.run(host="127.0.0.1", port=5001, debug=False, use_reloader=False)
 | 02 `import-preview.png` | 合併檔填 `2025-01` 後預覽 JSON | 來源表格／位置、5 與 3 指標筆數、`can_commit=true` |
 | 03 `monthly-analysis.png` | 單檔提交後的 `/history/monthly/view` | 客戶／商品、五指標合計、日預測不可用 |
 | 04 `multi-file-import.png` | 全新練習目錄選兩個分檔 | 多檔選擇與正確涵蓋月份；配合結果核對 |
-| 05 `monthly-conflict.png` | 同批匯入兩個 S 量衝突檔 | 真實錯誤訊息，沒有靜默覆蓋 |
+| 05 `monthly-conflict.png` | 同批匯入兩個 S 量衝突檔 | 目前受阻：總覽未呈現 `sync_error`，無可讀錯誤提示可拍；不得標示通過，待 UI 缺口修復後再驗證 |
 | 06 `monthly-after-rejection.png` | 錯誤後重開月彙總 | 原 S 量仍為 20，不宣稱只靠截圖驗證整個 DB 原子性 |
 | 07 `daily-monitor.png` | 監控用途匯入後切 `2026-01` | 最新匯入批次摘要：1 筆、數量 3、金額 30；不要求出現個別監控列 |
 | 08 `monthly-empty.png` | `/history/monthly/view?year=2025&month=2` | 沒資料與零實績明確不同 |
