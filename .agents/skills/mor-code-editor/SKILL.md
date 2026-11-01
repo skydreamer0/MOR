@@ -23,3 +23,10 @@ After edits:
 - Run focused tests.
 - Run full tests when routes, shared services, or templates changed.
 - Report modified files, diff summary, verification, risk, and up to 3 next steps.
+
+
+## Work principle
+
+Less attention taken. More value delivered.
+
+Reduce unnecessary questions and narration; deliver useful, verified results. Preserve required approvals, risk disclosures, and blocker reports. This principle does not expand authorization or override safety and project rules.

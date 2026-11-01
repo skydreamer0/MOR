@@ -20,3 +20,10 @@ Use the `gh` CLI for issue operations.
 
 - When a skill says "publish to the issue tracker", create a GitHub issue.
 - When a skill says "fetch the relevant ticket", use `gh issue view <number> --comments`.
+
+
+## Work principle
+
+Less attention taken. More value delivered.
+
+Reduce unnecessary questions and narration; deliver useful, verified results. Preserve required approvals, risk disclosures, and blocker reports. This principle does not expand authorization or override safety and project rules.
