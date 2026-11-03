@@ -202,6 +202,29 @@ _MIGRATIONS: list[tuple[int, list[str]]] = [
 
     # 7 — backfill: month_close_records.final_snapshot_id
     (7, ["ALTER TABLE month_close_records ADD COLUMN final_snapshot_id INTEGER"]),
+
+    # 8 — grain-preserving imports. Source workbooks are never stored here.
+    (8, [
+        """CREATE TABLE IF NOT EXISTS monthly_actual_facts (
+            year INTEGER NOT NULL, month INTEGER NOT NULL,
+            customer_name TEXT NOT NULL, product_code TEXT NOT NULL,
+            metric TEXT NOT NULL, unit TEXT NOT NULL, value REAL NOT NULL,
+            PRIMARY KEY (year, month, customer_name, product_code, metric)
+        )""",
+        """CREATE TABLE IF NOT EXISTS import_receipts (
+            id INTEGER PRIMARY KEY, package_hash TEXT NOT NULL,
+            intent TEXT NOT NULL, manifest TEXT NOT NULL,
+            imported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )""",
+        """CREATE TABLE IF NOT EXISTS import_fact_sources (
+            kind TEXT NOT NULL, fact_key TEXT NOT NULL,
+            receipt_id INTEGER NOT NULL, sources TEXT NOT NULL,
+            PRIMARY KEY (kind, fact_key)
+        )""",
+    ]),
+    (9, ["""CREATE TABLE IF NOT EXISTS import_customer_bindings (
+        customer_name TEXT PRIMARY KEY, customer_code TEXT NOT NULL
+    )"""]),
 ]
 
 

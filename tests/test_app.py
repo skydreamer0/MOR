@@ -1796,6 +1796,10 @@ def test_product_monitor_import_route_stores_daily_actuals():
          "商品簡稱": "Product One", "銷+贈S量": 3, "單價NT(淨)": 100, "含稅總額(淨)": 0},
     ])
     _seed_sales_from_legacy_df(db_base_path, data)
+    # This fixture explicitly resolves the legacy name-only customer's identity.
+    from src.backend.database import get_db
+    with get_db(db_base_path).get_connection() as conn:
+        conn.execute("INSERT INTO import_customer_bindings(customer_name,customer_code) VALUES (?,?)", ("Hospital A","C001"))
     client = _client({"DB_BASE_PATH": db_base_path})
 
     response = client.post(
@@ -1828,6 +1832,10 @@ def test_close_month_route_creates_record_and_blocks_reimport():
         "商品簡稱": "Product One", "銷+贈S量": 10, "單價NT(淨)": 100, "含稅總額(淨)": 0,
     }])
     _seed_sales_from_legacy_df(db_base_path, data)
+    # This fixture explicitly resolves the legacy name-only customer's identity.
+    from src.backend.database import get_db
+    with get_db(db_base_path).get_connection() as conn:
+        conn.execute("INSERT INTO import_customer_bindings(customer_name,customer_code) VALUES (?,?)", ("Hospital A","C001"))
     client = _client({"DB_BASE_PATH": db_base_path})
 
     # Import May 2026 data
@@ -1894,6 +1902,10 @@ def test_close_month_auto_saves_forecast_snapshot():
         "商品簡稱": "Product One", "銷+贈S量": 10, "單價NT(淨)": 100, "含稅總額(淨)": 0,
     }])
     _seed_sales_from_legacy_df(db_base_path, data)
+    # This fixture explicitly resolves the legacy name-only customer's identity.
+    from src.backend.database import get_db
+    with get_db(db_base_path).get_connection() as conn:
+        conn.execute("INSERT INTO import_customer_bindings(customer_name,customer_code) VALUES (?,?)", ("Hospital A","C001"))
     client = _client({"DB_BASE_PATH": db_base_path})
 
     client.post(
@@ -1946,6 +1958,10 @@ def test_product_monitor_shows_close_button_after_import():
         "商品簡稱": "Product One", "銷+贈S量": 10, "單價NT(淨)": 100, "含稅總額(淨)": 0,
     }])
     _seed_sales_from_legacy_df(db_base_path, data)
+    # This fixture explicitly resolves the legacy name-only customer's identity.
+    from src.backend.database import get_db
+    with get_db(db_base_path).get_connection() as conn:
+        conn.execute("INSERT INTO import_customer_bindings(customer_name,customer_code) VALUES (?,?)", ("Hospital A","C001"))
     client = _client({"DB_BASE_PATH": db_base_path})
 
     client.post(

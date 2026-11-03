@@ -136,7 +136,7 @@ def test_import_daily_sales_workbook_overwrites_same_month(tmp_path: Path):
     second = _workbook_bytes([_daily_row("2026-05-08", "Hospital A", "P1", 9, 1800)])
 
     import_daily_sales_workbook(db, first, "first.xlsx")
-    result = import_daily_sales_workbook(db, second, "second.xlsx")
+    result = import_daily_sales_workbook(db, second, "second.xlsx", complete_months={(2026,5)})
 
     with db.get_connection() as conn:
         rows = conn.execute("SELECT * FROM daily_sales_actuals").fetchall()
@@ -257,7 +257,7 @@ def test_get_latest_import_batch_returns_most_recent(tmp_path: Path):
     first = _workbook_bytes([_daily_row("2026-05-04", "H", "P1", 5, 1000)])
     second = _workbook_bytes([_daily_row("2026-05-08", "H", "P1", 9, 1800)])
     import_daily_sales_workbook(db, first, "first.xlsx")
-    import_daily_sales_workbook(db, second, "second.xlsx")
+    import_daily_sales_workbook(db, second, "second.xlsx", complete_months={(2026,5)})
 
     batch = get_latest_import_batch(db, 2026, 5)
     assert batch is not None

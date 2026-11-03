@@ -6,7 +6,7 @@ from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlparse
 
 import pandas as pd
-from flask import Flask, Response, redirect, render_template, request, send_file, url_for
+from flask import Flask, Response, redirect, render_template, request, send_file, url_for, jsonify
 from flask_caching import Cache
 
 from src.backend.dashboard_analytics_workflow import build_dashboard_template_context
@@ -38,7 +38,10 @@ from src.backend.daily_sales_importer import (
 from src.backend.close_month_workflow import execute_close_month
 from src.backend.context_cache import ContextCache
 from src.backend.database import get_db
-from src.backend.etl import import_current_month, sync_excel_to_db
+from src.backend.etl import import_current_month, import_current_workbooks, sync_excel_to_db
+from src.backend.import_service import parse_period_selection
+from src.backend.daily_sales_importer import import_daily_sales_workbooks
+from src.backend.monthly_actuals import fetch_monthly_actuals
 from src.backend.settings_context import build_settings_error_context, build_settings_page_context
 from src.backend.snapshot_service import (
     delete_snapshot,
@@ -64,6 +67,8 @@ def create_app(config: dict | None = None) -> Flask:
         static_folder=str(resource_root / "static"),
     )
     app.config.update(config or {})
+    if app.config.get("MAX_CONTENT_LENGTH") is None:
+        app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024
     forecast_config = app.config.get("FORECAST_CONFIG", ForecastConfig())
     db = get_db(db_base_path)
     flask_cache = Cache(config={"CACHE_TYPE": "SimpleCache", "CACHE_DEFAULT_TIMEOUT": 0, "CACHE_THRESHOLD": 500})
@@ -237,11 +242,15 @@ def create_app(config: dict | None = None) -> Flask:
 
     @app.post("/monitor/products/import")
     def import_product_monitor_daily_sales() -> Response:
-        uploaded = request.files.get("daily_sales_file")
-        if uploaded is None or not uploaded.filename:
+        uploaded = [f for f in (request.files.getlist("daily_sales_file") or request.files.getlist("files")) if f.filename]
+        if not uploaded:
             return redirect(url_for("product_monitor", import_error="請選擇當月累積業績檔。"))
         try:
-            result = import_daily_sales_workbook(db, uploaded.stream, uploaded.filename)
+            result = import_daily_sales_workbooks(
+                db, [(f.filename, f.read()) for f in uploaded],
+                complete_months=parse_period_selection(request.form.get('complete_months')),
+                daily_partitions=request.form.get('daily_partitions') == 'true',
+            )
             ctx_cache.invalidate(result.sales_year, result.sales_month)
         except Exception as exc:
             return redirect(url_for("product_monitor", import_error=f"匯入失敗：{exc}"))
@@ -421,28 +430,71 @@ def create_app(config: dict | None = None) -> Flask:
     def save_exclusions() -> Response:
         return redirect(url_for("settings"))
 
+    @app.get('/history/monthly/view', endpoint='monthly_history_view')
+    @app.get('/history/monthly')
+    def monthly_history():
+        try:
+            with db.get_connection() as conn:
+                periods=[tuple(r) for r in conn.execute('SELECT DISTINCT year,month FROM monthly_actual_facts ORDER BY year DESC,month DESC')]
+            from src.backend.forecast_models import ForecastTarget
+            default=ForecastTarget(*periods[0]) if periods else default_target_from_db(db)
+            target = parse_target_period(request.args, default)
+            year,month = target.year,target.month
+            facts=fetch_monthly_actuals(db,year,month)
+            if request.path.endswith('/view'):
+                metrics=['base_quantity','quantity','taxed_amount','untaxed_amount','bonus_amount']
+                totals={metric:sum(row.get(metric,0) for row in facts.values()) for metric in metrics}
+                return render_template('monthly_history.html',year=year,month=month,
+                                       facts=facts,totals=totals,periods=periods)
+            return jsonify({'year':year,'month':month,'facts':facts,
+                            'daily_capabilities':{'order_cycle':False,'latest_order_day':False,'unit_price':False}})
+        except (ValueError, TypeError, FormValidationError) as exc:
+            return jsonify({'error':str(exc)}),400
+
     @app.post("/sync")
     def sync_data() -> Response:
         try:
-            sync_excel_to_db(db, data_base_path)
+            uploaded = [f for f in request.files.getlist('files') if f.filename]
+            result = sync_excel_to_db(
+                db, data_base_path, files=[(f.filename,f.read()) for f in uploaded] if uploaded else None,
+                default_budget_year=request.form.get('budget_year') or None,
+                complete_months=parse_period_selection(request.form.get('complete_months')),
+                observed_months=parse_period_selection(request.form.get('observed_months')),
+                daily_partitions=request.form.get('daily_partitions') == 'true',
+                deduplicate_monthly=request.form.get('deduplicate_monthly') == 'true',
+                preview=request.form.get('preview') == 'true',
+            )
+            if request.form.get('preview') == 'true':
+                return jsonify(result)
             ctx_cache.invalidate_all()
         except Exception as exc:
             return redirect(url_for("dashboard", sync_error=str(exc)))
-        return redirect(url_for("dashboard", sync_message="資料同步完成。"))
+        labels = {'sales':'歷史明細','budget':'預算欄值','monthly_actual':'月實績欄值'}
+        counts = '、'.join(f"{labels.get(kind,kind)} {count} 筆" for kind,count in result['counts'].items())
+        state = '資料同步完成' if result['changed'] else '資料相同，未重複寫入'
+        if result['counts'].get('monthly_actual'):
+            periods=result['preview']['observed_months']
+            year,month=max(periods)
+            return redirect(url_for('monthly_history_view',year=year,month=month,upload_message=f"{state}：{counts}。"))
+        return redirect(url_for("dashboard", sync_message=f"{state}：{counts}。"))
 
     @app.post("/upload/current-month")
     def upload_current_month() -> Response:
         """接收 SHPB 出貨報表，寫入 current_month_records。
 
         上傳後清除 cache，讓下次頁面請求重新合併當月資料。
-        支援重複上傳：每次只取代 SHPB 涵蓋的年月，歷史資料不受影響。
+        相同資料重送不重複新增；不同的重疊資料需明確指定完整月份。
         """
-        file = request.files.get("file")
-        if not file or not file.filename:
+        files = [f for f in (request.files.getlist("file") or request.files.getlist("files")) if f.filename]
+        if not files:
             return _redirect_back(upload_error="請選擇檔案")
         try:
-            df = pd.read_excel(file)
-            count = import_current_month(db, df)
+            result = import_current_workbooks(
+                db, [(f.filename,f.read()) for f in files],
+                complete_months=parse_period_selection(request.form.get('complete_months')),
+                daily_partitions=request.form.get('daily_partitions') == 'true',
+            )
+            count = result['counts']['current']
             ctx_cache.invalidate_all()
             return _redirect_back(upload_message=f"已匯入 {count} 筆當月業績資料。")
         except Exception as exc:

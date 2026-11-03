@@ -1,0 +1,21 @@
+{% set page_title = "月彙總實績" %}
+{% set active_page = "monthly_history" %}
+{% set show_period_toolbar = true %}
+{% extends "_base.html" %}
+{% block title %}月彙總實績 - MOR{% endblock %}
+{% block content %}
+<main class="settings-main">
+  <h2>{{ year }} / {{ '%02d'|format(month) }} 月彙總實績</h2>
+  <p>此頁僅列已匯入的月彙總來源，不與每日明細加總。普通量、S 量與各金額口徑分開呈現。</p>
+  <p role="note">月資料的日預測不可用：未提供訂單日期、單價與叫貨週期，不以零表示，也不產生每日交易。只有月資料的品項可在此分析，尚不建立每日預估列。</p>
+  <nav aria-label="已匯入月份">{% for y,m in periods %}<a href="/history/monthly/view?year={{ y }}&month={{ m }}">{{ y }}-{{ '%02d'|format(m) }}</a> {% endfor %}</nav>
+  {% if facts %}
+  <table>
+    <caption>客戶／商品月實績，共 {{ facts|length }} 組</caption>
+    <thead><tr><th scope="col">客戶</th><th scope="col">商品代碼</th><th scope="col">普通量</th><th scope="col">S 量</th><th scope="col">含稅金額</th><th scope="col">未稅金額</th><th scope="col">折後業績額</th></tr></thead>
+    <tbody>{% for row in facts.values() %}<tr><th scope="row">{{ row.customer_name }}</th><td>{{ row.product_code }}</td>{% for metric in ['base_quantity','quantity','taxed_amount','untaxed_amount','bonus_amount'] %}<td>{{ row[metric] }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+    <tfoot><tr><th scope="row" colspan="2">月彙總來源合計</th>{% for metric in ['base_quantity','quantity','taxed_amount','untaxed_amount','bonus_amount'] %}<td>{{ totals[metric] }}</td>{% endfor %}</tr></tfoot>
+  </table>
+  {% else %}<p>此月份尚無已匯入月彙總資料。這不代表實績為零。</p>{% endif %}
+</main>
+{% endblock %}

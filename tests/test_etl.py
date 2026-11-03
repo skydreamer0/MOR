@@ -31,34 +31,27 @@ def test_normalize_budget_targets_keeps_quantity_and_amount_formats_separate():
     assert by_key[("B", "1002", 5)].target_quantity == 3
 
 
-def test_sync_cleanup_failure_does_not_propagate(tmp_path):
-    """cleanup failure is best-effort: sync_excel_to_db must not raise."""
+def test_sync_second_table_failure_rolls_back_all_changes(tmp_path, monkeypatch):
     from src.backend.database import MORDatabase
     from src.backend.etl import sync_excel_to_db
-
-    db = MORDatabase(tmp_path / "test.db")
-    fake_sales = pd.DataFrame([{
-        "order_date": pd.Timestamp("2026-05-31"),
-        "customer_name": "X",
-        "product_code": "Y",
-        "product_name": "Test",
-        "quantity": 1,
-        "unit_price": 100.0,
-        "amount": 100.0,
+    from src.backend import import_service
+    db = MORDatabase(tmp_path / 'test.db')
+    sales = pd.DataFrame([{
+        "年": 2026, "月": 5, "日": 31, "客戶簡稱": "Synthetic", "商品號": "0001",
+        "商品簡稱": "Test", "銷+贈S量": 1, "單價NT(淨)": 100, "含稅總額(淨)": 100,
     }])
-
-    with patch("src.backend.etl._find_first_file") as mock_find, \
-         patch("src.backend.etl.pd.read_excel", return_value=pd.DataFrame()), \
-         patch("src.backend.etl.normalize_sales_records", return_value=fake_sales), \
-         patch("src.backend.etl._clear_covered_current_month_records", side_effect=RuntimeError("boom")):
-        mock_find.side_effect = lambda root, pattern: (
-            root / "fake.xlsx" if "業績" in pattern else None
-        )
-        sync_excel_to_db(db, tmp_path)  # must not raise
-
+    budget = pd.DataFrame([{'客戶簡稱':'Synthetic','商品號':'0001','標  題':'07預算S總量',202605:2}])
+    with pd.ExcelWriter(tmp_path/'combined.xlsx') as writer:
+        sales.to_excel(writer,sheet_name='detail',index=False)
+        budget.to_excel(writer,sheet_name='budget',index=False)
+    def fail(*args):
+        raise RuntimeError('injected failure')
+    monkeypatch.setattr(import_service,'_write_budget',fail)
+    with pytest.raises(RuntimeError):
+        sync_excel_to_db(db,tmp_path)
     with db.get_connection() as conn:
-        count = conn.execute("SELECT COUNT(*) FROM sales_records").fetchone()[0]
-    assert count == 1
+        assert conn.execute('SELECT COUNT(*) FROM sales_records').fetchone()[0] == 0
+        assert conn.execute('SELECT COUNT(*) FROM import_receipts').fetchone()[0] == 0
 
 
 def test_normalize_budget_targets_uses_default_year_when_sheet_has_no_year_column():
@@ -71,7 +64,7 @@ def test_normalize_budget_targets_uses_default_year_when_sheet_has_no_year_colum
     assert rows.iloc[0]["year"] == 2027
 
 
-def test_sync_excel_to_db_infers_budget_year_from_latest_budget_filename(tmp_path):
+def test_sync_excel_to_db_requires_explicit_year_not_filename_guess(tmp_path):
     from src.backend.database import MORDatabase
     from src.backend.etl import sync_excel_to_db
 
@@ -85,7 +78,9 @@ def test_sync_excel_to_db_infers_budget_year_from_latest_budget_filename(tmp_pat
     sales.to_excel(tmp_path / "業績明細.xlsx", index=False, sheet_name="業績明細")
     budget.to_excel(tmp_path / "2027預算報表.xlsx", index=False)
 
-    sync_excel_to_db(db, tmp_path)
+    with pytest.raises(ValueError,match='year'):
+        sync_excel_to_db(db, tmp_path)
+    sync_excel_to_db(db, tmp_path, default_budget_year=2027)
 
     with db.get_connection() as conn:
         saved = conn.execute(
@@ -95,7 +90,7 @@ def test_sync_excel_to_db_infers_budget_year_from_latest_budget_filename(tmp_pat
     assert tuple(saved) == (2027, 5, 20.0)
 
 
-def test_sync_excel_to_db_prefers_requested_budget_year(tmp_path):
+def test_sync_excel_to_db_rejects_conflicting_package_then_accepts_explicit_file_selection(tmp_path):
     from src.backend.database import MORDatabase
     from src.backend.etl import sync_excel_to_db
 
@@ -109,7 +104,10 @@ def test_sync_excel_to_db_prefers_requested_budget_year(tmp_path):
     budget_2026.to_excel(tmp_path / "2026預算報表.xlsx", index=False)
     budget_2027.to_excel(tmp_path / "2027預算報表.xlsx", index=False)
 
-    sync_excel_to_db(db, tmp_path, default_budget_year=2026)
+    with pytest.raises(ValueError,match='Overlapping monthly'):
+        sync_excel_to_db(db, tmp_path, default_budget_year=2026)
+    sync_excel_to_db(db, tmp_path, default_budget_year=2026,
+                     files=[(p.name,p.read_bytes()) for p in [tmp_path/'業績明細.xlsx',tmp_path/'2026預算報表.xlsx']])
 
     with db.get_connection() as conn:
         saved = conn.execute(

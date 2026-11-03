@@ -74,13 +74,13 @@ def test_normalize_shpb_sums_sales_and_gift_qty():
     assert result.iloc[0]["quantity"] == 20
 
 
-def test_normalize_shpb_drops_invalid_dates():
+def test_normalize_shpb_rejects_invalid_dates_without_silent_data_loss():
     rows = [
         _shpb_row(**{SHPB_COLUMNS["order_date"]: "20260505"}),
         _shpb_row(**{SHPB_COLUMNS["order_date"]: "invalid"}),
     ]
-    result = normalize_shpb_records(pd.DataFrame(rows))
-    assert len(result) == 1
+    with pytest.raises(ValueError, match="invalid date"):
+        normalize_shpb_records(pd.DataFrame(rows))
 
 
 def test_normalize_shpb_raises_on_missing_columns():
@@ -113,7 +113,7 @@ def test_import_current_month_replaces_same_month_on_reupload():
     import_current_month(db, df_first)
 
     df_second = pd.DataFrame([_shpb_row(**{SHPB_COLUMNS["sales_qty"]: 20, SHPB_COLUMNS["gift_qty"]: 0})])
-    import_current_month(db, df_second)
+    import_current_month(db, df_second, complete_months={(2026, 5)})
 
     with db.get_connection() as conn:
         rows = conn.execute("SELECT * FROM current_month_records").fetchall()
@@ -143,55 +143,35 @@ def test_import_current_month_does_not_affect_other_months():
 # _clear_covered_current_month_records (via sync_excel_to_db path)
 # ---------------------------------------------------------------------------
 
-def test_sync_clears_current_month_records_for_covered_months():
-    """業績明細已涵蓋的月份，sync 後 current_month_records 應被清除。"""
-    from src.backend.etl import _clear_covered_current_month_records
-
+def test_sync_clears_current_month_records_for_explicitly_complete_months(tmp_path):
+    from src.backend.etl import sync_excel_to_db
     db = _make_db()
-
-    # 寫入 5 月的 SHPB 資料
-    df_may = pd.DataFrame([_shpb_row(**{SHPB_COLUMNS["order_date"]: "20260505"})])
-    import_current_month(db, df_may)
-
-    # 模擬業績明細已更新至 5 月底
-    sales_rows = pd.DataFrame([{
-        "order_date": pd.Timestamp("2026-05-31"),
-        "customer_name": "慈濟台北",
-        "product_code": "T5EL1",
+    import_current_month(db, pd.DataFrame([_shpb_row()]))
+    historical = pd.DataFrame([{
+        "年": 2026, "月": 5, "日": 31, "客戶簡稱": "慈濟台北", "商品號": "T5EL1",
+        "商品簡稱": "Synthetic", "銷+贈S量": 12, "單價NT(淨)": 3, "含稅總額(淨)": 36,
     }])
-    _clear_covered_current_month_records(db, sales_rows)
-
+    historical.to_excel(tmp_path / 'renamed.xlsx', index=False)
+    sync_excel_to_db(db, tmp_path, complete_months={(2026,5)})
     with db.get_connection() as conn:
-        remaining = conn.execute("SELECT COUNT(*) FROM current_month_records").fetchone()[0]
-    assert remaining == 0
+        assert conn.execute('SELECT COUNT(*) FROM current_month_records').fetchone()[0] == 0
+        assert conn.execute('SELECT COUNT(*) FROM sales_records').fetchone()[0] == 1
 
 
-def test_sync_keeps_future_months_in_current_month_records():
-    """sync 只清除已涵蓋的月份，未來月份應保留。"""
-    from src.backend.etl import _clear_covered_current_month_records
-
+def test_sync_preserves_earlier_and_future_uncovered_current_months(tmp_path):
+    from src.backend.etl import sync_excel_to_db
     db = _make_db()
-
-    # 寫入 4 月和 5 月的 SHPB
-    rows = [
-        _shpb_row(**{SHPB_COLUMNS["order_date"]: "20260423"}),
-        _shpb_row(**{SHPB_COLUMNS["order_date"]: "20260505"}),
-    ]
+    rows = [_shpb_row(**{SHPB_COLUMNS['order_date']: day}) for day in ('20260323','20260423','20260505')]
     import_current_month(db, pd.DataFrame(rows))
-
-    # 業績明細只到 4 月底
-    sales_rows = pd.DataFrame([{
-        "order_date": pd.Timestamp("2026-04-30"),
+    historical = pd.DataFrame([{
+        "年": 2026, "月": 4, "日": 30, "客戶簡稱": "慈濟台北", "商品號": "T5EL1",
+        "商品簡稱": "Synthetic", "銷+贈S量": 12, "單價NT(淨)": 3, "含稅總額(淨)": 36,
     }])
-    _clear_covered_current_month_records(db, sales_rows)
-
+    historical.to_excel(tmp_path / 'renamed.xlsx', index=False)
+    sync_excel_to_db(db, tmp_path, complete_months={(2026,4)})
     with db.get_connection() as conn:
-        remaining = conn.execute(
-            "SELECT order_date FROM current_month_records"
-        ).fetchall()
-    months = {r["order_date"][:7] for r in remaining}
-    assert "2026-04" not in months   # 已清除
-    assert "2026-05" in months       # 保留
+        months = {r[0][:7] for r in conn.execute('SELECT order_date FROM current_month_records')}
+    assert months == {'2026-03','2026-05'}
 
 
 # ---------------------------------------------------------------------------

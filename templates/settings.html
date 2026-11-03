@@ -11,6 +11,27 @@
       <section class="alert" role="alert">{{ error_message }}</section>
     {% endif %}
 
+    <details class="settings-health-panel" id="import-workbooks">
+      <summary>匯入報表（單檔或多檔）</summary>
+      <form action="{{ url_for('sync_data') }}" method="post" enctype="multipart/form-data" class="workbench-panel">
+        <p>自動辨認工作表、標題位置與欄位。月彙總只供月分析；缺少每日明細時無法計算叫貨日、週期或單價。</p>
+        <label>報表檔案 <input type="file" name="files" accept=".xlsx" multiple required></label>
+        <label>預算年份（僅無年份月份欄位需要） <input name="budget_year" inputmode="numeric" placeholder="2026"></label>
+        <label>月實績確實涵蓋月份 <input name="observed_months" placeholder="2025-01,2025-02" aria-describedby="import-scope-help"></label>
+        <label>完整取代的每日月份 <input name="complete_months" placeholder="2026-01" aria-describedby="import-scope-help"></label>
+        <p id="import-scope-help" class="muted">月份格式 YYYY-MM，以逗號分隔。月彙總的空白或未來零值不代表已發生實績。只有確認已包含該月所有客戶、商品與交易時，才填寫完整取代月份；該月未列入的舊每日資料會刪除。留白時保留無關資料，重疊且不同的每日資料會停止匯入。</p>
+        <label><input type="checkbox" name="daily_partitions" value="true">這些每日表格是互不重複的分割檔，可以串接交易</label>
+        <label><input type="checkbox" name="deduplicate_monthly" value="true">略過相同月實績／預算鍵且數值完全相同的重複資料（衝突仍停止）</label>
+        <div class="toolbar-actions">
+          <button type="submit" name="preview" value="true">預覽歷史／預算匯入</button>
+          <button type="submit">匯入歷史／預算</button>
+          <button type="submit" formaction="{{ url_for('upload_current_month') }}">匯入當月 SHPB</button>
+          <button type="submit" formaction="{{ url_for('import_product_monitor_daily_sales') }}">匯入監控 SHPB</button>
+        </div>
+        <p><a href="{{ url_for('monthly_history',year=year,month=month) }}">查看選定月份的月彙總資料與可用能力</a></p>
+      </form>
+    </details>
+
     <form action="/items/save" method="post" class="settings-workspace workbench-panel">
       <div class="settings-toolbar workbench-toolbar" aria-label="品項設定搜尋">
         <div class="settings-toolbar__title toolbar-title">

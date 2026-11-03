@@ -64,10 +64,12 @@
               action="{{ url_for('import_product_monitor_daily_sales') }}"
               enctype="multipart/form-data">
           <input type="file" id="daily-sales-file" name="daily_sales_file"
-                 accept=".xlsx,.xls" required class="sr-only">
+                 accept=".xlsx" multiple required class="sr-only">
           <label for="daily-sales-file" class="btn-secondary file-pick-btn" id="file-pick-label">選擇檔案</label>
           <span id="file-pick-name" class="file-pick-name muted">未選擇檔案</span>
+          <label><input type="checkbox" name="complete_months" value="{{ year }}-{{ '%02d'|format(month) }}">完整取代 {{ year }}/{{ '%02d'|format(month) }} 全月資料</label>
           <button type="submit">匯入</button>
+          <a href="{{ '/settings' }}#import-workbooks">分割檔／範圍設定</a>
         </form>
         {% endif %}
 
@@ -489,7 +491,7 @@
   <script>
     // 選檔後更新顯示的檔名
     document.getElementById('daily-sales-file').addEventListener('change', function () {
-      const name = this.files[0] ? this.files[0].name : '未選擇檔案';
+      const name = this.files.length ? Array.from(this.files, file => file.name).join('、') : '未選擇檔案';
       document.getElementById('file-pick-name').textContent = name;
     });
 

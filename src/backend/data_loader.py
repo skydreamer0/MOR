@@ -47,6 +47,13 @@ def load_sales_detail_from_db(db: "MORDatabase") -> pd.DataFrame:
     若 DB 無資料，回傳具有正確欄位的空 DataFrame。
     """
     with db.get_connection() as conn:
+        overlap = conn.execute("""
+            SELECT 1 FROM sales_records h JOIN current_month_records c
+              ON h.customer_name=c.customer_name AND h.product_code=c.product_code
+             AND substr(h.order_date,1,7)=substr(c.order_date,1,7) LIMIT 1
+        """).fetchone()
+        if overlap:
+            raise ValueError('Historical/current detail overlap; reconcile sources before forecasting')
         rows = conn.execute(
             "SELECT order_date, customer_name, product_code, product_name, "
             "quantity, unit_price, amount FROM sales_records "
@@ -129,7 +136,13 @@ def load_sales_detail(
     if not file_path.exists():
         raise FileNotFoundError(f"找不到業績明細檔案: {file_path}")
 
-    historical = prepare_sales_data(pd.read_excel(file_path, sheet_name=config.detail_sheet), config)
+    from src.backend.import_parser import parse_workbook
+    from src.backend.import_service import plan_tables
+    tables = parse_workbook(file_path.read_bytes(), file_path.name)
+    if any(table.kind != 'sales' for table in tables):
+        raise ValueError('Excel daily compatibility loader requires dated sales detail')
+    plan = plan_tables(tables)
+    historical = _normalize_db_sales_df(plan.frames['sales'])
 
     if db is None:
         return historical
@@ -138,7 +151,10 @@ def load_sales_detail(
     if current.empty:
         return historical
 
-    # 兩者時間不重疊（Excel 只到上月底，DB 只存當月），直接 concat 不會重複
+    def scopes(frame):
+        return {(d.year,d.month,c,p) for d,c,p in zip(frame.order_date,frame['客戶簡稱'],frame['商品號'])}
+    if scopes(historical) & scopes(current):
+        raise ValueError('Excel/current detail overlap; reconcile sources before forecasting')
     return pd.concat([historical, current], ignore_index=True)
 
 
